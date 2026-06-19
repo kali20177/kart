@@ -1,0 +1,84 @@
+/* 设计令牌 —— 扁平化主题，亮/暗双色，跟随 data-theme 切换 */
+
+:root {
+  --mono-font: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
+  --ui-font: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --radius: 4px;
+  --gap: 8px;
+}
+
+/* 亮色 */
+:root,
+[data-theme='light'] {
+  --bg: #f5f6f8;
+  --bg-panel: #ffffff;
+  --bg-elevated: #f0f1f4;
+  --border: #e2e5ea;
+  --text: #1f2329;
+  --text-dim: #8a909c;
+  --accent: #2080f0;
+
+  --rx-bg: #eef4ff;
+  --rx-border: #cfe0ff;
+  --rx-text: #1f2329;
+  --tx-bg: #e9f7ee;
+  --tx-border: #c4ebd2;
+  --tx-text: #1f2329;
+
+  --ok: #36ad6a;
+  --warn: #f0a020;
+  --err: #e03e3e;
+}
+
+/* 暗色 */
+[data-theme='dark'] {
+  --bg: #18191c;
+  --bg-panel: #1f2024;
+  --bg-elevated: #26282d;
+  --border: #2f3136;
+  --text: #e3e6eb;
+  --text-dim: #7a808b;
+  --accent: #4098fc;
+
+  --rx-bg: #1c2733;
+  --rx-border: #2b4257;
+  --rx-text: #d6e2f0;
+  --tx-bg: #1b2a20;
+  --tx-border: #2c4636;
+  --tx-text: #d2ecdb;
+
+  --ok: #50c878;
+  --warn: #f0a850;
+  --err: #ec5b5b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--ui-font);
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}

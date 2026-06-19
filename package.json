@@ -1,0 +1,31 @@
+{
+  "name": "serial-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "嵌入式串口调试助手 —— 阶段 1：前端 UI（模拟数据驱动）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "naive-ui": "^2.38.2",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-virtual-scroller": "2.0.0-beta.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/test-utils": "^2.4.5",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.10",
+    "vitest": "^1.5.0",
+    "vue-tsc": "^2.0.13"
+  }
+}

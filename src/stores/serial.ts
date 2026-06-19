@@ -1,0 +1,158 @@
+import { defineStore } from 'pinia'
+import { ref, reactive, computed } from 'vue'
+import type { MockScenarioId, PortOptions, SerialSignals } from '@/types'
+import { MockSerialSource } from '@/mock/MockSerialSource'
+import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
+import { parseHexInput } from '@/utils/hex'
+import type { DataMode, LineEnding } from '@/types'
+import { useMessagesStore } from './messages'
+import { storage } from '@/composables/useStorage'
+
+const DEFAULT_OPTS: PortOptions = {
+  baudRate: 115200,
+  dataBits: 8,
+  stopBits: 1,
+  parity: 'none',
+  flowControl: 'none'
+}
+
+export const useSerialStore = defineStore('serial', () => {
+  const driver = new MockSerialSource()
+  const messages = useMessagesStore()
+
+  const ports = ref<string[]>([])
+  const selectedPort = ref<string | null>(null)
+  const connected = ref(false)
+  const options = reactive<PortOptions>({
+    ...DEFAULT_OPTS,
+    ...storage.get('portOptions', {})
+  })
+  const scenario = ref<MockScenarioId>('at-reply')
+  const signals = ref<SerialSignals>({ dcd: false, cts: false, dsr: false, ri: false })
+  const rxBytes = ref(0)
+  const txBytes = ref(0)
+
+  let unsubscribe: (() => void) | null = null
+  let signalTimer: ReturnType<typeof setInterval> | null = null
+
+  /** 串口参数概要，如 "115200 8N1" */
+  const summary = computed(() => {
+    const p = options.parity === 'none' ? 'N' : options.parity === 'even' ? 'E' : 'O'
+    return `${options.baudRate} ${options.dataBits}${p}${options.stopBits}`
+  })
+
+  async function refreshPorts() {
+    ports.value = await driver.listPorts()
+    if (!selectedPort.value && ports.value.length > 0) {
+      selectedPort.value = ports.value[0]
+    }
+  }
+
+  async function connect() {
+    if (connected.value || !selectedPort.value) return
+    driver.setScenario(scenario.value)
+    await driver.open(selectedPort.value, { ...options })
+    storage.set('portOptions', { ...options })
+    rxBytes.value = 0
+    txBytes.value = 0
+    unsubscribe = driver.onData((bytes) => {
+      rxBytes.value += bytes.length
+      messages.ingestRx(bytes)
+    })
+    connected.value = true
+    signalTimer = setInterval(() => {
+      signals.value = driver.getSignals()
+    }, 500)
+  }
+
+  async function disconnect() {
+    if (!connected.value) return
+    unsubscribe?.()
+    unsubscribe = null
+    if (signalTimer) {
+      clearInterval(signalTimer)
+      signalTimer = null
+    }
+    await driver.close()
+    connected.value = false
+    signals.value = { dcd: false, cts: false, dsr: false, ri: false }
+  }
+
+  function setScenario(id: MockScenarioId) {
+    scenario.value = id
+    driver.setScenario(id)
+  }
+
+  /** 手动注入模拟数据（设置面板用） */
+  function inject(bytes: Uint8Array) {
+    driver.inject(bytes)
+  }
+
+  /**
+   * 发送 —— 把文本/hex 按当前模式转字节，追加行尾，写入驱动并记录 TX 气泡。
+   * 返回是否成功（hex 解析失败时返回错误信息）。
+   */
+  async function send(
+    payload: string,
+    mode: DataMode,
+    ending: LineEnding,
+    encoding: 'utf-8' | 'ascii' | 'gbk'
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!connected.value) return { ok: false, error: '未连接' }
+
+    let body: Uint8Array
+    if (mode === 'hex') {
+      const r = parseHexInput(payload)
+      if (!r.ok) return { ok: false, error: r.error }
+      body = r.bytes
+    } else {
+      body = encodeText(payload, encoding)
+    }
+    const bytes = concatBytes(body, lineEndingBytes(ending))
+
+    try {
+      await driver.write(bytes)
+      txBytes.value += bytes.length
+      messages.addTx(bytes)
+      return { ok: true }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      messages.addTx(bytes, msg)
+      return { ok: false, error: msg }
+    }
+  }
+
+  /** 直接重发原始字节（气泡"重发"按钮用，bytes 已含行尾） */
+  async function resend(bytes: Uint8Array): Promise<{ ok: boolean; error?: string }> {
+    if (!connected.value) return { ok: false, error: '未连接' }
+    try {
+      await driver.write(bytes)
+      txBytes.value += bytes.length
+      messages.addTx(bytes)
+      return { ok: true }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      messages.addTx(bytes, msg)
+      return { ok: false, error: msg }
+    }
+  }
+
+  return {
+    ports,
+    selectedPort,
+    connected,
+    options,
+    scenario,
+    signals,
+    rxBytes,
+    txBytes,
+    summary,
+    refreshPorts,
+    connect,
+    disconnect,
+    setScenario,
+    inject,
+    send,
+    resend
+  }
+})
