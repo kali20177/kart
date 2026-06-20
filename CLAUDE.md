@@ -5,20 +5,24 @@
 ## 常用命令
 
 ```sh
-npm run dev        # 启动 Vite 开发服务器（localhost:5273）
-npm run build      # 类型检查 + 生产构建（vue-tsc --noEmit && vite build）
-npm run preview    # 本地预览生产构建
-npm run typecheck  # 仅执行 vue-tsc 类型检查（不输出文件）
-npm test           # 运行所有 Vitest 测试（单次）
-npm run test:watch # 以 watch 模式运行测试
+npm run dev            # 启动 Vite 开发服务器（localhost:5273，浏览器）
+npm run build          # 类型检查 + 生产构建（vue-tsc --noEmit && vite build）
+npm run preview        # 本地预览生产构建
+npm run typecheck      # 仅执行 vue-tsc 类型检查（不输出文件）
+npm test               # 运行所有 Vitest 测试（单次）
+npm run test:watch     # 以 watch 模式运行测试
+npm run electron:dev   # 在 Electron 中以开发模式运行（含 HMR + 主/预加载自动重启）
+npm run electron:build # 类型检查 + 构建 + electron-builder 打包为 Windows 安装包（输出 release/）
+npm run electron:preview # 构建后用 electron 直接运行（不打包）
 ```
 
 ## 项目概览
 
-**阶段 1** 串口调试助手 — 纯浏览器 SPA，使用模拟串口数据。**阶段 2** 将添加 Electron + Web Serial API。
+**阶段 1** 串口调试助手 — 浏览器 SPA，使用模拟串口数据。同一份代码已可打包为 Electron 桌面应用（仍跑模拟数据，仅构建/打包脚手架）。**阶段 2** 将接入 Web Serial API 等真实能力。
 
 - **框架**：Vue 3（`<script setup>` Composition API）
 - **构建**：Vite 5、TypeScript strict、`@/` 路径别名 → `src/`
+- **桌面打包**：Electron 31 + vite-plugin-electron + electron-builder（详见下文「Electron 集成」）
 - **状态管理**：Pinia
 - **UI 组件库**：Naive UI（zhCN 中文语言包）
 - **测试**：Vitest + jsdom + `@vue/test-utils`
@@ -66,9 +70,25 @@ StatusBar       → serial store
 ### 存储抽象
 `useStorage.ts` 封装 localStorage，暴露 `{ get, set, remove }` 接口。阶段 2 切换到 `electron-store` 时，调用方无需修改。
 
+## Electron 集成
+
+桌面打包基于 **vite-plugin-electron**（单 vite 配置，由环境变量 `ELECTRON=true` 开关）。普通 `npm run dev` / `npm run build` 不设该变量，插件完全惰性，浏览器构建产物与无 Electron 时一致。
+
+- `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`。
+- `src/preload/index.ts` — 预加载：当前仅占位（暴露 `platform`），阶段 2 在此通过 contextBridge 接入串口/存储。
+- `vite.config.ts` — `base` 在 Electron 目标下设为 `'./'`（file:// 加载需相对路径），浏览器下为 `'/'`。
+- `tsconfig.node.json` — 主/预加载的 Node 上下文类型检查（无 DOM lib），`electron:build` 中以 `tsc -p tsconfig.node.json --noEmit` 作为门禁。
+- `electron-builder.json` — 打包配置，输出到 `release/`（Windows NSIS）。
+- 主/预加载强制以 **CommonJS（`.cjs`）** 输出（见 `vite.config.ts` 中 main 的 `lib:false` + `rollupOptions`）：`package.json` 为 `type:module`，若以 ESM 导入 CJS 的 `electron` 模块会触发 Node ESM 互操作错误。
+- 浏览器构建与 Electron 渲染构建都写入 `dist/`，是两个独立命令，后构建覆盖前者。
+
+### 本机环境注意点（Windows）
+- **`ELECTRON_RUN_AS_NODE`**：本机全局设置了该变量为 `1`（疑似 STM32 等工具链所致），会让所有 Electron 退化为纯 Node 运行（`electron --version` 返回 Node 版本，`require('electron')` 只得到可执行文件路径）。Electron 按「变量是否存在」判断，置空/置 0 均无效，必须删除。项目已防御处理：`vite.config.ts` 在 Electron 分支删除它（覆盖 `electron:dev` 插件 spawn），`scripts/start-electron.mjs` 在 `electron:preview` 启动前删除它。根治办法是从系统环境变量中移除该项。
+- **`electron:build` 首次打包的 winCodeSign 解压**：electron-builder 解压 `winCodeSign` 归档时需创建 macOS 符号链接，Windows 非管理员且未开启「开发者模式」会因权限失败（`客户端没有所需的特权`）。该归档里的 darwin 文件仅用于 macOS 签名，与 Windows 打包无关。解决：开启 Windows 开发者模式（或以管理员运行）后重跑；或手动把归档解压到缓存 `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0`（排除 `darwin` 目录）再重跑。未做代码签名，安装包会触发 SmartScreen 警告，属正常。
+
 ## 阶段 2 路线图
-1. 添加 Electron + electron-vite + electron-builder
-2. 添加 `src/main/`（主进程）和 `src/preload/`（contextBridge）
+1. ~~添加 Electron + electron-builder~~（已完成：vite-plugin-electron + electron-builder 脚手架）
+2. ~~添加 `src/main/`（主进程）和 `src/preload/`（contextBridge）~~（已完成占位）
 3. 实现 Web Serial API 的 `SerialDriver`
 4. 将 serial store 中的 `MockSerialSource` 替换为真实驱动
 5. 将 `useStorage` 从 localStorage 迁移到 electron-store

@@ -3,14 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "description": "嵌入式串口调试助手 —— 阶段 1：前端 UI（模拟数据驱动）",
+  "author": "serial-demo",
   "type": "module",
+  "main": "dist-electron/main/index.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "electron:dev": "cross-env ELECTRON=true vite",
+    "electron:build": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit && cross-env ELECTRON=true vite build && electron-builder",
+    "electron:preview": "cross-env ELECTRON=true vite build && node scripts/start-electron.mjs"
   },
   "dependencies": {
     "naive-ui": "^2.38.2",
@@ -22,9 +27,13 @@
     "@types/node": "^20.12.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "@vue/test-utils": "^2.4.5",
+    "cross-env": "^7.0.3",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
     "jsdom": "^24.0.0",
     "typescript": "^5.4.5",
     "vite": "^5.2.10",
+    "vite-plugin-electron": "^0.28.8",
     "vitest": "^1.5.0",
     "vue-tsc": "^2.0.13"
   }
