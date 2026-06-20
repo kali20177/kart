@@ -152,6 +152,7 @@ onBeforeUnmount(stopRepeat)
 
 <style scoped>
 .composer {
+  flex: none;
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
   padding: 8px 12px;
