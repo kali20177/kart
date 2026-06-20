@@ -9,6 +9,10 @@
     "dist-electron/**",
     "package.json"
   ],
+  "mac": {
+    "target": ["dmg", "zip"],
+    "artifactName": "${productName}-${version}-${arch}.${ext}"
+  },
   "win": {
     "target": "nsis"
   }
