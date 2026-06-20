@@ -78,13 +78,64 @@ StatusBar       → serial store
 - `src/preload/index.ts` — 预加载：当前仅占位（暴露 `platform`），阶段 2 在此通过 contextBridge 接入串口/存储。
 - `vite.config.ts` — `base` 在 Electron 目标下设为 `'./'`（file:// 加载需相对路径），浏览器下为 `'/'`。
 - `tsconfig.node.json` — 主/预加载的 Node 上下文类型检查（无 DOM lib），`electron:build` 中以 `tsc -p tsconfig.node.json --noEmit` 作为门禁。
-- `electron-builder.json` — 打包配置，输出到 `release/`（Windows NSIS）。
+- `electron-builder.json` — 打包配置，输出到 `release/`（三平台：Windows NSIS、macOS DMG/ZIP、Linux AppImage/deb）。
 - 主/预加载强制以 **CommonJS（`.cjs`）** 输出（见 `vite.config.ts` 中 main 的 `lib:false` + `rollupOptions`）：`package.json` 为 `type:module`，若以 ESM 导入 CJS 的 `electron` 模块会触发 Node ESM 互操作错误。
 - 浏览器构建与 Electron 渲染构建都写入 `dist/`，是两个独立命令，后构建覆盖前者。
+
+### macOS / Linux Electron 二进制下载
+
+首次 `npm install` 后运行 `electron:dev` 可能报 `Electron failed to install correctly`，原因是 npm 11+ **不再将 `.npmrc` 中未知的 config key 注入为环境变量**，导致 `@electron/get` 读取不到 `electron_mirror` 镜像地址，下载静默失败。
+
+**症状**：
+- `node_modules/electron/path.txt` 缺失
+- `node_modules/electron/dist/version` 缺失
+- macOS：`dist/Electron.app` 存在但只有 49KB stub，缺少 `Frameworks/Electron Framework.framework`
+- Linux：`dist/electron` 二进制很小或不存在
+- `require('electron')` 抛出 `Electron failed to install correctly`
+
+**修复**：
+
+```sh
+# 1. 确认 approve-scripts（否则 postinstall 被 npm 安全策略拦截）
+npm approve-scripts electron
+
+# 2. 设镜像变量并重新安装
+ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm install electron@31.7.7
+
+# 3. 若仍失败，直接手动下载并解压
+rm -rf node_modules/electron/dist node_modules/electron/path.txt ~/Library/Caches/electron/
+
+# macOS (arm64)
+curl -L -o /tmp/electron-v31.7.7-darwin-arm64.zip \
+  "https://npmmirror.com/mirrors/electron/31.7.7/electron-v31.7.7-darwin-arm64.zip"
+mkdir -p node_modules/electron/dist
+unzip -o /tmp/electron-v31.7.7-darwin-arm64.zip -d node_modules/electron/dist/
+printf 'Electron.app/Contents/MacOS/Electron' > node_modules/electron/path.txt
+printf '%s' '31.7.7' > node_modules/electron/dist/version
+
+# Linux (x64)
+curl -L -o /tmp/electron-v31.7.7-linux-x64.zip \
+  "https://npmmirror.com/mirrors/electron/31.7.7/electron-v31.7.7-linux-x64.zip"
+mkdir -p node_modules/electron/dist
+unzip -o /tmp/electron-v31.7.7-linux-x64.zip -d node_modules/electron/dist/
+printf 'electron' > node_modules/electron/path.txt
+printf '%s' '31.7.7' > node_modules/electron/dist/version
+```
+
+`allowScripts` 配置已写入 `package.json`，未来新 clone 项目时 `npm install` 会自动触发 electron 的 postinstall 下载。
 
 ### 本机环境注意点（Windows）
 - **`ELECTRON_RUN_AS_NODE`**：本机全局设置了该变量为 `1`（疑似 STM32 等工具链所致），会让所有 Electron 退化为纯 Node 运行（`electron --version` 返回 Node 版本，`require('electron')` 只得到可执行文件路径）。Electron 按「变量是否存在」判断，置空/置 0 均无效，必须删除。项目已防御处理：`vite.config.ts` 在 Electron 分支删除它（覆盖 `electron:dev` 插件 spawn），`scripts/start-electron.mjs` 在 `electron:preview` 启动前删除它。根治办法是从系统环境变量中移除该项。
 - **`electron:build` 首次打包的 winCodeSign 解压**：electron-builder 解压 `winCodeSign` 归档时需创建 macOS 符号链接，Windows 非管理员且未开启「开发者模式」会因权限失败（`客户端没有所需的特权`）。该归档里的 darwin 文件仅用于 macOS 签名，与 Windows 打包无关。解决：开启 Windows 开发者模式（或以管理员运行）后重跑；或手动把归档解压到缓存 `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0`（排除 `darwin` 目录）再重跑。未做代码签名，安装包会触发 SmartScreen 警告，属正常。
+
+### 本机环境注意点（Linux / WSL）
+- **系统依赖**：Linux 下 Electron 需要 GTK、libnotify、libnss 等原生库。Debian/Ubuntu 系（含 WSL）执行：
+  ```sh
+  sudo apt install -y libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils
+  ```
+- **WSL 图形支持**：WSL2 + WSLg（Windows 11）可直接运行 Electron 窗口。旧版 WSL 或无 WSLg 的环境需配置 X server（如 VcXsrv），且附加 `--no-sandbox` 参数。
+- **`electron:build` 打包目标**：当前配置为 `AppImage`（通用单文件）和 `deb`（Debian/Ubuntu），可在 Linux 下直接构建。若在 WSL 中构建 Windows NSIS 安装包，需额外安装 `wine`（electron-builder 依赖它处理 `.exe`）。
+- **镜像下载**：与前文 macOS 节描述相同，Linux 同样受 npm 11+ 不传递 `.npmrc` 环境变量的问题影响，修复方法一致。注意平台后缀不同（`linux-x64.zip` vs `darwin-arm64.zip`）。
 
 ## 阶段 2 路线图
 1. ~~添加 Electron + electron-builder~~（已完成：vite-plugin-electron + electron-builder 脚手架）

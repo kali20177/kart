@@ -15,5 +15,9 @@
   },
   "win": {
     "target": "nsis"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "artifactName": "${productName}-${version}-${arch}.${ext}"
   }
 }
