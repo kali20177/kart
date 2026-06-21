@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import type { AppSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
 
@@ -23,10 +23,20 @@ export const useSettingsStore = defineStore('settings', () => {
     structuredClone({ ...DEFAULTS, ...storage.get('settings', {}) })
   )
 
-  // 任何变更落盘
+  // 是否自动把配置落盘（菜单「文件 ▸ 自动保存配置」开关）。
+  // 开关标志本身始终持久化；它只决定 settings 内容是否自动写入本地存储。
+  const autoSave = ref<boolean>(storage.get('autoSave', true))
+  watch(autoSave, (on) => {
+    storage.set('autoSave', on)
+    if (on) storage.set('settings', settings) // 开启时立即落盘当前配置
+  })
+
+  // 任何变更落盘（受 autoSave 开关控制）
   watch(
     settings,
-    (val) => storage.set('settings', val),
+    (val) => {
+      if (autoSave.value) storage.set('settings', val)
+    },
     { deep: true }
   )
 
@@ -34,5 +44,5 @@ export const useSettingsStore = defineStore('settings', () => {
     Object.assign(settings, structuredClone(DEFAULTS))
   }
 
-  return { settings, reset }
+  return { settings, autoSave, reset }
 })

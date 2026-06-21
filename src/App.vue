@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { NConfigProvider, NMessageProvider, darkTheme, zhCN, dateZhCN } from 'naive-ui'
+import MenuBar from './components/MenuBar.vue'
 import ConnectionBar from './components/ConnectionBar.vue'
 import MessageList from './components/MessageList.vue'
 import InputComposer from './components/InputComposer.vue'
@@ -69,6 +70,7 @@ onMounted(() => {
   <NConfigProvider :theme="naiveTheme" :locale="zhCN" :date-locale="dateZhCN">
     <NMessageProvider>
       <div class="app">
+        <MenuBar />
         <ConnectionBar @open-ascii="showAscii = true" @open-settings="showSettings = true" />
 
         <div class="main">

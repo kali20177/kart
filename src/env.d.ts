@@ -7,3 +7,17 @@ declare module '*.vue' {
 }
 
 declare module 'vue-virtual-scroller'
+
+// 构建期由 vite define 注入（见 vite.config.ts）
+declare const __APP_VERSION__: string
+declare const __GIT_COMMIT__: string
+declare const __BUILD_DATE__: string
+declare const __DEP_VERSIONS__: Record<string, string>
+
+// preload 通过 contextBridge 暴露（仅 Electron 下存在）
+interface Window {
+  electron?: {
+    platform: string
+    versions?: Record<string, string | undefined>
+  }
+}

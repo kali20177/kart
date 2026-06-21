@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import electron from 'vite-plugin-electron/simple'
 import { fileURLToPath, URL } from 'node:url'
+import { execSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 
 // 仅当 ELECTRON=true 时激活 Electron 插件；
 // 普通 `vite` / `vite build`（浏览器构建）下完全惰性，产物与现状一致。
@@ -16,9 +18,46 @@ if (isElectron) {
   delete process.env.ELECTRON_RUN_AS_NODE
 }
 
+// 「关于」对话框用的构建期信息（参考 VSCode：版本 / 提交 / 构建日期 / 依赖版本）。
+const requirePkg = createRequire(import.meta.url)
+const pkg = requirePkg('./package.json')
+const depVersion = (name: string): string => {
+  try {
+    return requirePkg(`${name}/package.json`).version
+  } catch {
+    return 'unknown'
+  }
+}
+let gitCommit = 'unknown'
+try {
+  gitCommit = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+    .toString()
+    .trim()
+} catch {
+  // 非 git 环境或未安装 git：保持 'unknown'
+}
+const buildInfo = {
+  version: pkg.version as string,
+  commit: gitCommit,
+  date: new Date().toISOString(),
+  deps: {
+    vue: depVersion('vue'),
+    pinia: depVersion('pinia'),
+    'naive-ui': depVersion('naive-ui'),
+    vite: depVersion('vite'),
+    electron: depVersion('electron')
+  }
+}
+
 export default defineConfig({
   // file:// 加载需相对路径；浏览器构建保持绝对根路径。
   base: isElectron ? './' : '/',
+  define: {
+    __APP_VERSION__: JSON.stringify(buildInfo.version),
+    __GIT_COMMIT__: JSON.stringify(buildInfo.commit),
+    __BUILD_DATE__: JSON.stringify(buildInfo.date),
+    __DEP_VERSIONS__: JSON.stringify(buildInfo.deps)
+  },
   plugins: [
     vue(),
     ...(isElectron
