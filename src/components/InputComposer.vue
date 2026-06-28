@@ -4,7 +4,8 @@ import { NInput, NButton, NButtonGroup, NSelect, NInputNumber, NSwitch, useMessa
 import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
-import { parseHexInput } from '@/utils/hex'
+import { parseHexInput, bytesToHex } from '@/utils/hex'
+import { encodeWithEscapes } from '@/utils/encoding'
 import type { DataMode, LineEnding } from '@/types'
 
 const text = defineModel<string>('text', { default: '' })
@@ -31,12 +32,19 @@ let repeatTimer: ReturnType<typeof setInterval> | null = null
 const repeatSent = ref(0)
 const repeating = computed(() => repeatTimer != null)
 
-// HEX 解析实时提示
-const hexHint = computed(() => {
-  if (mode.value !== 'hex' || !text.value.trim()) return null
-  const r = parseHexInput(text.value)
-  if (r.ok) return { ok: true, msg: `${r.bytes.length} 字节` }
-  return { ok: false, msg: r.error ?? '解析失败' }
+// 发送预览：HEX 模式显示解析结果，ASCII 模式显示转义后的实际字节
+const sendPreview = computed(() => {
+  if (!text.value.trim()) return null
+
+  if (mode.value === 'hex') {
+    const r = parseHexInput(text.value)
+    if (r.ok) return { ok: true, msg: `${r.bytes.length} 字节` }
+    return { ok: false, msg: r.error ?? '解析失败' }
+  }
+
+  // ASCII 模式：展示转义解析后的实际发送字节（不含行尾，行尾在 selector 里可见）
+  const body = encodeWithEscapes(text.value)
+  return { ok: true, msg: `${bytesToHex(body)}  (${body.length} 字节)` }
 })
 
 async function sendOnce(): Promise<boolean> {
@@ -127,14 +135,14 @@ onBeforeUnmount(stopRepeat)
         <span v-if="repeating" class="repeat-count">{{ repeatSent }}{{ repeatCount > 0 ? '/' + repeatCount : '' }}</span>
       </template>
 
-      <span v-if="hexHint" class="hint" :class="{ bad: !hexHint.ok }">{{ hexHint.msg }}</span>
+      <span v-if="sendPreview" class="hint" :class="{ bad: !sendPreview.ok }">{{ sendPreview.msg }}</span>
     </div>
 
     <div class="input-row">
       <NInput
         v-model:value="text"
         type="text"
-        :placeholder="mode === 'hex' ? '输入 HEX，如 AA 55 01 0x02 ；Enter 发送，Ctrl+↑/↓ 翻历史' : '输入文本；Enter 发送，Ctrl+↑/↓ 翻历史'"
+        :placeholder="mode === 'hex' ? '输入 HEX，如 AA 55 01 0x02 ；Enter 发送，Ctrl+↑/↓ 翻历史' : '输入文本，支持 \\r \\n \\t \\\\ \\0 \\xHH ；Enter 发送，Ctrl+↑/↓ 翻历史'"
         class="mono"
         @keydown="onKeydown"
       />
