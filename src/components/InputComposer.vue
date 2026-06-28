@@ -30,7 +30,7 @@ const repeatInterval = ref(1000)
 const repeatCount = ref(0) // 0 = 无限
 let repeatTimer: ReturnType<typeof setInterval> | null = null
 const repeatSent = ref(0)
-const repeating = computed(() => repeatTimer != null)
+const repeating = ref(false)
 
 // 发送预览：HEX 模式显示解析结果，ASCII 模式显示转义后的实际字节
 const sendPreview = computed(() => {
@@ -65,32 +65,54 @@ async function onSend() {
   if (ok && text.value.trim()) history.add(text.value)
 }
 
+type StopReason = 'manual' | 'completed' | 'disconnect' | 'silent'
+
 function startRepeat() {
   if (!serial.connected) {
     message.warning('请先连接端口')
     return
   }
   repeatSent.value = 0
+  const total = repeatCount.value
+  const interval = Math.max(10, repeatInterval.value)
+  message.info(
+    total > 0
+      ? `开始循环发送 · 共 ${total} 次 · 间隔 ${interval} ms`
+      : `开始循环发送 · 无限次 · 间隔 ${interval} ms`,
+    { duration: 2000 }
+  )
+  repeating.value = true
   repeatTimer = setInterval(async () => {
     const ok = await sendOnce()
     if (!ok) {
-      stopRepeat()
+      // sendOnce 已弹错误提示，这里静默停
+      stopRepeat('silent')
       return
     }
     repeatSent.value++
-    if (repeatCount.value > 0 && repeatSent.value >= repeatCount.value) stopRepeat()
-  }, Math.max(10, repeatInterval.value))
+    if (repeatCount.value > 0 && repeatSent.value >= repeatCount.value) {
+      stopRepeat('completed')
+    }
+  }, interval)
 }
 
-function stopRepeat() {
-  if (repeatTimer) {
-    clearInterval(repeatTimer)
-    repeatTimer = null
+function stopRepeat(reason: StopReason = 'manual') {
+  if (!repeatTimer) return
+  clearInterval(repeatTimer)
+  repeatTimer = null
+  repeating.value = false
+  if (reason === 'completed') {
+    message.success(`循环发送完成 · 共发送 ${repeatSent.value} 次`, { duration: 3000 })
+  } else if (reason === 'manual') {
+    message.info(`循环发送已停止 · 已发送 ${repeatSent.value} 次`, { duration: 2000 })
+  } else if (reason === 'disconnect') {
+    message.warning(`连接断开，循环已停止 · 已发送 ${repeatSent.value} 次`, { duration: 3000 })
   }
+  // silent: 不提示（卸载、或发送错误已自行弹窗）
 }
 
 function toggleRepeat() {
-  if (repeating.value) stopRepeat()
+  if (repeating.value) stopRepeat('manual')
   else startRepeat()
 }
 
@@ -110,11 +132,11 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 // 关掉循环开关时自动停止
-watch(repeatOn, (on) => { if (!on) stopRepeat() })
+watch(repeatOn, (on) => { if (!on) stopRepeat('manual') })
 // 断开连接时自动停止
-watch(() => serial.connected, (c) => { if (!c) stopRepeat() })
+watch(() => serial.connected, (c) => { if (!c) stopRepeat('disconnect') })
 
-onBeforeUnmount(stopRepeat)
+onBeforeUnmount(() => stopRepeat('silent'))
 </script>
 
 <template>
@@ -137,7 +159,10 @@ onBeforeUnmount(stopRepeat)
         <NInputNumber v-model:value="repeatCount" size="tiny" :min="0" style="width: 96px" placeholder="次数">
           <template #suffix>次</template>
         </NInputNumber>
-        <span v-if="repeating" class="repeat-count">{{ repeatSent }}{{ repeatCount > 0 ? '/' + repeatCount : '' }}</span>
+        <span v-if="repeating" class="repeat-count">
+          <span class="dot" />
+          {{ repeatSent }}{{ repeatCount > 0 ? '/' + repeatCount : '' }}
+        </span>
       </template>
 
       <span v-if="sendPreview" class="hint" :class="{ bad: !sendPreview.ok }">{{ sendPreview.msg }}</span>
@@ -151,13 +176,18 @@ onBeforeUnmount(stopRepeat)
         class="mono"
         @keydown="onKeydown"
       />
-      <NButton
-        v-if="repeatOn"
-        :type="repeating ? 'error' : 'warning'"
-        @click="toggleRepeat"
-      >
-        {{ repeating ? '停止' : '开始循环' }}
-      </NButton>
+      <span v-if="repeatOn" class="loop-btn-wrap" :class="{ 'is-looping': repeating }">
+        <NButton
+          :type="repeating ? 'error' : 'warning'"
+          @click="toggleRepeat"
+        >
+          <template v-if="repeating">
+            <span class="spinner" />
+            停止
+          </template>
+          <template v-else>开始循环</template>
+        </NButton>
+      </span>
       <NButton type="primary" :disabled="repeating" @click="onSend">发送</NButton>
     </div>
   </div>
@@ -182,9 +212,20 @@ onBeforeUnmount(stopRepeat)
   color: var(--text-dim);
 }
 .repeat-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--accent);
   font-family: var(--mono-font);
+}
+.repeat-count .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, #18a058);
+  box-shadow: 0 0 0 0 currentColor;
+  animation: loop-pulse 1.2s ease-out infinite;
 }
 .hint {
   font-size: 12px;
@@ -201,5 +242,52 @@ onBeforeUnmount(stopRepeat)
 }
 .mono :deep(input) {
   font-family: var(--mono-font);
+}
+
+/* 循环中的「停止」按钮：旋转图标 + 呼吸光晕 */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: loop-spin 0.8s linear infinite;
+}
+/* 用 wrapper + ::after 做光晕，避免被 Naive UI 自带的 box-shadow 覆盖 */
+.loop-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  border-radius: 4px;
+}
+.loop-btn-wrap.is-looping {
+  animation: loop-scale 1.2s ease-in-out infinite;
+}
+.loop-btn-wrap.is-looping::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: loop-glow 1.2s ease-out infinite;
+}
+@keyframes loop-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes loop-scale {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+@keyframes loop-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(208, 48, 80, 0.7); }
+  70%  { box-shadow: 0 0 0 10px rgba(208, 48, 80, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(208, 48, 80, 0); }
+}
+@keyframes loop-pulse {
+  0%   { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70%  { box-shadow: 0 0 0 6px transparent; opacity: 0.6; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
 }
 </style>
