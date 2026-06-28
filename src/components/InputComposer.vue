@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { NInput, NButton, NButtonGroup, NSelect, NInputNumber, NSwitch, useMessage } from 'naive-ui'
 import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
@@ -108,6 +108,11 @@ function onKeydown(e: KeyboardEvent) {
     if (v != null) text.value = v
   }
 }
+
+// 关掉循环开关时自动停止
+watch(repeatOn, (on) => { if (!on) stopRepeat() })
+// 断开连接时自动停止
+watch(() => serial.connected, (c) => { if (!c) stopRepeat() })
 
 onBeforeUnmount(stopRepeat)
 </script>
