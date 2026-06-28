@@ -142,7 +142,7 @@ onBeforeUnmount(stopRepeat)
       <NInput
         v-model:value="text"
         type="text"
-        :placeholder="mode === 'hex' ? '输入 HEX，如 AA 55 01 0x02 ；Enter 发送，Ctrl+↑/↓ 翻历史' : '输入文本，支持 \\r \\n \\t \\\\ \\0 \\xHH ；Enter 发送，Ctrl+↑/↓ 翻历史'"
+        :placeholder="mode === 'hex' ? '输入 HEX，如 AA 55 01 0x02 ；Enter 发送，Alt+↑/↓ 翻历史' : '输入文本，支持 \\r \\n \\t \\\\ \\0 \\xHH ；Enter 发送，Alt+↑/↓ 翻历史'"
         class="mono"
         @keydown="onKeydown"
       />
