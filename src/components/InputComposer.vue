@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, onMounted, nextTick } from 'vue'
 import { NInput, NButton, NButtonGroup, NSelect, NInputNumber, NSwitch, useMessage } from 'naive-ui'
 import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
@@ -138,6 +138,57 @@ watch(repeatOn, (on) => { if (!on) stopRepeat('manual') })
 watch(() => serial.connected, (c) => { if (!c) stopRepeat('disconnect') })
 
 onBeforeUnmount(() => stopRepeat('silent'))
+
+// —— 输入框高度拖拽 ——
+// Naive UI 原生 resize 手柄在右下角且为「向上压」语义，交互反直觉；
+// 这里改用输入框上边缘的横向拖拽条：向上拖增大、向下拖减小。
+const inputComp = ref<InstanceType<typeof NInput> | null>(null)
+const MIN_H = 40
+const MAX_H = 360
+let dragStartY = 0
+let dragStartH = 0
+
+function getTextarea(): HTMLTextAreaElement | null {
+  const el = (inputComp.value as any)?.$el as HTMLElement | undefined
+  return el ? el.querySelector('textarea') : null
+}
+
+function onGripDown(e: PointerEvent) {
+  const ta = getTextarea()
+  if (!ta) return
+  e.preventDefault()
+  dragStartY = e.clientY
+  dragStartH = ta.getBoundingClientRect().height
+  document.body.style.cursor = 'row-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', onGripMove)
+  window.addEventListener('pointerup', onGripUp, { once: true })
+}
+
+function onGripMove(e: PointerEvent) {
+  const ta = getTextarea()
+  if (!ta) return
+  // grip 在上边缘：向上拖（delta 为负）增大高度
+  let h = dragStartH - (e.clientY - dragStartY)
+  h = Math.max(MIN_H, Math.min(MAX_H, h))
+  ta.style.height = `${h}px`
+}
+
+function onGripUp() {
+  window.removeEventListener('pointermove', onGripMove)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+onMounted(async () => {
+  await nextTick()
+  const ta = getTextarea()
+  if (ta) ta.style.height = `${MIN_H * 2}px`
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', onGripMove)
+})
 </script>
 
 <template>
@@ -170,14 +221,19 @@ onBeforeUnmount(() => stopRepeat('silent'))
     </div>
 
     <div class="input-row">
-      <NInput
-        v-model:value="text"
-        type="textarea"
-        :autosize="{ minRows: 1, maxRows: 6 }"
-        :placeholder="mode === 'hex' ? '输入 HEX，可多行（换行仅作分隔）；如 AA 55 01 0x02 ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史' : '输入文本，可多行（换行仅作分隔，不发送字节）；支持 \\r \\n \\t \\\\ \\0 \\xHH ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史'"
-        class="mono"
-        @keydown="onKeydown"
-      />
+      <div class="input-wrap">
+        <div class="grip" @pointerdown="onGripDown" title="拖动调整高度" />
+        <NInput
+          ref="inputComp"
+          v-model:value="text"
+          type="textarea"
+          :rows="2"
+          :resizable="false"
+          :placeholder="mode === 'hex' ? '输入 HEX，可多行（换行仅作分隔）；如 AA 55 01 0x02 ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史' : '输入文本，可多行（换行仅作分隔，不发送字节）；支持 \\r \\n \\t \\\\ \\0 \\xHH ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史'"
+          class="mono"
+          @keydown="onKeydown"
+        />
+      </div>
       <span v-if="repeatOn" class="loop-btn-wrap" :class="{ 'is-looping': repeating }">
         <NButton
           :type="repeating ? 'error' : 'warning'"
@@ -243,8 +299,40 @@ onBeforeUnmount(() => stopRepeat('silent'))
   gap: 8px;
   align-items: flex-end;
 }
+.input-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 .mono :deep(textarea) {
   font-family: var(--mono-font);
+  resize: none;
+}
+/* 输入框上边缘横向拖拽手柄：向上拖增大、向下拖减小 */
+.grip {
+  flex: none;
+  height: 8px;
+  margin-bottom: 2px;
+  cursor: row-resize;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.grip::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-dim);
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.grip:hover::before {
+  opacity: 0.9;
 }
 
 /* 循环中的「停止」按钮：旋转图标 + 呼吸光晕 */
