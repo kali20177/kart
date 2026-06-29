@@ -117,6 +117,25 @@ describe('encodeWithEscapes', () => {
   it('字面反斜杠 + 转义混排', () => {
     expect(bytes('\\\\\\n')).toEqual([0x5c, 0x0a]) // \\ → \, \n → LF
   })
+
+  // 多行输入：原始换行仅为视觉分隔，不产生字节
+  it('原始 \\n 不产生字节', () => {
+    expect(bytes('AA\nBB')).toEqual([0x41, 0x41, 0x42, 0x42])
+  })
+  it('原始 \\r 不产生字节', () => {
+    expect(bytes('AA\rBB')).toEqual([0x41, 0x41, 0x42, 0x42])
+  })
+  it('原始 \\r\\n (Windows 换行) 不产生字节', () => {
+    expect(bytes('AA\r\nBB')).toEqual([0x41, 0x41, 0x42, 0x42])
+  })
+  it('多行文本被视作单行数据', () => {
+    expect(bytes('AA 45\n67 89\n45 90')).toEqual([
+      0x41, 0x41, 0x20, 0x34, 0x35, 0x36, 0x37, 0x20, 0x38, 0x39, 0x34, 0x35, 0x20, 0x39, 0x30
+    ])
+  })
+  it('原始换行与 \\n 转义并存：仅转义产生 0x0A', () => {
+    expect(bytes('A\nB\\nC')).toEqual([0x41, 0x42, 0x0a, 0x43])
+  })
 })
 
 describe('encodeText 集成转义解析', () => {

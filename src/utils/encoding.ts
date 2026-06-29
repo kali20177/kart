@@ -38,6 +38,9 @@ export function decodeBytes(bytes: Uint8Array, encoding: Encoding): string {
  *
  * 未识别的转义（如 \a、行尾孤立的 \）保留原样，不丢数据。
  * 非转义文本统一用 UTF-8 编码（ASCII 字符在 utf-8/gbk/ascii 下编码一致）。
+ *
+ * 多行输入：输入框里的原始换行（\n / \r）仅为视觉分隔，不会被编码为字节；
+ * 如需发送真实换行，请用 \n / \r 转义序列。
  */
 export function encodeText(text: string, encoding: Encoding): Uint8Array {
   void encoding
@@ -112,6 +115,14 @@ export function encodeWithEscapes(text: string): Uint8Array {
         parts.push(encoder.encode(text.slice(literalStart, i)))
       }
       parts.push(new Uint8Array([0x5c]))
+      i++
+      literalStart = i
+    } else if (text[i] === '\n' || text[i] === '\r') {
+      // 多行输入框里的原始换行仅为视觉分隔，不产生任何字节；
+      // 若需发送真实的换行/回车，请用 \n / \r 转义序列。
+      if (literalStart < i) {
+        parts.push(encoder.encode(text.slice(literalStart, i)))
+      }
       i++
       literalStart = i
     } else {

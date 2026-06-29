@@ -117,7 +117,8 @@ function toggleRepeat() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    // Ctrl/Cmd+Enter 发送；普通 Enter 留给 textarea 插入换行（仅视觉分隔，不发送字节）
     e.preventDefault()
     onSend()
   } else if (e.key === 'ArrowUp' && (e.ctrlKey || e.altKey)) {
@@ -171,8 +172,9 @@ onBeforeUnmount(() => stopRepeat('silent'))
     <div class="input-row">
       <NInput
         v-model:value="text"
-        type="text"
-        :placeholder="mode === 'hex' ? '输入 HEX，如 AA 55 01 0x02 ；Enter 发送，Alt+↑/↓ 翻历史' : '输入文本，支持 \\r \\n \\t \\\\ \\0 \\xHH ；Enter 发送，Alt+↑/↓ 翻历史'"
+        type="textarea"
+        :autosize="{ minRows: 1, maxRows: 6 }"
+        :placeholder="mode === 'hex' ? '输入 HEX，可多行（换行仅作分隔）；如 AA 55 01 0x02 ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史' : '输入文本，可多行（换行仅作分隔，不发送字节）；支持 \\r \\n \\t \\\\ \\0 \\xHH ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史'"
         class="mono"
         @keydown="onKeydown"
       />
@@ -239,8 +241,9 @@ onBeforeUnmount(() => stopRepeat('silent'))
 .input-row {
   display: flex;
   gap: 8px;
+  align-items: flex-end;
 }
-.mono :deep(input) {
+.mono :deep(textarea) {
   font-family: var(--mono-font);
 }
 
