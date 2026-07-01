@@ -41,6 +41,16 @@ const themeOptions = [
   { label: '亮色', value: 'light' },
   { label: '跟随系统', value: 'system' }
 ]
+const numericTypeOptions = [
+  { label: 'uint8 (1B)', value: 'uint8' },
+  { label: 'int8 (1B)', value: 'int8' },
+  { label: 'uint16 (2B)', value: 'uint16' },
+  { label: 'int16 (2B)', value: 'int16' },
+  { label: 'uint32 (4B)', value: 'uint32' },
+  { label: 'int32 (4B)', value: 'int32' },
+  { label: 'float32 (4B)', value: 'float32' },
+  { label: 'float64 (8B)', value: 'float64' }
+]
 
 // 模拟注入
 const injectText = ref('Hello from MCU\r\n')
@@ -111,6 +121,51 @@ function doInject() {
         </NFormItem>
         <NFormItem label="字号 (px)">
           <NInputNumber v-model:value="s.fontSize" :min="10" :max="20" style="width: 100%" />
+        </NFormItem>
+
+        <NDivider title-placement="left">波形解析</NDivider>
+        <NFormItem label="数值类型">
+          <NSelect v-model:value="s.waveform.parse.type" :options="numericTypeOptions" />
+        </NFormItem>
+        <NFormItem label="字节序">
+          <NSwitch v-model:value="s.waveform.parse.littleEndian">
+            <template #checked>小端 LE</template>
+            <template #unchecked>大端 BE</template>
+          </NSwitch>
+        </NFormItem>
+        <NFormItem label="通道数">
+          <NInputNumber
+            v-model:value="s.waveform.parse.channels"
+            :min="1"
+            :max="16"
+            style="width: 100%"
+          />
+        </NFormItem>
+        <NFormItem label="字节偏移（帧头）">
+          <NInputNumber
+            v-model:value="s.waveform.parse.byteOffset"
+            :min="0"
+            :max="64"
+            style="width: 100%"
+          />
+        </NFormItem>
+        <NFormItem label="采样率 (Hz)">
+          <NInputNumber
+            v-model:value="s.waveform.sampleRate"
+            :min="1"
+            :max="100000"
+            :step="10"
+            style="width: 100%"
+          />
+        </NFormItem>
+        <NFormItem label="最大点数">
+          <NInputNumber
+            v-model:value="s.waveform.maxPoints"
+            :min="100"
+            :max="100000"
+            :step="500"
+            style="width: 100%"
+          />
         </NFormItem>
 
         <NDivider title-placement="left">连接</NDivider>

@@ -15,6 +15,16 @@ const DEFAULTS: AppSettings = {
   defaultView: 'ascii',
   theme: 'dark',
   fontSize: 13,
+  waveform: {
+    parse: {
+      type: 'int16',
+      littleEndian: true,
+      channels: 2,
+      byteOffset: 0
+    },
+    sampleRate: 640,
+    maxPoints: 5000
+  },
   autoReconnect: false
 }
 

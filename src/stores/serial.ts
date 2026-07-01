@@ -35,6 +35,16 @@ export const useSerialStore = defineStore('serial', () => {
   let unsubscribe: (() => void) | null = null
   let signalTimer: ReturnType<typeof setInterval> | null = null
 
+  // 额外的原始字节消费者（如波形 store）。与 messages store 的帧切分互不干扰：
+  // 同一份字节流被两个独立消费者处理。订阅早于 connect() 也不会漏数据。
+  const externalDataListeners = new Set<(bytes: Uint8Array) => void>()
+
+  /** 订阅原始 RX 字节流（在帧切分之前）。返回取消订阅函数。 */
+  function onData(cb: (bytes: Uint8Array) => void): () => void {
+    externalDataListeners.add(cb)
+    return () => externalDataListeners.delete(cb)
+  }
+
   /** 串口参数概要，如 "115200 8N1" */
   const summary = computed(() => {
     const p = options.parity === 'none' ? 'N' : options.parity === 'even' ? 'E' : 'O'
@@ -57,6 +67,11 @@ export const useSerialStore = defineStore('serial', () => {
     txBytes.value = 0
     unsubscribe = driver.onData((bytes) => {
       rxBytes.value += bytes.length
+      // 先 fan-out 给外部消费者（波形管线订阅原始字节），再入消息列表。
+      // 顺序无关紧要：两者各自独立处理这份副本。
+      if (externalDataListeners.size > 0) {
+        for (const cb of externalDataListeners) cb(bytes)
+      }
       messages.ingestRx(bytes)
     })
     connected.value = true
@@ -153,6 +168,7 @@ export const useSerialStore = defineStore('serial', () => {
     setScenario,
     inject,
     send,
-    resend
+    resend,
+    onData
   }
 })

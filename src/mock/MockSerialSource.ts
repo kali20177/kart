@@ -4,7 +4,8 @@ import {
   binaryFrame,
   gbkSample,
   logLine,
-  throughputChunk
+  throughputChunk,
+  waveformChunk
 } from './scenarios'
 
 /**
@@ -102,6 +103,10 @@ export class MockSerialSource implements SerialDriver {
           else this.emit(logLine(this.seq))
           this.seq++
         }, 600)
+        break
+      case 'waveform':
+        // 每 50ms 一帧 128 字节 = 32 采样 → 640 采样/秒，匹配默认 sampleRate:640
+        this.timer = setInterval(() => this.emit(waveformChunk(this.seq++)), 50)
         break
       case 'silent':
       case 'at-reply':

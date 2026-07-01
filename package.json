@@ -20,6 +20,7 @@
   "dependencies": {
     "naive-ui": "^2.38.2",
     "pinia": "^2.1.7",
+    "uplot": "^1.6.32",
     "vue": "^3.4.21",
     "vue-virtual-scroller": "2.0.0-beta.8"
   },

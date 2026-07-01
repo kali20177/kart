@@ -69,6 +69,38 @@ export interface FrameConfig {
 /** 主题 */
 export type ThemeMode = 'light' | 'dark' | 'system'
 
+/** 波形数值类型 —— 决定每采样字节数与 DataView 读取方法 */
+export type NumericType =
+  | 'uint8'
+  | 'int8'
+  | 'uint16'
+  | 'int16'
+  | 'uint32'
+  | 'int32'
+  | 'float32'
+  | 'float64'
+
+/** 波形解析配置：把连续字节流解析为多通道采样 */
+export interface WaveformParseConfig {
+  /** 数值类型（决定每采样字节数） */
+  type: NumericType
+  /** 大小端（uint8/int8 无效，仍保留以统一处理） */
+  littleEndian: boolean
+  /** 交错通道数 */
+  channels: number
+  /** 每 record 起始跳过的字节数（如帧头），连续流通常为 0 */
+  byteOffset: number
+}
+
+/** 波形视图设置 */
+export interface WaveformSettings {
+  parse: WaveformParseConfig
+  /** 采样率（Hz）—— 仅决定 X 轴时间刻度，不参与解析 */
+  sampleRate: number
+  /** 滑动窗口最大点数，超出从头裁剪 */
+  maxPoints: number
+}
+
 /** 全局设置 */
 export interface AppSettings {
   // 接收
@@ -79,6 +111,8 @@ export interface AppSettings {
   defaultView: DataMode
   theme: ThemeMode
   fontSize: number
+  // 波形
+  waveform: WaveformSettings
   // 连接
   autoReconnect: boolean
 }
@@ -90,3 +124,4 @@ export type MockScenarioId =
   | 'binary-frames'
   | 'high-throughput'
   | 'mixed-ascii'
+  | 'waveform'

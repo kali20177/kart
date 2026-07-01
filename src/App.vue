@@ -4,6 +4,7 @@ import { NConfigProvider, NMessageProvider, darkTheme, zhCN, dateZhCN } from 'na
 import MenuBar from './components/MenuBar.vue'
 import ConnectionBar from './components/ConnectionBar.vue'
 import MessageList from './components/MessageList.vue'
+import WaveformChart from './components/WaveformChart.vue'
 import InputComposer from './components/InputComposer.vue'
 import QuickCommandsPanel from './components/QuickCommandsPanel.vue'
 import AsciiTable from './components/AsciiTable.vue'
@@ -11,11 +12,15 @@ import SettingsDrawer from './components/SettingsDrawer.vue'
 import StatusBar from './components/StatusBar.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
+import { useIsDark } from './composables/useIsDark'
 import type { DataMode } from './types'
 import type { AsciiEntry } from './utils/ascii-table'
 
 const serial = useSerialStore()
 const settingsStore = useSettingsStore()
+
+// 主区域视图：[消息] / [波形]。v-show 切换（不卸载），波形隐藏时仍缓冲数据
+const mainView = ref<'messages' | 'waveform'>('messages')
 
 const viewMode = ref<DataMode>(settingsStore.settings.defaultView)
 const composerText = ref('')
@@ -65,14 +70,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onColGripMove)
 })
 
-// 主题：system → 跟随媒体查询
-const prefersDark =
-  typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null
-const isDark = computed(() => {
-  const t = settingsStore.settings.theme
-  if (t === 'system') return prefersDark?.matches ?? true
-  return t === 'dark'
-})
+// 主题：system → 跟随媒体查询（逻辑抽到 useIsDark，WaveformChart 共用）
+const isDark = useIsDark()
 const naiveTheme = computed(() => (isDark.value ? darkTheme : null))
 
 watch(
@@ -117,7 +116,25 @@ onMounted(() => {
 
         <div class="main">
           <div class="left">
-            <MessageList :view-mode="viewMode" @resend="onResend" />
+            <div class="view-tabs">
+              <button
+                class="tab"
+                :class="{ active: mainView === 'messages' }"
+                @click="mainView = 'messages'"
+              >
+                消息
+              </button>
+              <button
+                class="tab"
+                :class="{ active: mainView === 'waveform' }"
+                @click="mainView = 'waveform'"
+              >
+                波形
+              </button>
+            </div>
+
+            <MessageList v-show="mainView === 'messages'" :view-mode="viewMode" @resend="onResend" />
+            <WaveformChart v-show="mainView === 'waveform'" />
             <InputComposer v-model:text="composerText" v-model:mode="viewMode" />
           </div>
           <div
@@ -164,6 +181,30 @@ onMounted(() => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+.view-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 .right {
   flex: none;
