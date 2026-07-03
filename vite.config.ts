@@ -104,6 +104,9 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Node 22+ 在 globalThis 上装了实验性 localStorage 访问器，会遮蔽 jsdom 的
+    // Web Storage 实现（见 src/test/setup.ts 头注释），故仍需 setup 文件提供。
+    setupFiles: ['./src/test/setup.ts'],
     globals: true
   }
 })

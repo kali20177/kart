@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSerialStore } from './serial'
 
@@ -6,19 +6,7 @@ const KEY = 'serial-demo:customBaudRates'
 
 beforeEach(() => {
   setActivePinia(createPinia())
-  // 测试环境为 node（vite.config 的 environment:jsdom 未生效），无 localStorage，
-  // 用内存实现替代以覆盖持久化逻辑
-  const store = new Map<string, string>()
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => store.set(k, String(v)),
-    removeItem: (k: string) => store.delete(k),
-    clear: () => store.clear(),
-    key: (i: number) => Array.from(store.values())[i] ?? null,
-    get length() {
-      return store.size
-    }
-  })
+  // localStorage 由 src/test/setup.ts 统一提供（内存版，每用例重置）
 })
 
 describe('serial store · 自定义波特率', () => {

@@ -48,10 +48,11 @@
 
 ## 二、已知技术问题
 
-### `vite.config` 的 `test.environment` 未生效
+### ✅ `vite.config` 的 `test.environment`「未生效」（已排查并修复）
 
-- **现象**：`vite.config.ts` 写了 `test: { environment: 'jsdom' }`，但测试实际跑在 node 环境（`localStorage` 不可用，出现 `ExperimentalWarning: localStorage is not available`）。
-- **根因**：`defineConfig` 从 `'vite'` 导入，vite 不识别 `test` 字段。曾尝试改 `from 'vitest/config'`，但 environment 仍未生效（根因未明，疑似 vitest 1.6.1 config 解析问题）。
-- **当前规避**：需 localStorage 的测试（`src/stores/serial.spec.ts`）用 `vi.stubGlobal('localStorage', ...)` 提供内存实现。
-- **影响**：不影响生产、不影响当前测试。但未来加 DOM/组件渲染测试（`@vue/test-utils` 挂载组件）会因 jsdom 未启用而踩坑。
-- **待办**：排查 vitest config 解析；或显式新建 `vitest.config.ts` 单独配置 `environment: 'jsdom'`。
+- **原误判**：曾以为 `environment: 'jsdom'` 没生效、测试跑在 node 环境。
+- **实况**：jsdom 一直生效（`navigator.userAgent` 为 `jsdom/24.x`，`window`/`document` 均可用）。真正症状只是 `localStorage` 不可用，并抛 `ExperimentalWarning: localStorage is not available because --localstorage-file was not provided`。
+- **真正根因**：Node 22+ 在 `globalThis` 上装了实验性 `localStorage` 访问器（`--experimental-webstorage`），它是 own property，遮蔽了 jsdom 的 Web Storage。vitest 1.6.1 的 jsdom 环境只把 jsdom window 的「自有可枚举属性」拷到全局，而 jsdom 的 `localStorage` 位于原型链上不会被拷贝，于是全局 `localStorage` 命中 Node 的实验性访问器（getter 返回 undefined + 警告）。**与 `defineConfig` 从 `'vite'` 还是 `'vitest/config'` 导入无关**——二者运行时都原样透传 `test` 字段，仅影响类型标注。
+- **修复**：新增 `src/test/setup.ts`，在 `beforeEach` 用 `vi.stubGlobal` 提供内存版 `localStorage`（每用例重置保证隔离），并在 `vite.config.ts` 的 `test.setupFiles` 注册。`serial.spec.ts` 内冗余的 stub 及误判注释已移除。
+- **备选（未采用）**：`NODE_OPTIONS=--no-experimental-webstorage` 可让 jsdom 的 localStorage 接管，但该标志仅 Node 22+ 存在，在 Node 20 上会报 `bad option`，跨版本不可移植，故未采用。
+- **影响**：不影响生产。现已消除警告，后续 DOM/组件渲染测试（`@vue/test-utils` 挂载）可直接用 jsdom。
