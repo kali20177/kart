@@ -54,4 +54,22 @@ describe('loadCustomBaudRates', () => {
     const data = [{ baud: 500000, note: '自定义设备' }]
     expect(loadCustomBaudRates(data)).toEqual(data)
   })
+  it('丢弃 baud 缺失/非法/重复的项，清除空白标注', () => {
+    expect(
+      loadCustomBaudRates([
+        { baud: 500000, note: '自定义设备' },
+        { note: '无 baud' }, // 缺 baud → 丢弃
+        { baud: 0 }, // 非法 baud → 丢弃
+        { baud: 1.5 }, // 非整数 → 丢弃
+        { baud: BAUD_MAX + 1 }, // 越界 → 丢弃
+        { baud: 74880, note: '   ' }, // 空白标注 → 清除 note
+        { baud: 74880 }, // 重复 baud → 丢弃
+        'oops', // 非对象 → 丢弃
+        null // null → 丢弃
+      ])
+    ).toEqual([
+      { baud: 500000, note: '自定义设备' },
+      { baud: 74880 }
+    ])
+  })
 })

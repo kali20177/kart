@@ -29,14 +29,29 @@ export function isValidBaud(n: number): boolean {
 }
 
 /**
- * 读取持久化的自定义波特率，兼容旧格式：
+ * 读取持久化的自定义波特率，兼容旧格式并做防御性清洗：
  *  - 旧版存 number[]（如 [74880, 500000]）→ 转为 [{ baud }]
- *  - 新版存 CustomBaudRate[] → 原样返回
+ *  - 新版存 CustomBaudRate[] → 保留 baud 与 note
+ *  - 丢弃 baud 缺失/非法（非正整数或越界）或重复的项；note 非字符串或纯空白则清除
  */
 export function loadCustomBaudRates(raw: unknown): CustomBaudRate[] {
   if (!Array.isArray(raw)) return []
-  if (raw.length && typeof raw[0] === 'number') {
-    return (raw as number[]).map((baud) => ({ baud }))
+  const seen = new Set<number>()
+  const result: CustomBaudRate[] = []
+  for (const item of raw) {
+    if (typeof item === 'number') {
+      if (isValidBaud(item) && !seen.has(item)) {
+        seen.add(item)
+        result.push({ baud: item })
+      }
+      continue
+    }
+    if (item == null || typeof item !== 'object') continue
+    const baud = (item as { baud?: unknown }).baud
+    if (typeof baud !== 'number' || !isValidBaud(baud) || seen.has(baud)) continue
+    seen.add(baud)
+    const note = (item as { note?: unknown }).note
+    result.push(typeof note === 'string' && note.trim() ? { baud, note } : { baud })
   }
-  return raw as CustomBaudRate[]
+  return result
 }

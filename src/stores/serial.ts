@@ -4,7 +4,7 @@ import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate } from 
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
-import { isPresetBaud, loadCustomBaudRates } from '@/utils/baud'
+import { isPresetBaud, isValidBaud, loadCustomBaudRates } from '@/utils/baud'
 import type { DataMode, LineEnding } from '@/types'
 import { useMessagesStore } from './messages'
 import { storage } from '@/composables/useStorage'
@@ -110,8 +110,9 @@ export const useSerialStore = defineStore('serial', () => {
     driver.inject(bytes)
   }
 
-  /** 新增自定义波特率（预设档位与已存在项会被忽略） */
+  /** 新增自定义波特率（非法值/预设档位/已存在项会被忽略） */
   function addCustomBaudRate(baud: number) {
+    if (!isValidBaud(baud)) return
     if (isPresetBaud(baud)) return
     if (customBaudRates.value.some((c) => c.baud === baud)) return
     customBaudRates.value = [...customBaudRates.value, { baud }].sort((a, b) => a.baud - b.baud)

@@ -57,4 +57,13 @@ describe('serial store · 自定义波特率', () => {
     const s = useSerialStore()
     expect(s.customBaudRates).toEqual([{ baud: 74880 }, { baud: 500000 }])
   })
+
+  it('非法 baud（0/负/小数/越界）不会被加入', () => {
+    const s = useSerialStore()
+    s.addCustomBaudRate(0)
+    s.addCustomBaudRate(-1)
+    s.addCustomBaudRate(1.5)
+    s.addCustomBaudRate(99_999_999)
+    expect(s.customBaudRates).toEqual([])
+  })
 })

@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, h, nextTick, ref } from 'vue'
+import { computed, h, nextTick, ref, type VNode, type VNodeChild } from 'vue'
 import { NSelect, NButton, NTooltip, NModal, NInput, useMessage } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
-import type { RenderOption } from 'naive-ui/es/_internal/select-menu/src/interface'
 import { useSerialStore } from '@/stores/serial'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
@@ -30,6 +29,9 @@ const baudOptions = computed<SelectOption[]>(() => {
 /** 自定义项操作按钮（✎ 编辑标注 / × 删除）的统一样式 */
 const baudBtnStyle =
   'border:none;background:transparent;cursor:pointer;color:var(--text-dim);font-size:13px;line-height:1;padding:0 4px'
+
+/** render-option 回调签名（等价 NSelect 的 render-option prop，避免深路径 import naive-ui 内部） */
+type RenderOption = (info: { option: SelectOption; node: VNode; selected: boolean }) => VNodeChild
 
 /**
  * render-label 同时用于触发器(传 selected=true)与下拉项 content。
