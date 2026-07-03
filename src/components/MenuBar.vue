@@ -4,7 +4,8 @@ import { NDropdown, NButton, NModal, useMessage } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
-import { decodeBytes } from '@/utils/encoding'
+import { formatMessageLine } from '@/utils/message-format'
+import { downloadTextFile } from '@/utils/download'
 
 const messages = useMessagesStore()
 const settingsStore = useSettingsStore()
@@ -59,8 +60,6 @@ const helpMenu: DropdownOption[] = [
   { label: '许可证', key: 'license' }
 ]
 
-const pad = (n: number, w = 2) => String(n).padStart(w, '0')
-
 /** 导出接收/发送记录为纯文本日志：每行 [时间戳] RX/TX: 解码文本 */
 function exportLog() {
   const list = messages.messages
@@ -69,18 +68,11 @@ function exportLog() {
     return
   }
   const enc = settingsStore.settings.encoding
-  const lines = list.map((m) => {
-    const d = new Date(m.timestamp)
-    const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
-    const dir = m.direction === 'tx' ? 'TX' : 'RX'
-    return `[${ts}] ${dir}: ${decodeBytes(m.bytes, enc)}`
-  })
-  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = 'serial-log.txt'
-  a.click()
-  URL.revokeObjectURL(a.href)
+  const lines =
+    list
+      .map((m) => formatMessageLine(m, { viewMode: 'ascii', encoding: enc, timeStyle: 'full' }))
+      .join('\n') + '\n'
+  downloadTextFile('serial-log.txt', lines)
 }
 
 function handleSelect(key: string) {

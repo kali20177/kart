@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { NConfigProvider, NMessageProvider, darkTheme, zhCN, dateZhCN } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, zhCN, dateZhCN } from 'naive-ui'
 import MenuBar from './components/MenuBar.vue'
 import ConnectionBar from './components/ConnectionBar.vue'
 import MessageList from './components/MessageList.vue'
@@ -110,6 +110,7 @@ onMounted(() => {
 <template>
   <NConfigProvider :theme="naiveTheme" :locale="zhCN" :date-locale="dateZhCN">
     <NMessageProvider>
+      <NDialogProvider>
       <div class="app">
         <MenuBar />
         <ConnectionBar @open-ascii="showAscii = true" @open-settings="showSettings = true" />
@@ -160,6 +161,7 @@ onMounted(() => {
 
       <AsciiTable v-model:show="showAscii" @insert="onInsertAscii" />
       <SettingsDrawer v-model:show="showSettings" />
+      </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>
 </template>

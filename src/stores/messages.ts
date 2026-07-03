@@ -89,9 +89,17 @@ export const useMessagesStore = defineStore('messages', () => {
     triggerRef(messages)
   }
 
+  /** 删除指定 id 的帧（批量删除用）；pending 里未刷入的不可见不可选，不动；rxFrames 是历史接收统计，不减 */
+  function removeByIds(ids: number[]) {
+    if (ids.length === 0) return
+    const set = new Set(ids)
+    messages.value = messages.value.filter((m) => !set.has(m.id))
+    triggerRef(messages)
+  }
+
   function togglePause() {
     paused.value = !paused.value
   }
 
-  return { messages, paused, rxFrames, ingestRx, addTx, clear, togglePause }
+  return { messages, paused, rxFrames, ingestRx, addTx, clear, removeByIds, togglePause }
 })
