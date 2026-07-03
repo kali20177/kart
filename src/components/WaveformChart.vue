@@ -71,12 +71,15 @@ function buildOpts(ch: number, w: number, h: number): uPlot.Options {
         size: 56
       }
     ],
-    cursor: { points: { show: false } }
+    // 关闭 uPlot 默认拖框放大（drag.setScale）；x/y:false 彻底不画选择框。
+    // 暂停时的回看平移由组件自实现（见 onPanDown），不复用 uPlot 的 drag。
+    cursor: { points: { show: false }, drag: { setScale: false, x: false, y: false } }
   }
 }
 
 function destroyChart() {
   if (chart) {
+    unbindPan()
     chart.destroy()
     chart = null
   }
@@ -93,6 +96,77 @@ function rebuild() {
   lastH = h
   const opts = buildOpts(channels(), w, h)
   chart = new uPlot(opts, waveform.data as unknown as uPlot.AlignedData, el)
+  bindPan()
+}
+
+// —— 暂停时拖拽回看历史（grab 式平移）——
+// uPlot 1.6 无内置 pan 插件，自实现 pointerdown/move/up 于 chart.over 覆盖层。
+// 仅 paused 时启用；向右拖 → viewOffset 增大 → 看更早历史，1:1 跟手。
+let panActive = false
+let panStartX = 0
+let panStartOffset = 0
+
+function onPanDown(e: PointerEvent) {
+  if (!chart || !waveform.paused) return
+  e.preventDefault()
+  panActive = true
+  panStartX = e.clientX
+  panStartOffset = waveform.viewOffset
+  const over = chart.over
+  try {
+    over.setPointerCapture(e.pointerId)
+  } catch {
+    /* 无 pointer capture 时退化为仅 over 内移动 */
+  }
+  over.style.cursor = 'grabbing'
+  over.addEventListener('pointermove', onPanMove)
+  over.addEventListener('pointerup', onPanUp)
+  over.addEventListener('pointercancel', onPanUp)
+}
+
+function onPanMove(e: PointerEvent) {
+  if (!panActive || !chart) return
+  const plotW = chart.over.clientWidth
+  if (plotW <= 0) return
+  const viewSize = Math.max(1, settings.settings.waveform.maxPoints)
+  const dx = e.clientX - panStartX
+  // samplesPerPx = 可视点数 / 绘图区像素宽 → 像素位移换算为采样位移，1:1 跟手
+  const samplesPerPx = viewSize / plotW
+  const target = Math.round(panStartOffset + dx * samplesPerPx)
+  waveform.setViewOffset(target)
+}
+
+function onPanUp(e: PointerEvent) {
+  if (!chart) return
+  const over = chart.over
+  panActive = false
+  try {
+    over.releasePointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+  over.style.cursor = waveform.paused ? 'grab' : ''
+  over.removeEventListener('pointermove', onPanMove)
+  over.removeEventListener('pointerup', onPanUp)
+  over.removeEventListener('pointercancel', onPanUp)
+}
+
+/** 重建后挂 pan 监听 + 设初始光标 */
+function bindPan() {
+  if (!chart) return
+  const over = chart.over
+  over.addEventListener('pointerdown', onPanDown)
+  over.style.cursor = waveform.paused ? 'grab' : ''
+}
+
+function unbindPan() {
+  if (!chart) return
+  const over = chart.over
+  over.removeEventListener('pointerdown', onPanDown)
+  over.removeEventListener('pointermove', onPanMove)
+  over.removeEventListener('pointerup', onPanUp)
+  over.removeEventListener('pointercancel', onPanUp)
+  panActive = false
 }
 
 /** rAF 节流刷入：每帧最多一次 setData，避免 50ms 批次压垮渲染 */
@@ -132,6 +206,14 @@ watch(
 // 主题切换 → 销毁重建（应用新配色；低频，重建成本可忽略）
 watch(isDark, () => rebuild())
 
+// 暂停状态切换 → 更新覆盖层光标（grab / 默认）；拖拽中不打断
+watch(
+  () => waveform.paused,
+  (p) => {
+    if (chart && !panActive) chart.over.style.cursor = p ? 'grab' : ''
+  }
+)
+
 onMounted(() => {
   rebuild()
   const el = containerRef.value
@@ -167,6 +249,12 @@ const pointCount = computed(() => {
   void waveform.version
   return waveform.data[0]?.length ?? 0
 })
+
+// 回看偏移折算为秒（viewOffset 采样 / 采样率），用于工具栏提示
+const backSeconds = computed(() => {
+  const rate = Math.max(1, settings.settings.waveform.sampleRate)
+  return waveform.viewOffset / rate
+})
 </script>
 
 <template>
@@ -174,7 +262,14 @@ const pointCount = computed(() => {
     <div class="toolbar">
       <NTag size="small" :bordered="false">{{ pointCount }} 点</NTag>
       <NTag size="small" :bordered="false">{{ channels() }} 通道</NTag>
+      <NTag v-if="waveform.paused" size="small" :bordered="false" type="info">拖拽回看历史</NTag>
+      <NTag v-if="waveform.viewOffset > 0" size="small" :bordered="false" type="warning">
+        回看 −{{ backSeconds.toFixed(1) }}s
+      </NTag>
       <div class="spacer" />
+      <NButton v-if="waveform.viewOffset > 0" size="tiny" @click="waveform.resetView()">
+        回到最新
+      </NButton>
       <NButton
         size="tiny"
         :type="waveform.paused ? 'warning' : 'default'"

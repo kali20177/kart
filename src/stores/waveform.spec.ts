@@ -67,16 +67,17 @@ describe('waveform store ingest', () => {
     expect(wf.data[0].length).toBe(32)
   })
 
-  it('超过 maxPoints 从头裁剪（滚动窗口）', async () => {
+  it('超过 maxPoints 后可视窗口滚满（history 另保留）', async () => {
     const settings = useSettingsStore()
     settings.settings.waveform.maxPoints = 10
     await nextTick()
     const wf = useWaveformStore()
-    // 每帧 32 采样，灌两帧 = 64 点，上限 10 → 裁到 10
+    // 每帧 32 采样，灌两帧 = 64 点，可视窗口上限 10 → 滚满
     wf.ingest(waveformChunk(0))
     wf.ingest(waveformChunk(1))
-    expect(wf.data[0].length).toBe(10)
+    expect(wf.data[0].length).toBe(10) // 可视窗口滚满
     expect(wf.data[1].length).toBe(10)
+    expect(wf.history[0].length).toBe(64) // 历史完整保留（不再从头裁剪）
   })
 
   it('回归：窗口滚满后 version 仍持续递增（图表刷新信号不能依赖长度）', async () => {
@@ -116,5 +117,70 @@ describe('waveform store ingest', () => {
     await nextTick()
     expect(wf.data.length).toBe(2) // X + 1 通道
     expect(wf.data[0].length).toBe(0) // 已清空
+  })
+})
+
+describe('waveform store 历史回看', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  // 把可视窗口设小（10），灌 2 帧 = 64 采样 → history=64、maxOffset=54，便于回看
+  async function seedSmallWindow() {
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 10
+    await nextTick()
+    const wf = useWaveformStore()
+    wf.ingest(waveformChunk(0))
+    wf.ingest(waveformChunk(1))
+    return wf
+  }
+
+  it('暂停后 setViewOffset 回看更早采样（X 时间戳更小）', async () => {
+    const wf = await seedSmallWindow()
+    expect(wf.history[0].length).toBe(64)
+    const latestFirstX = wf.data[0][0] // viewOffset=0 → 末尾窗口里最早点（sample 54）的 X
+    wf.togglePause() // 暂停后才能回看
+    wf.setViewOffset(54) // 回看到最旧（sample 0..9）
+    expect(wf.viewOffset).toBe(54)
+    expect(wf.data[0].length).toBe(10)
+    const backFirstX = wf.data[0][0] // sample 0 的 X
+    expect(backFirstX).toBeLessThan(latestFirstX)
+  })
+
+  it('setViewOffset 越界 clamp：不小于 0、不超过 history-viewSize', async () => {
+    const wf = await seedSmallWindow()
+    wf.togglePause()
+    wf.setViewOffset(-100)
+    expect(wf.viewOffset).toBe(0)
+    wf.setViewOffset(99999)
+    expect(wf.viewOffset).toBe(54) // 64 - 10
+  })
+
+  it('恢复（togglePause）自动回到最新', async () => {
+    const wf = await seedSmallWindow()
+    wf.togglePause()
+    wf.setViewOffset(54)
+    expect(wf.viewOffset).toBe(54)
+    wf.togglePause() // 恢复
+    expect(wf.viewOffset).toBe(0)
+    expect(wf.data[0][0]).toBe(wf.history[0][54]) // 回到末尾窗口
+  })
+
+  it('resetView 回到最新', async () => {
+    const wf = await seedSmallWindow()
+    wf.togglePause()
+    wf.setViewOffset(40)
+    expect(wf.viewOffset).toBe(40)
+    wf.resetView()
+    expect(wf.viewOffset).toBe(0)
+  })
+
+  it('运行中（未暂停）ingest 始终跟随最新，viewOffset 恒为 0', async () => {
+    const wf = await seedSmallWindow()
+    expect(wf.viewOffset).toBe(0)
+    wf.ingest(waveformChunk(2)) // 又一帧，history=96
+    expect(wf.viewOffset).toBe(0) // 运行中不会停留在历史
+    expect(wf.data[0][0]).toBe(wf.history[0][86]) // 末尾 10 窗口
   })
 })

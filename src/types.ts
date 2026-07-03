@@ -97,7 +97,7 @@ export interface WaveformSettings {
   parse: WaveformParseConfig
   /** 采样率（Hz）—— 仅决定 X 轴时间刻度，不参与解析 */
   sampleRate: number
-  /** 滑动窗口最大点数，超出从头裁剪 */
+  /** 可视窗口点数（历史另保留至 MAX_HISTORY，暂停后可拖拽回看） */
   maxPoints: number
 }
 

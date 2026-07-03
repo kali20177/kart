@@ -38,12 +38,12 @@ serial store connect() 内的 driver.onData 回调
           └─ 零头作为新 remainder 返回（跨回调承接半截采样）
                 │
                 ▼
-        按通道 append 进滑动窗口 data[ch][]
+        按通道 append 进历史缓冲 history[ch][]
           X = startTime + sampleIndex++ * (1000/sampleRate)
-          超 maxPoints 从头裁剪
+          超 MAX_HISTORY 从头裁剪；可视窗口 data = history 末尾 maxPoints 切片
                 │
                 ▼
-        WaveformChart 组件 watch(data) + rAF 节流 → uPlot.setData(data)
+        WaveformChart 组件 watch(version) + rAF 节流 → uPlot.setData(data)
 ```
 
 **关键原则**：波形管线订阅**原始字节**（在 messages store 的帧切分之前），独立解析，
@@ -122,7 +122,9 @@ parseSamples(bytes, cfg, carryover): { perChannel: number[][]; remainder: Uint8A
 - `ResizeObserver` → `chart.setSize({width,height})`（0 尺寸跳过）。
 - `watch(data)` + rAF 节流 → `chart.setData(data)`。
 - `watch(isDark)` → `chart.destroy()` 后重建（应用主题色）。
-- `onBeforeUnmount` → `chart.destroy()` + RO.disconnect + `waveformStore.unsubscribe()`。
+- `onBeforeUnmount` → `chart.destroy()` + RO.disconnect。
+- `cursor.drag = { setScale: false, x: false, y: false }` 关闭 uPlot 默认拖框放大（避免误操作）。
+- 暂停时于 `chart.over` 覆盖层挂 `pointerdown/move/up` 实现 grab 式平移回看历史（见 §10）。
 
 ## 8. 验证
 
@@ -133,6 +135,8 @@ parseSamples(bytes, cfg, carryover): { perChannel: number[][]; remainder: Uint8A
    点清空缓冲重置。
 4. **滚满验证**：窗口滚到 maxPoints 后波形仍持续滚动、点数稳定在 maxPoints
    （刷新信号用 `version` 版本号而非数组长度，避免窗口满后卡死）。
+5. **历史回看验证**：等数据滚满 → 暂停 → 向右拖拽应 1:1 平移回看更早波形、工具栏出现「回看 −Xs」与「回到最新」；
+   点「回到最新」或恢复运行即回实时；运行中拖拽不再框选放大。
 
 ## 9. 单片机数据协议
 
@@ -194,4 +198,49 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc) {
 | 大端 MCU | 字节序 → 大端 |
 
 解析逻辑全部参数化且配置持久化——这是这套抽象的意义：阶段 2 换真实驱动时，单片机协议和解析配置都无需改代码。
+
+## 10. 历史回看（暂停后拖拽平移）
+
+### 10.1 动机
+
+早期实现是单一滑动窗口：`trimIfNeeded` 把超过 `maxPoints` 的旧采样**从头丢弃**。这带来两个问题：
+
+1. uPlot 默认 `cursor.drag.setScale: true`，在图上拖拽会**框选放大**该区域——调试时极易误触。
+2. 旧数据被即时删除，**没有历史可回看**——暂停后想看几秒前的波形已不可能。
+
+### 10.2 两层模型：历史缓冲 + 可视窗口
+
+把「保留多少数据」与「显示哪一段」解耦：
+
+| 层 | 含义 | 上限 |
+|---|---|---|
+| `history` | 完整保留的采样缓冲（`[X, ch1, ch2, …]`），组件**不直接渲染** | 常量 `MAX_HISTORY = 200_000`（~5min@640Hz、2 通道约 3MB），从头裁剪 |
+| `data` | 可视切片 = `history` 末尾向前偏移 `viewOffset` 个采样的 `maxPoints` 长度窗口 | `maxPoints`（现为「可视点数」） |
+| `viewOffset` | 从尾部向回偏移的采样数。`0` = 跟随最新；`>0` = 回看更早 | `[0, history长度 − viewSize]`，由 `recomputeView` clamp |
+
+- 组件照旧 `chart.setData(waveform.data)`——`data` 永远是当前可视切片，x 轴 auto-fit 即正确显示该窗口。
+- 运行中（`!paused`）`viewOffset` 恒为 `0`，数据流入时可视窗口自动跟随最新（观感同旧）。
+- 暂停后拖拽调整 `viewOffset` 回看；`togglePause` 恢复时归零自动回到最新。
+
+### 10.3 交互
+
+- **关闭默认放大**：`cursor.drag = { setScale: false, x: false, y: false }`，运行中拖拽置空（既不放大也不平移）。
+- **暂停时 grab-pan**：于 `chart.over` 挂 `pointerdown/move/up`，`setPointerCapture` 锁定。
+  - `samplesPerPx = viewSize / chart.over.clientWidth`；`target = startOffset + round(dx × samplesPerPx)`。
+  - **方向**：向右拖（`dx>0`）→ `viewOffset` 增大 → 看更早历史（grab 隐喻：抓住波形向右拉，左侧更早内容进入视野，1:1 跟手）。
+  - 仅 `paused` 时 `onPanDown` 才启动；光标 `grab`/`grabbing`。
+- **回到最新**：工具栏在 `viewOffset > 0` 时显示「回到最新」按钮（`resetView`）与「回看 −Xs」提示；恢复运行也自动回最新。
+
+### 10.4 配置变更语义（相对旧版的调整）
+
+- 采样率变更：重算**全部 history** 的 X（不只可视窗口，否则回看时时间轴会错）。
+- `maxPoints` 变更：现为「可视点数」→ 仅 `recomputeView` 重切窗口，**不再裁剪 history**。
+- 解析配置变更：仍清空重建（history 与 data 一并重置）。
+
+### 10.5 取舍
+
+- 历史上限用常量 `MAX_HISTORY = 200_000`（不做设置项）：避免长会话无界内存增长；`maxPoints` 设置上限 100k，恒 ≤ 此值，回看总有余量。后续可按需提升为设置。
+- pan 仅暂停时启用（符合「当点击暂停时」）；恢复自动回最新，避免停留在历史里错过新数据。
+- y 轴随可视窗口 auto-fit（沿用 `setData` 默认 `resetScales`），回看到不同幅度区域时 y 自适应（类示波器 auto-y）。
+- uPlot 1.6 无内置 pan 插件，自实现 grab-pan 更可控且零依赖。
 
