@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useMessage } from 'naive-ui'
 import type { DataMode, Encoding, Message } from '@/types'
 import { bytesToHex, hexDump } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
@@ -13,6 +14,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'resend', bytes: Uint8Array): void
 }>()
+
+const toast = useMessage()
 
 const isTx = computed(() => props.message.direction === 'tx')
 
@@ -28,14 +31,19 @@ const timeLabel = computed(() => {
 const asciiText = computed(() => decodeBytes(props.message.bytes, props.encoding))
 const dumpLines = computed(() => hexDump(props.message.bytes, 16))
 
+/** 复制本帧：带时间戳 + 方向前缀，与气泡显示时间一致 */
 function copyCurrent() {
-  const text =
+  const dir = isTx.value ? 'TX' : 'RX'
+  const content =
     props.viewMode === 'hex' ? bytesToHex(props.message.bytes) : asciiText.value
-  navigator.clipboard?.writeText(text)
+  navigator.clipboard?.writeText(`[${timeLabel.value}] ${dir}: ${content}`)
+  toast.success('已复制')
 }
 
+/** 复制为纯 HEX（不带前缀，喂脚本 / 编辑器用） */
 function copyHex() {
   navigator.clipboard?.writeText(bytesToHex(props.message.bytes))
+  toast.success('已复制')
 }
 </script>
 
@@ -50,7 +58,7 @@ function copyHex() {
         <span v-if="message.error" class="err-badge">⚠ {{ message.error }}</span>
         <span class="spacer" />
         <span class="actions">
-          <button title="按当前视图复制" @click="copyCurrent">复制</button>
+          <button title="复制本帧（带时间戳与方向）" @click="copyCurrent">复制</button>
           <button title="复制为 HEX" @click="copyHex">Hex</button>
           <button v-if="isTx" title="再次发送" @click="emit('resend', message.bytes)">重发</button>
         </span>
