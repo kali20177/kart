@@ -4,6 +4,7 @@ import {
   NDrawerContent,
   NForm,
   NFormItem,
+  NInput,
   NSelect,
   NInputNumber,
   NSwitch,
@@ -173,6 +174,32 @@ function doInject() {
           <NSwitch v-model:value="s.autoReconnect" />
         </NFormItem>
 
+        <NDivider title-placement="left">自定义波特率</NDivider>
+        <div v-if="serial.customBaudRates.length === 0" class="empty-hint">
+          在连接栏波特率框输入新数值即可添加；预设档位不可删除。
+        </div>
+        <div
+          v-for="item in serial.customBaudRates"
+          :key="item.baud"
+          class="custom-baud-row"
+        >
+          <span class="custom-baud-num">{{ item.baud }}</span>
+          <NInput
+            size="small"
+            :value="item.note ?? ''"
+            placeholder="标注（可选）"
+            @update:value="(v: string) => serial.updateCustomBaudNote(item.baud, v)"
+          />
+          <NButton
+            size="small"
+            quaternary
+            type="error"
+            @click="serial.removeCustomBaudRate(item.baud)"
+          >
+            删除
+          </NButton>
+        </div>
+
         <NDivider title-placement="left">模拟数据（阶段 1）</NDivider>
         <NFormItem label="注入内容">
           <NSelect v-model:value="injectMode" :options="injectModeOptions" style="width: 100px; margin-right: 8px" />
@@ -197,6 +224,24 @@ function doInject() {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
+  color: var(--text);
+}
+.empty-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.custom-baud-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.custom-baud-num {
+  flex: none;
+  width: 72px;
+  font-family: var(--mono-font);
+  font-size: 13px;
   color: var(--text);
 }
 </style>

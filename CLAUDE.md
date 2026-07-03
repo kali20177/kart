@@ -144,3 +144,7 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 4. 将 serial store 中的 `MockSerialSource` 替换为真实驱动
 5. 将 `useStorage` 从 localStorage 迁移到 electron-store
 6. 将 Blob 下载替换为 Electron `dialog` + `fs`
+
+## 生产环境缺失功能与已知问题
+
+生产化待补功能（按优先级分层）与已知技术问题（如 `vite.config` 的 `test.environment` 未生效）汇总在 [docs/production-gaps.md](docs/production-gaps.md)，供后续任务规划参考。

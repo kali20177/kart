@@ -1,0 +1,57 @@
+# 生产环境缺失功能与已知问题
+
+本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
+
+> 最近更新：2026-07-03。已完成项标注 ✅。
+
+## 一、生产环境缺失功能
+
+### 核心调试能力（高优先级，不补日常用会很难受）
+
+1. **帧间时间差 Δt** — `MessageBubble` 只显示绝对时间 `HH:MM:SS.mmm`，缺与上一帧的 Δt、会话起点 elapsed。嵌入式调试时序刚需。
+2. **搜索只能过滤、不能高亮，且搜不了 HEX** — `MessageList` 的 keyword 是剔除非匹配帧。缺高亮模式、HEX 字节序列搜索、正则、时间范围、find next/prev。
+3. **发送无 CRC/校验和，接收无校验** — `serial.send` 只拼行尾。嵌入式协议普遍带 CRC8/16/32 或累加和。接收侧 `Message.error` 只用于发送失败，无校验位不符标记。
+4. **文件发送（二进制整包下发）** — `InputComposer` 只能手敲文本/HEX。固件烧录、bin 下发、批量回灌需选文件发送，可选限速/分包。
+5. **DTR/RTS/Break 控制** — `SerialDriver` 只有 `getSignals`（只读），无 `setSignals`。ESP32/STM32 bootloader、复位、ISP 靠 DTR/RTS 组合 + Break。前端无按钮，接口契约无。〔依赖 Web Serial 驱动〕
+6. **暂停时数据直接丢弃** — `messages.ingestRx` 和 `waveform.ingest` 都是 `if (paused) return`，静默丢失，不缓冲不提示。暂停看历史可能漏关键回包。
+7. **布局与发送历史不持久化** — 右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM）不存；`useSendHistory` 仅内存。每天重开归零。
+8. ✅ **自定义波特率** — 已完成（filterable+tag 输入、自定义档位+标注、预设标注、校验、持久化）。
+
+### 专业工具进阶预期（中优先级）
+
+9. **统计面板太薄** — `StatusBar` 只 RX/TX 字节；`rxFrames` 定义了未显示。缺帧数、B/s、帧/s、错误帧、会话时长、帧间隔统计。
+10. **标记/注释/分隔** — 无法在流里插 marker/备注。
+11. **会话录制与回放** — 只有导出 txt，无导入回放。
+12. **导出格式单一** — `exportLog` 只 txt。缺 CSV、原始二进制、按筛选导出、hex+ascii 双列。
+13. **结构化协议解析器** — 帧切分解决了切帧，无"帧内字段（header/len/cmd/payload/crc）可配置渲染"。无 Modbus 等通用协议解码。
+14. **单连接，不支持多端口并发** — `serial` store 单例 driver。同时盯多设备做不到。〔依赖驱动〕
+15. **快速命令不支持变量/宏替换** — `QuickCommand.payload` 静态。缺计数器、时间戳、CRC 占位；无每命令独立循环发送。
+16. **波形缺测量与导出** — `WaveformChart` 有暂停回看，缺游标读值、双游标 Δ、Y 轴单位/量程、V/div & ms/div、触发线、每通道自定义颜色、CSV 导出。
+17. **自动重连是空开关** — `autoReconnect` 设置存在，无重连逻辑，无掉线提示。〔依赖驱动〕
+
+### 打磨项（低优先级）
+
+18. **清空无确认/无撤销** — `messages.clear` 直接清空，误点丢失。
+19. **缓冲满无感知** — 超 `bufferLimit` 静默裁剪，无"已丢弃 N 帧"提示。
+20. **全局快捷键缺失** — 只 Ctrl+Enter 发送、Alt+↑↓ 历史。连接/清空/切视图/暂停无快捷键，无命令面板。
+21. **关键字告警** — 收到特定模式无声音/通知。
+22. **端口元信息缺失** — `listPorts` 只字符串数组，无 VID/PID/厂商/占用提示。〔依赖驱动〕
+23. **复制能力弱** — `MessageBubble` 只单帧复制，缺复制全部可见/CSV 行/时间戳。
+24. **`useStorage` 同步无容量保护** — 全同步 localStorage，阶段 2 换 electron-store（async）接口签名要改。
+
+### 边界说明
+
+- 第 5、14、17、22 项依赖 Web Serial 驱动实现相应能力，前端 UI 可先做但落地需驱动支持（属"阶段 2 路线图"）。
+- 其余各项（1–4、6–13、15–16、18–24）纯前端可独立完成。
+
+---
+
+## 二、已知技术问题
+
+### `vite.config` 的 `test.environment` 未生效
+
+- **现象**：`vite.config.ts` 写了 `test: { environment: 'jsdom' }`，但测试实际跑在 node 环境（`localStorage` 不可用，出现 `ExperimentalWarning: localStorage is not available`）。
+- **根因**：`defineConfig` 从 `'vite'` 导入，vite 不识别 `test` 字段。曾尝试改 `from 'vitest/config'`，但 environment 仍未生效（根因未明，疑似 vitest 1.6.1 config 解析问题）。
+- **当前规避**：需 localStorage 的测试（`src/stores/serial.spec.ts`）用 `vi.stubGlobal('localStorage', ...)` 提供内存实现。
+- **影响**：不影响生产、不影响当前测试。但未来加 DOM/组件渲染测试（`@vue/test-utils` 挂载组件）会因 jsdom 未启用而踩坑。
+- **待办**：排查 vitest config 解析；或显式新建 `vitest.config.ts` 单独配置 `environment: 'jsdom'`。

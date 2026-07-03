@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
-import type { MockScenarioId, PortOptions, SerialSignals } from '@/types'
+import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate } from '@/types'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
+import { isPresetBaud, loadCustomBaudRates } from '@/utils/baud'
 import type { DataMode, LineEnding } from '@/types'
 import { useMessagesStore } from './messages'
 import { storage } from '@/composables/useStorage'
@@ -31,6 +32,12 @@ export const useSerialStore = defineStore('serial', () => {
   const signals = ref<SerialSignals>({ dcd: false, cts: false, dsr: false, ri: false })
   const rxBytes = ref(0)
   const txBytes = ref(0)
+
+  // 用户自定义波特率（可带标注，持久化）。预设档位不在此列、不可删除。
+  // 读取时兼容旧版 number[] 格式（见 loadCustomBaudRates）。
+  const customBaudRates = ref<CustomBaudRate[]>(
+    loadCustomBaudRates(storage.get<unknown>('customBaudRates', []))
+  )
 
   let unsubscribe: (() => void) | null = null
   let signalTimer: ReturnType<typeof setInterval> | null = null
@@ -103,6 +110,29 @@ export const useSerialStore = defineStore('serial', () => {
     driver.inject(bytes)
   }
 
+  /** 新增自定义波特率（预设档位与已存在项会被忽略） */
+  function addCustomBaudRate(baud: number) {
+    if (isPresetBaud(baud)) return
+    if (customBaudRates.value.some((c) => c.baud === baud)) return
+    customBaudRates.value = [...customBaudRates.value, { baud }].sort((a, b) => a.baud - b.baud)
+    storage.set('customBaudRates', customBaudRates.value)
+  }
+
+  /** 删除自定义波特率（预设档位不在 customBaudRates 中，天然不可删） */
+  function removeCustomBaudRate(baud: number) {
+    customBaudRates.value = customBaudRates.value.filter((c) => c.baud !== baud)
+    storage.set('customBaudRates', customBaudRates.value)
+  }
+
+  /** 更新自定义波特率的标注（空串清除标注） */
+  function updateCustomBaudNote(baud: number, note: string) {
+    const trimmed = note.trim()
+    customBaudRates.value = customBaudRates.value.map((c) =>
+      c.baud === baud ? { ...c, note: trimmed || undefined } : c
+    )
+    storage.set('customBaudRates', customBaudRates.value)
+  }
+
   /**
    * 发送 —— 把文本/hex 按当前模式转字节，追加行尾，写入驱动并记录 TX 气泡。
    * 返回是否成功（hex 解析失败时返回错误信息）。
@@ -161,12 +191,16 @@ export const useSerialStore = defineStore('serial', () => {
     signals,
     rxBytes,
     txBytes,
+    customBaudRates,
     summary,
     refreshPorts,
     connect,
     disconnect,
     setScenario,
     inject,
+    addCustomBaudRate,
+    removeCustomBaudRate,
+    updateCustomBaudNote,
     send,
     resend,
     onData

@@ -33,6 +33,12 @@ export interface PortOptions {
   flowControl: 'none' | 'hardware'
 }
 
+/** 用户自定义波特率项（可带标注；预设档位不在此列、不可删除） */
+export interface CustomBaudRate {
+  baud: number
+  note?: string
+}
+
 /** 控制线状态（阶段 1 来自 Mock，阶段 2 来自 port.getSignals()） */
 export interface SerialSignals {
   dcd: boolean
