@@ -19,5 +19,6 @@ interface Window {
   electron?: {
     platform: string
     versions?: Record<string, string | undefined>
+    toggleDevTools?: () => void
   }
 }

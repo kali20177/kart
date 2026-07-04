@@ -57,7 +57,9 @@ const fileMenu = computed<DropdownOption[]>(() => [
 
 const helpMenu: DropdownOption[] = [
   { label: '关于', key: 'about' },
-  { label: '许可证', key: 'license' }
+  { label: '许可证', key: 'license' },
+  { type: 'divider', key: 'd1' },
+  { label: '开发者工具', key: 'devtools' }
 ]
 
 /** 导出接收/发送记录为纯文本日志：每行 [时间戳] RX/TX: 解码文本 */
@@ -88,6 +90,13 @@ function handleSelect(key: string) {
       break
     case 'license':
       showLicense.value = true
+      break
+    case 'devtools':
+      if (window.electron?.toggleDevTools) {
+        window.electron.toggleDevTools()
+      } else {
+        message.info('浏览器环境请使用 F12 / Ctrl+Shift+I 打开开发者工具')
+      }
       break
   }
 }

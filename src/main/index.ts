@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'node:path'
 
 // 主/预加载产物以 CommonJS 输出（.cjs），__dirname 始终可用。
@@ -27,6 +27,12 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // 切换开发者工具（由渲染进程通过 IPC 触发）
+  ipcMain.on('toggle-devtools', () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    if (win) win.webContents.toggleDevTools()
+  })
+
   createWindow()
 
   app.on('activate', () => {
