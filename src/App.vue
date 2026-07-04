@@ -8,7 +8,7 @@ import WaveformChart from './components/WaveformChart.vue'
 import InputComposer from './components/InputComposer.vue'
 import QuickCommandsPanel from './components/QuickCommandsPanel.vue'
 import AsciiTable from './components/AsciiTable.vue'
-import SettingsDrawer from './components/SettingsDrawer.vue'
+import SettingsModal from './components/SettingsModal.vue'
 import StatusBar from './components/StatusBar.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
@@ -184,7 +184,7 @@ onMounted(() => {
       </div>
 
       <AsciiTable v-model:show="showAscii" @insert="onInsertAscii" />
-      <SettingsDrawer v-model:show="showSettings" />
+      <SettingsModal v-model:show="showSettings" />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>

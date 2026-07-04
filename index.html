@@ -4,9 +4,58 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>串口调试助手</title>
+    <style>
+      /* 启动预载 —— Vue 挂载后 #app.innerHTML 被替换，此内容自动消失 */
+      #app:empty::after {
+        content: '';
+      }
+      .app-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #0d1117;
+        color: #8b949e;
+        font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        transition: opacity 0.15s;
+      }
+      .app-loader-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #e6edf3;
+        margin-bottom: 20px;
+        letter-spacing: 1px;
+      }
+      .app-loader-bar {
+        width: 120px;
+        height: 2px;
+        background: #21262d;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .app-loader-bar::after {
+        content: '';
+        display: block;
+        width: 40%;
+        height: 100%;
+        background: #58a6ff;
+        border-radius: 2px;
+        animation: loader-slide 1.2s ease-in-out infinite;
+      }
+      @keyframes loader-slide {
+        0%   { transform: translateX(-100%); }
+        100% { transform: translateX(350%); }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="app-loader">
+        <div class="app-loader-title">串口调试助手</div>
+        <div class="app-loader-bar"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
