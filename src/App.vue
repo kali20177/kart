@@ -118,11 +118,16 @@ function onToComposer(p: { text: string; mode: DataMode }) {
   viewMode.value = p.mode
 }
 
+/** 编码器支持的命名转义（与 encodeWithEscapes 的 switch 保持一致） */
+const NAMED_ESCAPES = new Set([0, 9, 10, 13])
+
 function onInsertAscii(e: AsciiEntry) {
   if (viewMode.value === 'hex') {
     composerText.value += (composerText.value && !composerText.value.endsWith(' ') ? ' ' : '') + e.hex + ' '
   } else if (e.char != null) {
     composerText.value += e.char
+  } else if (e.escape && NAMED_ESCAPES.has(e.dec)) {
+    composerText.value += e.escape
   }
 }
 
