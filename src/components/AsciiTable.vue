@@ -8,7 +8,11 @@ const emit = defineEmits<{ (e: 'insert', entry: AsciiEntry): void }>()
 
 <template>
   <NDrawer v-model:show="show" :width="460" placement="right">
-    <NDrawerContent title="ASCII 对照表" closable>
+    <NDrawerContent
+      title="ASCII 对照表"
+      closable
+      :body-content-style="{ padding: '0 24px 16px' }"
+    >
       <p class="tip">点击任意行插入到发送框（按当前 ASCII/HEX 模式）。</p>
       <table class="ascii">
         <thead>
@@ -45,11 +49,12 @@ const emit = defineEmits<{ (e: 'insert', entry: AsciiEntry): void }>()
 .tip {
   font-size: 12px;
   color: var(--text-dim);
-  margin: 0 0 10px;
+  margin: 12px 0 10px;
 }
 table.ascii {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
 }
 th,
@@ -61,8 +66,10 @@ td {
 th {
   position: sticky;
   top: 0;
+  z-index: 1;
   background: var(--bg-panel);
   color: var(--text-dim);
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 tbody tr {
   cursor: pointer;
