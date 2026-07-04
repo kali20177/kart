@@ -71,6 +71,12 @@ function clearTimeFilter() {
   timeInputEnd.value = ''
 }
 
+/** 搜索框回车：合并两个 keydown 处理器为单个函数，避免 Vue 3.4+ 将多个监听打包为数组 */
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.shiftKey) goToMatch(-1)
+  else goToMatch(1)
+}
+
 // 多选状态：右键进入，左键切选，底部操作栏批量复制 / 导出 / 删除
 const multiSelect = ref(false)
 const selected = reactive(new Set<number>())
@@ -222,8 +228,7 @@ function deleteSelected() {
         :placeholder="searchMode === 'hex' ? '搜索 HEX 字节' : '搜索关键字'"
         clearable
         style="width: 180px"
-        @keydown.enter.exact="goToMatch(1)"
-        @keydown.enter.shift="goToMatch(-1)"
+        @keydown.enter="onSearchKeydown"
       />
       <span v-if="hexError" class="hex-err">{{ hexError }}</span>
       <!-- 匹配导航 -->

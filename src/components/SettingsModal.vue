@@ -377,11 +377,6 @@ const navItems: NavItem[] = [
   color: var(--err);
 }
 
-.nav-reset.active {
-  background: transparent;
-  color: var(--text-dim);
-}
-
 /* ===== 右侧内容 ===== */
 .settings-content {
   flex: 1;
@@ -443,7 +438,8 @@ const navItems: NavItem[] = [
 }
 
 /* ===== NForm 内间距微调 ===== */
-:deep(.n-form-item) {
+/* NModal preset="card" + teleport 打断 data-v 作用域链，scoped :deep() 穿不透，此处用 :global() */
+:global(.n-form-item) {
   margin-bottom: 12px;
 }
 </style>
