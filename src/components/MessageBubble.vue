@@ -266,23 +266,25 @@ function onRowContext(e: MouseEvent) {
 }
 .row.selected .bubble {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
 }
 .bubble {
   max-width: 78%;
   border: 1px solid;
-  border-radius: var(--radius);
   padding: 5px 9px 7px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .bubble-rx {
   background: var(--rx-bg);
   border-color: var(--rx-border);
   color: var(--rx-text);
+  border-radius: 0 var(--radius) var(--radius) var(--radius);
 }
 .bubble-tx {
   background: var(--tx-bg);
   border-color: var(--tx-border);
   color: var(--tx-text);
+  border-radius: var(--radius) 0 var(--radius) var(--radius);
 }
 .meta {
   display: flex;
@@ -297,8 +299,8 @@ function onRowContext(e: MouseEvent) {
   font-weight: 600;
 }
 .mode-badge {
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   padding: 0 4px;
 }
 .err-badge {
@@ -318,10 +320,12 @@ function onRowContext(e: MouseEvent) {
 }
 .actions button {
   font-size: 11px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   color: var(--text-dim);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 0 5px;
   cursor: pointer;
 }

@@ -203,15 +203,16 @@ function onFile(e: Event) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-panel);
-  border-left: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 .head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
 }
 .title {
   font-weight: 600;
@@ -231,7 +232,7 @@ function onFile(e: Event) {
   cursor: grab;
 }
 .item:hover {
-  background: var(--bg-elevated);
+  background: rgba(255, 255, 255, 0.06);
 }
 .dot {
   width: 8px;
@@ -257,9 +258,9 @@ function onFile(e: Event) {
 }
 .tag {
   display: inline-block;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   padding: 0 3px;
   margin-right: 5px;
   font-size: 10px;
@@ -274,6 +275,6 @@ function onFile(e: Event) {
   display: flex;
   gap: 6px;
   padding: 8px 12px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-border);
 }
 </style>

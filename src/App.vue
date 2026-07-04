@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, zhCN, dateZhCN } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, zhCN, dateZhCN, type GlobalThemeOverrides } from 'naive-ui'
 import MenuBar from './components/MenuBar.vue'
 import ConnectionBar from './components/ConnectionBar.vue'
 import MessageList from './components/MessageList.vue'
@@ -73,6 +73,30 @@ onBeforeUnmount(() => {
 // 主题：system → 跟随媒体查询（逻辑抽到 useIsDark，WaveformChart 共用）
 const isDark = useIsDark()
 const naiveTheme = computed(() => (isDark.value ? darkTheme : null))
+const themeOverrides = computed<GlobalThemeOverrides>(() => ({
+  common: {
+    primaryColor: isDark.value ? '#58a6ff' : '#2563eb',
+    primaryColorHover: isDark.value ? '#79c0ff' : '#3b82f6',
+    primaryColorPressed: isDark.value ? '#388bfd' : '#1d4ed8',
+    borderRadius: '6px',
+  },
+  Button: {
+    borderRadiusTiny: '4px',
+    borderRadiusSmall: '6px',
+    borderRadiusMedium: '6px',
+  },
+  Input: {
+    borderRadius: '6px',
+  },
+  Select: {
+    menuBoxShadow: isDark.value
+      ? '0 10px 15px rgba(0,0,0,0.4), 0 4px 6px rgba(0,0,0,0.2)'
+      : '0 10px 15px rgba(0,0,0,0.08)',
+  },
+  Tag: {
+    borderRadius: '4px',
+  },
+}))
 
 watch(
   isDark,
@@ -108,7 +132,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <NConfigProvider :theme="naiveTheme" :locale="zhCN" :date-locale="dateZhCN">
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
     <NMessageProvider>
       <NDialogProvider>
       <div class="app">
@@ -187,8 +211,10 @@ onMounted(() => {
 .view-tabs {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
 }
 .tab {
   appearance: none;
@@ -219,6 +245,10 @@ onMounted(() => {
 }
 .right.collapsed {
   width: 16px;
+}
+.right {
+  box-shadow: var(--shadow-lg);
+  z-index: 1;
 }
 /* 侧边栏左边缘横向拖拽手柄：向左拖增大、向右拖减小 */
 .col-grip {
@@ -257,6 +287,6 @@ onMounted(() => {
   background: var(--bg-panel);
   color: var(--text-dim);
   cursor: pointer;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
 }
 </style>

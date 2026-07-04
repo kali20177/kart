@@ -254,9 +254,14 @@ onBeforeUnmount(() => {
 <style scoped>
 .composer {
   flex: none;
-  border-top: 1px solid var(--border);
-  background: var(--bg-panel);
+  border-top: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   padding: 8px 12px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  position: relative;
+  z-index: 2;
 }
 .chips {
   display: flex;
@@ -308,6 +313,7 @@ onBeforeUnmount(() => {
 .mono :deep(textarea) {
   font-family: var(--mono-font);
   resize: none;
+  background: var(--bg-elevated);
 }
 /* 输入框上边缘横向拖拽手柄：向上拖增大、向下拖减小 */
 .grip {
@@ -315,7 +321,7 @@ onBeforeUnmount(() => {
   height: 8px;
   margin-bottom: 2px;
   cursor: row-resize;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
   position: relative;
 }
 .grip::before {
@@ -351,7 +357,7 @@ onBeforeUnmount(() => {
 .loop-btn-wrap {
   position: relative;
   display: inline-flex;
-  border-radius: 4px;
+  border-radius: var(--radius);
 }
 .loop-btn-wrap.is-looping {
   animation: loop-scale 1.2s ease-in-out infinite;

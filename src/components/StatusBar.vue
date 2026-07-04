@@ -45,8 +45,10 @@ const signalList = computed(() => [
   height: 28px;
   padding: 0 12px;
   font-size: 12px;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border-top: 1px solid var(--glass-border);
   color: var(--text-dim);
 }
 .led {
@@ -75,14 +77,14 @@ const signalList = computed(() => [
 .divider {
   width: 1px;
   height: 14px;
-  background: var(--border);
+  background: var(--glass-border);
 }
 .signal {
   font-family: var(--mono-font);
   font-size: 11px;
   padding: 0 4px;
-  border-radius: 3px;
-  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
 }
 .signal.active {
   color: var(--ok);

@@ -276,13 +276,16 @@ async function toggle() {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
 }
 .divider {
   width: 1px;
   height: 20px;
-  background: var(--border);
+  background: var(--glass-border);
   margin: 0 4px;
 }
 .mock-label {

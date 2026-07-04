@@ -142,8 +142,10 @@ function handleSelect(key: string) {
   align-items: center;
   gap: 2px;
   padding: 2px 6px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border-bottom: 1px solid var(--glass-border);
   flex-shrink: 0;
 }
 .about,

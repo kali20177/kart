@@ -1,57 +1,76 @@
-/* 设计令牌 —— 扁平化主题，亮/暗双色，跟随 data-theme 切换 */
+/* 设计令牌 —— 工业风主题，亮/暗双色，跟随 data-theme 切换 */
 
 :root {
   --mono-font: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
-  --ui-font: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --radius: 4px;
+  --ui-font: 'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius: 6px;       /* 快捷别名，保持兼容 */
+  --radius-lg: 8px;
+  --radius-xl: 10px;
   --gap: 8px;
+
+  /* 毛玻璃及阴影 —— 会被各主题覆盖 */
+  --glass-blur: 12px;
+  --glass-blur-sm: 8px;
+
+  /* 亮色默认值 */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
 }
 
 /* 亮色 */
 :root,
 [data-theme='light'] {
-  --bg: #f5f6f8;
+  --bg: #edf2f7;
   --bg-panel: #ffffff;
-  --bg-elevated: #f0f1f4;
-  --border: #e2e5ea;
-  --text: #1f2329;
-  --text-dim: #8a909c;
-  --accent: #2080f0;
+  --bg-elevated: #f1f5f9;
+  --border: #d1d5db;
+  --text: #0f172a;
+  --text-dim: #64748b;
+  --accent: #2563eb;
+  --accent-cyan: #0891b2;
+  --accent-teal: #0d9488;
 
-  --rx-bg: #eef4ff;
-  --rx-border: #cfe0ff;
-  --rx-text: #1f2329;
-  --tx-bg: #e9f7ee;
-  --tx-border: #c4ebd2;
-  --tx-text: #1f2329;
+  --rx-bg: rgba(59, 130, 246, 0.08);
+  --rx-border: rgba(59, 130, 246, 0.25);
+  --rx-text: #0f172a;
+  --tx-bg: rgba(16, 185, 129, 0.08);
+  --tx-border: rgba(16, 185, 129, 0.25);
+  --tx-text: #0f172a;
 
-  --ok: #36ad6a;
-  --warn: #f0a020;
-  --err: #e03e3e;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --err: #dc2626;
 
   /* 搜索高亮：所有命中 / 当前导航目标命中 */
-  --search-highlight-bg: #ffe066;
-  --search-highlight-text: #1f2329;
-  --search-active-bg: #ff9f1c;
-  --search-active-text: #1f2329;
+  --search-highlight-bg: #fde047;
+  --search-highlight-text: #0f172a;
+  --search-active-bg: #f59e0b;
+  --search-active-text: #0f172a;
 }
 
 /* 暗色 */
 [data-theme='dark'] {
-  --bg: #18191c;
-  --bg-panel: #1f2024;
-  --bg-elevated: #26282d;
-  --border: #2f3136;
-  --text: #e3e6eb;
-  --text-dim: #7a808b;
-  --accent: #4098fc;
+  --bg: #0d1117;
+  --bg-panel: #161b22;
+  --bg-elevated: #1c2333;
+  --border: #21262d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #58a6ff;
+  --accent-cyan: #22d3ee;
+  --accent-teal: #14b8a6;
 
-  --rx-bg: #1c2733;
-  --rx-border: #2b4257;
-  --rx-text: #d6e2f0;
-  --tx-bg: #1b2a20;
-  --tx-border: #2c4636;
-  --tx-text: #d2ecdb;
+  --rx-bg: rgba(56, 139, 253, 0.12);
+  --rx-border: rgba(56, 139, 253, 0.30);
+  --rx-text: #e6edf3;
+  --tx-bg: rgba(16, 185, 129, 0.12);
+  --tx-border: rgba(16, 185, 129, 0.30);
+  --tx-text: #e6edf3;
 
   --ok: #50c878;
   --warn: #f0a850;
@@ -62,6 +81,13 @@
   --search-highlight-text: #ffe066;
   --search-active-bg: #a85c00;
   --search-active-text: #ffe066;
+
+  /* 暗色毛玻璃 & 阴影覆写 */
+  --glass-bg: rgba(22, 27, 34, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4), 0 4px 6px rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -88,14 +114,26 @@ body {
   overflow: hidden;
 }
 
+/* 全局平滑过渡（主题切换） */
+html,
+body,
+#app,
+.n-config-provider,
+.app {
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
 /* 细滚动条 */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 5px;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);

@@ -337,13 +337,17 @@ function deleteSelected() {
   gap: 8px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
 }
 .time-row {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-border);
   border-bottom: none;
   padding-top: 4px;
   padding-bottom: 4px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
 }
 .time-label {
   font-size: 11px;
@@ -402,8 +406,11 @@ function deleteSelected() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-top: 1px solid var(--glass-border);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
   z-index: 2;
 }
 .fade-enter-active,
