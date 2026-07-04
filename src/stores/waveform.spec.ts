@@ -184,3 +184,120 @@ describe('waveform store 历史回看', () => {
     expect(wf.data[0][0]).toBe(wf.history[0][86]) // 末尾 10 窗口
   })
 })
+
+describe('waveform store 滚轮缩放', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  // 复用 seedSmallWindow：maxPoints=10、灌 2 帧 = 64 采样、viewSize 默认 = 10
+  async function seedSmallWindow() {
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 10
+    await nextTick()
+    const wf = useWaveformStore()
+    wf.ingest(waveformChunk(0))
+    wf.ingest(waveformChunk(1))
+    return wf
+  }
+
+  it('运行中缩放（锚定最新）：viewSize 减小、viewOffset 恒 0、窗口=末尾 newSize 点', async () => {
+    const wf = await seedSmallWindow() // running, viewSize=10, history=64
+    expect(wf.zoomed).toBe(false)
+    wf.zoom(0.5, null) // 运行中 → anchorFraction=null → 锚定最新
+    expect(wf.viewSize).toBe(5)
+    expect(wf.zoomed).toBe(true)
+    expect(wf.viewOffset).toBe(0)
+    expect(wf.data[0].length).toBe(5)
+    expect(wf.data[0][0]).toBe(wf.history[0][59]) // 末尾 5 点：sample 59..63
+    expect(wf.data[0][4]).toBe(wf.history[0][63])
+  })
+
+  it('运行中缩放后 ingest 仍跟随最新（viewSize 不变、viewOffset 恒 0）', async () => {
+    const wf = await seedSmallWindow()
+    wf.zoom(0.5, null) // viewSize=5
+    wf.ingest(waveformChunk(2)) // +32 → history=96
+    expect(wf.viewOffset).toBe(0)
+    expect(wf.viewSize).toBe(5)
+    expect(wf.data[0].length).toBe(5)
+    expect(wf.data[0][4]).toBe(wf.history[0][95]) // 末尾采样
+  })
+
+  it('暂停时光标锚定（f=0.5）：锚点采样留在新窗口内', async () => {
+    const wf = await seedSmallWindow()
+    wf.togglePause()
+    // 暂停时 viewOffset=0 → 末尾窗口 sample 54..63；光标中心 f=0.5 → 锚点 sample 59
+    const anchorX = wf.history[0][59]
+    wf.zoom(0.5, 0.5) // viewSize 10→5，光标锚定
+    expect(wf.viewSize).toBe(5)
+    expect(wf.viewOffset).toBe(3) // 锚定算出的偏移（中心保持）
+    expect(wf.data[0]).toContain(anchorX) // 锚点采样仍在可视窗口
+  })
+
+  it('暂停时右边缘锚定（f=1）：viewOffset 不变、末尾采样留住', async () => {
+    const wf = await seedSmallWindow()
+    wf.togglePause()
+    wf.setViewOffset(20) // 窗口 sample 34..43，右边缘 = sample 43
+    const rightX = wf.history[0][43]
+    wf.zoom(0.5, 1.0) // 右边缘锚定
+    expect(wf.viewOffset).toBe(20) // 偏移不变
+    expect(wf.viewSize).toBe(5)
+    expect(wf.data[0][4]).toBe(rightX) // 右边缘采样仍在窗口末尾
+  })
+
+  it('缩小至 maxPoints → zoomed 归 false（回到默认窗口）', async () => {
+    const wf = await seedSmallWindow()
+    wf.zoom(0.5, null) // viewSize 10→5
+    expect(wf.zoomed).toBe(true)
+    wf.zoom(3, null) // 5×3=15 → clamp 至 maxPoints=10
+    expect(wf.viewSize).toBe(10)
+    expect(wf.zoomed).toBe(false)
+  })
+
+  it('放大撞 MIN_VIEW 不再变小', async () => {
+    const wf = await seedSmallWindow()
+    wf.zoom(0.001, null) // 10×0.001→0 → clamp MIN_VIEW=2
+    expect(wf.viewSize).toBe(2)
+    wf.zoom(0.001, null) // 2×0.001→0 → clamp 2，等于 oldSize → 无变化
+    expect(wf.viewSize).toBe(2)
+  })
+
+  it('resetZoom 回到默认窗口', async () => {
+    const wf = await seedSmallWindow()
+    wf.zoom(0.5, null)
+    expect(wf.zoomed).toBe(true)
+    wf.resetZoom()
+    expect(wf.viewSize).toBe(10)
+    expect(wf.zoomed).toBe(false)
+  })
+
+  it('未缩放时改 maxPoints → viewSize 跟随', async () => {
+    const wf = await seedSmallWindow() // maxPoints=10, viewSize=10
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 20
+    await nextTick()
+    expect(wf.viewSize).toBe(20)
+    expect(wf.zoomed).toBe(false)
+  })
+
+  it('缩放中改 maxPoints → 保持 viewSize 仅 clamp', async () => {
+    const wf = await seedSmallWindow() // maxPoints=10
+    wf.zoom(0.5, null) // viewSize=5, zoomed
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 8 // 5 仍在 [2,8] → 保持
+    await nextTick()
+    expect(wf.viewSize).toBe(5)
+    settings.settings.waveform.maxPoints = 3 // 5 > 3 → clamp 至 3
+    await nextTick()
+    expect(wf.viewSize).toBe(3)
+  })
+
+  it('clear 重置缩放', async () => {
+    const wf = await seedSmallWindow()
+    wf.zoom(0.5, null)
+    expect(wf.zoomed).toBe(true)
+    wf.clear()
+    expect(wf.zoomed).toBe(false)
+    expect(wf.viewSize).toBe(10)
+  })
+})

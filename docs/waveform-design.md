@@ -244,3 +244,67 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc) {
 - y 轴随可视窗口 auto-fit（沿用 `setData` 默认 `resetScales`），回看到不同幅度区域时 y 自适应（类示波器 auto-y）。
 - uPlot 1.6 无内置 pan 插件，自实现 grab-pan 更可控且零依赖。
 
+## 11. 滚轮缩放（时基缩放）
+
+### 11.1 动机
+
+窗口滚满后，`maxPoints` 个采样挤满绘图区，波形密集、细节难辨。嵌入式调试常需"放大看某段细节"——
+如检查一个边沿、一个毛刺、半个周期。需要滚轮缩放，且**放大必须露出真实细节**：若只是把同样的点
+拉伸开，放大后仍是折线、无新信息。因此缩放语义是**改变可视窗口跨度**，从 history 取更少但更密集的真实采样。
+
+### 11.2 窗口几何：位置 + 跨度
+
+回看模型只有 `viewOffset`（窗口位置）。缩放再加一个正交维度 `viewSize`（窗口跨度）：
+
+| 量 | 含义 | 默认 | 改动方式 |
+|---|---|---|---|
+| `viewOffset` | 窗口右边缘距 history 尾部的偏移（位置） | `0`（跟随最新） | 暂停时拖拽 |
+| `viewSize` | 可视窗口采样数（跨度） | `maxPoints` | 滚轮缩放 |
+| `zoomed` | 是否处于缩放态（viewSize 独立于 maxPoints） | `false` | 缩放时置 true；回到 maxPoints 置 false |
+
+可视窗口 = `history[histLen − viewOffset − viewSize, histLen − viewOffset)`。`viewOffset` 管位置、
+`viewSize` 管跨度，二者正交，共同定义窗口几何。`recomputeView` 用 `viewSize`（clamp 到
+`[MIN_VIEW, maxPoints]`）切片，x 轴 auto-fit 即正确显示当前跨度。
+
+### 11.3 锚定策略：运行中锚最新，暂停时锚光标
+
+| 状态 | 锚点 | 行为 |
+|---|---|---|
+| 运行中（`!paused`） | 右边缘（最新） | 只改 `viewSize`，`viewOffset` 恒 0；数据流入仍跟随最新（时基缩放，不与自动跟随冲突） |
+| 暂停（`paused`） | 光标位置 | 光标下采样保持在同分数位置，同时调 `viewSize` 与 `viewOffset`，放大目标不跑偏 |
+
+**为什么运行中也允许缩放**：示波器 RUN 模式可调时基，是实时看细节的刚需。缩放只改跨度、不动位置，
+不与自动跟随冲突（pan 才冲突，故 pan 仍仅暂停可用）。运行中锚定最新而非光标，因为数据在滚、
+光标下的采样瞬息万变，锚光标无意义。
+
+**光标锚定数学**：设光标在绘图区分数 `f`（0=左、1=右），旧窗口右边缘 `oldEnd = histLen − viewOffset`，
+锚点采样 `anchorIdx = oldEnd − (1−f)·oldSize`。放大后令锚点仍处于分数 `f`：
+`newEnd = anchorIdx + (1−f)·newSize`，`viewOffset = round(histLen − newEnd)`，再 clamp 到
+`[0, histLen − newSize]`。整数采样网格下分数位置非精确保持，但锚点采样恒留在新窗口内（不跑偏）。
+
+### 11.4 缩放因子与范围
+
+- `factor = exp(δy · 0.0018)`：wheel up（`δy<0`）→ `factor<1` → 放大。`exp` 使鼠标 notch（δy≈±100，
+  ≈1.2×/格）与触控板小 δy 平滑统一。
+- 范围 `[MIN_VIEW=2, maxPoints]`：放大最深约 2 采样；缩小至 `maxPoints` 即回到默认窗口（`zoomed=false`）。
+  上限不超 `maxPoints` 以保证渲染负载受控（不悄悄渲染到 200k）。`MIN_VIEW` 为常量，可按需调大（如 10）。
+- 非被动 wheel 监听 + `preventDefault`：阻止页面滚动，也接管浏览器 ctrl+wheel 页面缩放与触控板捏合（捏合
+  在浏览器里即 ctrl+wheel，同样被接管为波形缩放）。
+
+### 11.5 与 pan / 配置的联动
+
+- **pan 1:1 跟手**：`onPanMove` 的 `samplesPerPx` 改用 `viewSize`（原为 `maxPoints`）。否则缩放后拖拽会快
+  N 倍、不再 1:1。缩放与 pan 正交（滚轮 vs 拖拽），暂停时可先缩放再平移。
+- **maxPoints 变更**：`!zoomed` → `viewSize` 跟随新 `maxPoints`（默认窗口随之变）；`zoomed` → 仅 clamp 到
+  新 `[MIN_VIEW, maxPoints]`（保持用户倍率）。用 `zoomed` 标志区分"未缩放、跟随默认"与"缩放中、保持倍率"。
+- **恢复运行 / clear**：`togglePause` 恢复时 `viewOffset` 归零、`viewSize` 保留（保留缩放倍率）；`clear` 一并
+  重置缩放（`zoomed=false`、`viewSize=maxPoints`）。
+- **工具栏**：`zoomed` 时显示「放大 ×N」（`N = maxPoints/viewSize`）与「重置缩放」按钮，与「回看 −Xs」、
+  「回到最新」并列。
+
+### 11.6 取舍
+
+- 缩放范围上限 = `maxPoints`（非 history 全长）：保证渲染负载受 maxPoints 设置约束；要看更大范围调大 maxPoints。
+- 运行中锚定最新而非光标：数据滚动时光标锚定无意义，最新锚定符合"缩放实时边缘"心智。
+- 不做缩放倍率/灵敏度设置项：`ZOOM_STEP`、`MIN_VIEW` 为常量已足够；后续按需提升为设置。
+

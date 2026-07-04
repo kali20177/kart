@@ -80,6 +80,7 @@ function buildOpts(ch: number, w: number, h: number): uPlot.Options {
 function destroyChart() {
   if (chart) {
     unbindPan()
+    unbindZoom()
     chart.destroy()
     chart = null
   }
@@ -97,6 +98,7 @@ function rebuild() {
   const opts = buildOpts(channels(), w, h)
   chart = new uPlot(opts, waveform.data as unknown as uPlot.AlignedData, el)
   bindPan()
+  bindZoom()
 }
 
 // —— 暂停时拖拽回看历史（grab 式平移）——
@@ -128,7 +130,8 @@ function onPanMove(e: PointerEvent) {
   if (!panActive || !chart) return
   const plotW = chart.over.clientWidth
   if (plotW <= 0) return
-  const viewSize = Math.max(1, settings.settings.waveform.maxPoints)
+  // 用当前可视窗口跨度 viewSize（缩放后会小于 maxPoints），否则缩放后拖拽会快 N 倍、不再 1:1 跟手
+  const viewSize = Math.max(1, waveform.viewSize)
   const dx = e.clientX - panStartX
   // samplesPerPx = 可视点数 / 绘图区像素宽 → 像素位移换算为采样位移，1:1 跟手
   const samplesPerPx = viewSize / plotW
@@ -167,6 +170,31 @@ function unbindPan() {
   over.removeEventListener('pointerup', onPanUp)
   over.removeEventListener('pointercancel', onPanUp)
   panActive = false
+}
+
+// —— 滚轮缩放（运行中 + 暂停均可）——
+// 改可视窗口跨度 viewSize（从 history 取更多/更少真实采样），放大露出真实细节（示波器时基缩放）。
+// 运行中锚定最新（viewOffset 恒 0，仍自动跟随）；暂停时光标锚定（光标下采样不跑偏）。
+// 非被动监听以允许 preventDefault 阻止页面滚动 / 浏览器 ctrl+wheel 页面缩放。
+const ZOOM_STEP = 0.0018 // factor = exp(deltaY * STEP)：wheel up（deltaY<0）→ factor<1 → 放大；notch≈1.2×，触控板平滑
+
+function onWheel(e: WheelEvent) {
+  if (!chart) return
+  e.preventDefault()
+  const histLen = waveform.history[0]?.length ?? 0
+  if (histLen === 0) return
+  const factor = Math.exp(e.deltaY * ZOOM_STEP)
+  const rect = chart.over.getBoundingClientRect()
+  const f = rect.width > 0 ? Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1) : 0.5
+  waveform.zoom(factor, waveform.paused ? f : null)
+}
+
+function bindZoom() {
+  chart?.over.addEventListener('wheel', onWheel, { passive: false })
+}
+
+function unbindZoom() {
+  chart?.over.removeEventListener('wheel', onWheel)
 }
 
 /** rAF 节流刷入：每帧最多一次 setData，避免 50ms 批次压垮渲染 */
@@ -255,6 +283,12 @@ const backSeconds = computed(() => {
   const rate = Math.max(1, settings.settings.waveform.sampleRate)
   return waveform.viewOffset / rate
 })
+
+// 缩放倍率 = maxPoints / viewSize（放大后 >1），用于工具栏提示
+const zoomLevel = computed(() => {
+  const mp = settings.settings.waveform.maxPoints
+  return mp / Math.max(1, waveform.viewSize)
+})
 </script>
 
 <template>
@@ -266,7 +300,11 @@ const backSeconds = computed(() => {
       <NTag v-if="waveform.viewOffset > 0" size="small" :bordered="false" type="warning">
         回看 −{{ backSeconds.toFixed(1) }}s
       </NTag>
+      <NTag v-if="waveform.zoomed" size="small" :bordered="false" type="success">
+        放大 ×{{ zoomLevel.toFixed(1) }}
+      </NTag>
       <div class="spacer" />
+      <NButton v-if="waveform.zoomed" size="tiny" @click="waveform.resetZoom()">重置缩放</NButton>
       <NButton v-if="waveform.viewOffset > 0" size="tiny" @click="waveform.resetView()">
         回到最新
       </NButton>
