@@ -45,6 +45,27 @@ export function parseHexInput(input: string): HexParseResult {
   return { ok: true, bytes, stripped: stripped || undefined }
 }
 
+/**
+ * 在字节数组中搜索子序列，返回所有匹配的起止区间（start 为字节偏移，end 为 start+needle.length）。
+ * 纯字节级比较，不涉及编码；含重叠匹配（如 "AAAA" 搜 "AA" → 0、1、2）。
+ * 空 needle 或 needle 比 haystack 长 → 空数组。供 HEX 搜索 / 高亮复用。
+ */
+export function findByteRanges(
+  haystack: Uint8Array,
+  needle: Uint8Array
+): Array<{ start: number; end: number }> {
+  if (needle.length === 0 || needle.length > haystack.length) return []
+  const ranges: Array<{ start: number; end: number }> = []
+  const limit = haystack.length - needle.length
+  outer: for (let i = 0; i <= limit; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer
+    }
+    ranges.push({ start: i, end: i + needle.length })
+  }
+  return ranges
+}
+
 /** 字节数组转空格分隔的大写 hex 字符串："AA 55 01" */
 export function bytesToHex(bytes: Uint8Array, separator = ' '): string {
   const parts: string[] = []

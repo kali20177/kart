@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseHexInput, bytesToHex, hexDump } from '@/utils/hex'
+import { parseHexInput, bytesToHex, hexDump, findByteRanges } from '@/utils/hex'
 
 describe('parseHexInput', () => {
   it('解析空格分隔', () => {
@@ -57,5 +57,61 @@ describe('hexDump', () => {
   it('不可打印字节显示为点', () => {
     const lines = hexDump(new Uint8Array([0x00, 0x41, 0xff]), 16)
     expect(lines[0].ascii).toBe('.A.')
+  })
+})
+
+describe('findByteRanges', () => {
+  it('空 needle 返回空数组', () => {
+    expect(findByteRanges(new Uint8Array([0x01, 0x02]), new Uint8Array(0))).toEqual([])
+  })
+
+  it('needle 比 haystack 长返回空数组', () => {
+    expect(findByteRanges(new Uint8Array([0x01]), new Uint8Array([0x01, 0x02]))).toEqual([])
+  })
+
+  it('无匹配返回空数组', () => {
+    expect(findByteRanges(new Uint8Array([0x01, 0x02, 0x03]), new Uint8Array([0xff]))).toEqual([])
+  })
+
+  it('单匹配', () => {
+    expect(
+      findByteRanges(new Uint8Array([0x0d, 0x0a, 0x41]), new Uint8Array([0x0d, 0x0a]))
+    ).toEqual([{ start: 0, end: 2 }])
+  })
+
+  it('多匹配', () => {
+    expect(
+      findByteRanges(new Uint8Array([0x0d, 0x0a, 0x41, 0x0d, 0x0a]), new Uint8Array([0x0d, 0x0a]))
+    ).toEqual([
+      { start: 0, end: 2 },
+      { start: 3, end: 5 }
+    ])
+  })
+
+  it('包含重叠匹配', () => {
+    // "AAAA" 中搜索 "AA" → 位置 0、1、2
+    expect(
+      findByteRanges(new Uint8Array([0x41, 0x41, 0x41, 0x41]), new Uint8Array([0x41, 0x41]))
+    ).toEqual([
+      { start: 0, end: 2 },
+      { start: 1, end: 3 },
+      { start: 2, end: 4 }
+    ])
+  })
+
+  it('单字节 needle', () => {
+    expect(
+      findByteRanges(new Uint8Array([0x00, 0x41, 0x00, 0x42, 0x00]), new Uint8Array([0x00]))
+    ).toEqual([
+      { start: 0, end: 1 },
+      { start: 2, end: 3 },
+      { start: 4, end: 5 }
+    ])
+  })
+
+  it('完整 haystack 匹配', () => {
+    expect(
+      findByteRanges(new Uint8Array([0x41, 0x42]), new Uint8Array([0x41, 0x42]))
+    ).toEqual([{ start: 0, end: 2 }])
   })
 })

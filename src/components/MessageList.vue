@@ -5,8 +5,9 @@ import { NButton, NInput, NButtonGroup, NTag, useDialog, useMessage } from 'naiv
 import MessageBubble from './MessageBubble.vue'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
+import { useMessageSearch } from '@/composables/useMessageSearch'
+import { parseTimeInput } from '@/utils/search'
 import type { DataMode, Direction, Message } from '@/types'
-import { decodeBytes } from '@/utils/encoding'
 import { formatMessageLine } from '@/utils/message-format'
 import { downloadTextFile } from '@/utils/download'
 
@@ -20,23 +21,60 @@ const toast = useMessage()
 
 const dirFilter = ref<'all' | Direction>('all')
 const keyword = ref('')
+const searchMode = ref<'text' | 'hex'>('text')
+const timeInputStart = ref('')
+const timeInputEnd = ref('')
+const showTimeFilter = ref(false)
+const matchIndex = ref(0)
+
+/** HH:MM:SS[.mmm] / HH:MM → 当日毫秒数；非法返回 null */
+const timeStart = computed(() => parseTimeInput(timeInputStart.value))
+const timeEnd = computed(() => parseTimeInput(timeInputEnd.value))
+/** 输入非空但解析失败 → 红框提示（不静默吞） */
+const timeStartInvalid = computed(() => timeInputStart.value.trim() !== '' && timeStart.value === null)
+const timeEndInvalid = computed(() => timeInputEnd.value.trim() !== '' && timeEnd.value === null)
+
+const encoding = computed(() => settingsStore.settings.encoding)
+
+const { filtered, matchRanges, matchCount, hexError } = useMessageSearch({
+  messages: computed(() => messagesStore.messages),
+  keyword,
+  searchMode,
+  encoding,
+  dirFilter,
+  timeStart,
+  timeEnd
+})
+
+// 任何筛选条件变化 → 导航从头开始（命中集合已变）
+watch([keyword, searchMode, dirFilter, timeStart, timeEnd], () => {
+  matchIndex.value = 0
+})
+// 实时流式收帧时 matchCount 会变，夹取 matchIndex 防越界（避免 5/3 这种显示）
+watch(matchCount, (n) => {
+  if (n === 0) matchIndex.value = 0
+  else if (matchIndex.value >= n) matchIndex.value = n - 1
+})
+
+/** 匹配导航：+1 下一项、-1 上一项，循环；并滚动到目标帧 */
+function goToMatch(delta: 1 | -1) {
+  const n = matchCount.value
+  if (n === 0) return
+  matchIndex.value = (matchIndex.value + delta + n) % n
+  const inst = scroller.value as unknown as { scrollToItem?: (index: number) => void } | null
+  inst?.scrollToItem?.(matchIndex.value)
+}
+
+/** 清除时间筛选 */
+function clearTimeFilter() {
+  timeInputStart.value = ''
+  timeInputEnd.value = ''
+}
 
 // 多选状态：右键进入，左键切选，底部操作栏批量复制 / 导出 / 删除
 const multiSelect = ref(false)
 const selected = reactive(new Set<number>())
 const selectedCount = computed(() => selected.size)
-
-const filtered = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  return messagesStore.messages.filter((m) => {
-    if (dirFilter.value !== 'all' && m.direction !== dirFilter.value) return false
-    if (kw) {
-      const text = decodeBytes(m.bytes, settingsStore.settings.encoding).toLowerCase()
-      if (!text.includes(kw)) return false
-    }
-    return true
-  })
-})
 
 const scroller = ref<InstanceType<typeof DynamicScroller> | null>(null)
 const follow = ref(true)
@@ -174,13 +212,62 @@ function deleteSelected() {
         <NButton :type="dirFilter === 'rx' ? 'primary' : 'default'" @click="dirFilter = 'rx'">RX</NButton>
         <NButton :type="dirFilter === 'tx' ? 'primary' : 'default'" @click="dirFilter = 'tx'">TX</NButton>
       </NButtonGroup>
-      <NInput v-model:value="keyword" size="tiny" placeholder="过滤关键字" clearable style="width: 160px" />
+      <NButtonGroup size="tiny">
+        <NButton :type="searchMode === 'text' ? 'primary' : 'default'" @click="searchMode = 'text'">文本</NButton>
+        <NButton :type="searchMode === 'hex' ? 'primary' : 'default'" @click="searchMode = 'hex'">HEX</NButton>
+      </NButtonGroup>
+      <NInput
+        v-model:value="keyword"
+        size="tiny"
+        :placeholder="searchMode === 'hex' ? '搜索 HEX 字节' : '搜索关键字'"
+        clearable
+        style="width: 180px"
+        @keydown.enter.exact="goToMatch(1)"
+        @keydown.enter.shift="goToMatch(-1)"
+      />
+      <span v-if="hexError" class="hex-err">{{ hexError }}</span>
+      <!-- 匹配导航 -->
+      <span v-if="matchCount > 0" class="match-nav">
+        <NButton size="tiny" quaternary :disabled="matchCount < 2" title="上一项 (Shift+Enter)" @click="goToMatch(-1)">↑</NButton>
+        <span class="match-pos">{{ matchIndex + 1 }}/{{ matchCount }}</span>
+        <NButton size="tiny" quaternary :disabled="matchCount < 2" title="下一项 (Enter)" @click="goToMatch(1)">↓</NButton>
+      </span>
       <NTag size="small" :bordered="false">{{ filtered.length }} 帧</NTag>
       <div class="spacer" />
+      <NButton
+        size="tiny"
+        :type="showTimeFilter || timeStart !== null || timeEnd !== null ? 'primary' : 'default'"
+        title="时间筛选"
+        @click="showTimeFilter = !showTimeFilter"
+        >⏱</NButton
+      >
       <NButton size="tiny" :type="messagesStore.paused ? 'warning' : 'default'" @click="messagesStore.togglePause()">
         {{ messagesStore.paused ? '已暂停' : '暂停' }}
       </NButton>
       <NButton size="tiny" @click="messagesStore.clear()">清空</NButton>
+    </div>
+
+    <!-- 时间筛选行 -->
+    <div v-if="showTimeFilter" class="toolbar time-row">
+      <span class="time-label">时间范围</span>
+      <NInput
+        v-model:value="timeInputStart"
+        size="tiny"
+        placeholder="HH:MM:SS"
+        clearable
+        :status="timeStartInvalid ? 'error' : undefined"
+        style="width: 110px"
+      />
+      <span class="time-sep">–</span>
+      <NInput
+        v-model:value="timeInputEnd"
+        size="tiny"
+        placeholder="HH:MM:SS"
+        clearable
+        :status="timeEndInvalid ? 'error' : undefined"
+        style="width: 110px"
+      />
+      <NButton size="tiny" quaternary @click="clearTimeFilter">清除</NButton>
     </div>
 
     <div class="scroll-area">
@@ -205,6 +292,10 @@ function deleteSelected() {
               :encoding="settingsStore.settings.encoding"
               :selectable="multiSelect"
               :selected="selected.has(item.id)"
+              :keyword="keyword"
+              :search-mode="searchMode"
+              :match-ranges="matchRanges.get(item.id) ?? []"
+              :active-match="matchIndex === index && matchCount > 0"
               @resend="emit('resend', $event)"
               @select="onBubbleSelect(item)"
               @contextmenu="onBubbleContext(item)"
@@ -247,6 +338,39 @@ function deleteSelected() {
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
+}
+.time-row {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.time-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.time-sep {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.hex-err {
+  font-size: 11px;
+  color: var(--err);
+  white-space: nowrap;
+}
+.match-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+.match-pos {
+  font-size: 11px;
+  font-family: var(--mono-font);
+  color: var(--text-dim);
+  min-width: 48px;
+  text-align: center;
 }
 .spacer {
   flex: 1;

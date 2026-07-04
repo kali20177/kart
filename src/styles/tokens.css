@@ -28,6 +28,12 @@
   --ok: #36ad6a;
   --warn: #f0a020;
   --err: #e03e3e;
+
+  /* 搜索高亮：所有命中 / 当前导航目标命中 */
+  --search-highlight-bg: #ffe066;
+  --search-highlight-text: #1f2329;
+  --search-active-bg: #ff9f1c;
+  --search-active-text: #1f2329;
 }
 
 /* 暗色 */
@@ -50,6 +56,12 @@
   --ok: #50c878;
   --warn: #f0a850;
   --err: #ec5b5b;
+
+  /* 搜索高亮：所有命中 / 当前导航目标命中 */
+  --search-highlight-bg: #665a00;
+  --search-highlight-text: #ffe066;
+  --search-active-bg: #a85c00;
+  --search-active-text: #ffe066;
 }
 
 * {

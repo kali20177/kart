@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { useMessage } from 'naive-ui'
 import type { DataMode, Encoding, Message } from '@/types'
 import { bytesToHex, hexDump } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
 import { formatMessageLine, formatTimestamp } from '@/utils/message-format'
+
+interface Range {
+  start: number
+  end: number
+}
 
 const props = defineProps<{
   message: Message
@@ -13,6 +18,14 @@ const props = defineProps<{
   /** 多选模式：显示勾选圈、左键切换选中、隐藏单条操作按钮 */
   selectable?: boolean
   selected?: boolean
+  /** 搜索关键字（不为空且命中时渲染高亮） */
+  keyword?: string
+  /** 搜索模式：text=字符偏移，hex=字节偏移 */
+  searchMode?: 'text' | 'hex'
+  /** 命中区间（文本模式=字符偏移、HEX 模式=字节偏移；文本模式已合并相交区间） */
+  matchRanges?: Range[]
+  /** 当前为导航目标帧（命中用活动色 + 短暂 flash） */
+  activeMatch?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +42,97 @@ const timeLabel = computed(() => formatTimestamp(props.message.timestamp, 'short
 
 const asciiText = computed(() => decodeBytes(props.message.bytes, props.encoding))
 const dumpLines = computed(() => hexDump(props.message.bytes, 16))
+
+const isSearching = computed(() => !!props.keyword?.trim() && (props.matchRanges?.length ?? 0) > 0)
+
+// 原生配对才内联高亮：text+ascii / hex+hex。
+// 交叉配对（如 hex 搜索 + ascii 视图）字节偏移≠字符偏移，强渲会错位；
+// 此时仍过滤 / 导航 / flash，只是不做逐字高亮（见 plan 取舍说明）。
+const hlAscii = computed(
+  () => props.viewMode === 'ascii' && props.searchMode === 'text' && isSearching.value
+)
+const hlHex = computed(
+  () => props.viewMode === 'hex' && props.searchMode === 'hex' && isSearching.value
+)
+
+/** ASCII 高亮片段：按（已合并的）字符区间切分 */
+const highlightedAscii = computed(() => {
+  const text = asciiText.value
+  const ranges = props.matchRanges
+  if (!hlAscii.value || !ranges) return [{ text, hl: false }]
+  const parts: Array<{ text: string; hl: boolean }> = []
+  let cursor = 0
+  for (const r of ranges) {
+    if (r.start > cursor) parts.push({ text: text.slice(cursor, r.start), hl: false })
+    parts.push({ text: text.slice(r.start, r.end), hl: true })
+    cursor = r.end
+  }
+  if (cursor < text.length) parts.push({ text: text.slice(cursor), hl: false })
+  return parts
+})
+
+/** HEX 高亮：从原始字节重建逐字节视图，命中字节（Set 天然去重）加 hl */
+interface HighlightedByte {
+  hex: string
+  ascii: string
+  hl: boolean
+}
+interface HighlightedHexLine {
+  offset: string
+  bytes: HighlightedByte[]
+}
+const BYTES_PER_LINE = 16
+const highlightedDumpLines = computed<HighlightedHexLine[]>(() => {
+  const bytes = props.message.bytes
+  const ranges = props.matchRanges
+  const hl = hlHex.value && ranges
+  const hlSet = new Set<number>()
+  if (hl) {
+    for (const r of ranges!) {
+      for (let i = r.start; i < r.end; i++) hlSet.add(i)
+    }
+  }
+  const lines: HighlightedHexLine[] = []
+  for (let off = 0; off < bytes.length; off += BYTES_PER_LINE) {
+    const offsetStr = off.toString(16).padStart(4, '0').toUpperCase()
+    const lineBytes: HighlightedByte[] = []
+    for (let i = 0; i < BYTES_PER_LINE; i++) {
+      const byteIndex = off + i
+      if (byteIndex < bytes.length) {
+        const b = bytes[byteIndex]
+        lineBytes.push({
+          hex: b.toString(16).padStart(2, '0').toUpperCase(),
+          ascii: b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : '.',
+          hl: hl ? hlSet.has(byteIndex) : false
+        })
+      } else {
+        lineBytes.push({ hex: '  ', ascii: ' ', hl: false })
+      }
+    }
+    lines.push({ offset: offsetStr, bytes: lineBytes })
+  }
+  return lines
+})
+
+/** 高亮 class：活动帧用活动色，其余命中用普通高亮色 */
+function hlClass(on: boolean): string | undefined {
+  if (!on) return undefined
+  return props.activeMatch ? 'hl-active' : 'hl'
+}
+
+// flash：activeMatch 变 true 时短暂闪烁；用 onCleanup 清理定时器，避免快速导航时泄漏
+const flash = ref(false)
+watchEffect((onCleanup) => {
+  if (props.activeMatch) {
+    flash.value = true
+    const id = setTimeout(() => {
+      flash.value = false
+    }, 600)
+    onCleanup(() => clearTimeout(id))
+  } else {
+    flash.value = false
+  }
+})
 
 /** 复制本帧：带时间戳 + 方向前缀，与气泡显示时间一致 */
 function copyCurrent() {
@@ -63,7 +167,7 @@ function onRowContext(e: MouseEvent) {
 <template>
   <div
     class="row"
-    :class="[isTx ? 'row-tx' : 'row-rx', { selectable, selected }]"
+    :class="[isTx ? 'row-tx' : 'row-rx', { selectable, selected, flash }]"
     @click="onRowClick"
     @contextmenu="onRowContext"
   >
@@ -83,15 +187,41 @@ function onRowContext(e: MouseEvent) {
         </span>
       </div>
 
-      <!-- ASCII 视图 -->
-      <pre v-if="viewMode === 'ascii'" class="body ascii">{{ asciiText }}</pre>
+      <!-- ASCII 视图：无高亮 -->
+      <pre v-if="viewMode === 'ascii' && !hlAscii" class="body ascii">{{ asciiText }}</pre>
+      <!-- ASCII 视图：文本高亮 -->
+      <pre v-else-if="viewMode === 'ascii'" class="body ascii"
+        ><mark
+          v-for="(part, pi) in highlightedAscii"
+          :key="pi"
+          :class="hlClass(part.hl)"
+          >{{ part.text }}</mark
+        ></pre
+      >
 
-      <!-- HEX 视图：左 offset / 中 hex / 右 ASCII 透视 -->
-      <div v-else class="body hex">
+      <!-- HEX 视图：无高亮（默认） -->
+      <div v-if="viewMode !== 'ascii' && !hlHex" class="body hex">
         <div v-for="(line, i) in dumpLines" :key="i" class="hex-line">
           <span class="off">{{ line.offset }}</span>
           <span class="hx">{{ line.hex }}</span>
           <span class="asc">{{ line.ascii }}</span>
+        </div>
+      </div>
+      <!-- HEX 视图：字节高亮 -->
+      <div v-else-if="viewMode !== 'ascii'" class="body hex">
+        <div v-for="(line, i) in highlightedDumpLines" :key="i" class="hex-line">
+          <span class="off">{{ line.offset }}</span>
+          <span class="hx">
+            <span
+              v-for="(b, bi) in line.bytes"
+              :key="bi"
+              :class="hlClass(b.hl)"
+              >{{ b.hex }}{{ bi < line.bytes.length - 1 ? ' ' : '' }}</span
+            >
+          </span>
+          <span class="asc">
+            <span v-for="(b, bi) in line.bytes" :key="bi" :class="hlClass(b.hl)">{{ b.ascii }}</span>
+          </span>
         </div>
       </div>
     </div>
@@ -220,5 +350,34 @@ function onRowContext(e: MouseEvent) {
 .asc {
   color: var(--text-dim);
   white-space: pre;
+}
+
+/* 搜索高亮：mark 默认黄底重置为透明，仅 .hl / .hl-active 着色 */
+mark {
+  background: none;
+  color: inherit;
+}
+.hl {
+  background: var(--search-highlight-bg);
+  color: var(--search-highlight-text);
+  border-radius: 2px;
+}
+.hl-active {
+  background: var(--search-active-bg);
+  color: var(--search-active-text);
+  border-radius: 2px;
+}
+
+/* 导航目标帧 flash */
+.row.flash .bubble {
+  animation: search-flash 0.6s ease-out;
+}
+@keyframes search-flash {
+  0% {
+    box-shadow: 0 0 0 2px var(--search-active-bg);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
 }
 </style>
