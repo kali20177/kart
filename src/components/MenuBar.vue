@@ -6,12 +6,12 @@ import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
 import { formatMessageLine } from '@/utils/message-format'
 import { downloadTextFile } from '@/utils/download'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const messages = useMessagesStore()
 const settingsStore = useSettingsStore()
 const message = useMessage()
-
-const APP_NAME = '串口调试助手'
 
 const showAbout = ref(false)
 const showLicense = ref(false)
@@ -20,9 +20,9 @@ const showLicense = ref(false)
 const aboutRows = computed<Array<[string, string]>>(() => {
   const deps = __DEP_VERSIONS__
   const rows: Array<[string, string]> = [
-    ['版本', __APP_VERSION__],
-    ['提交', __GIT_COMMIT__],
-    ['构建日期', new Date(__BUILD_DATE__).toLocaleString()],
+    [t('about.version'), __APP_VERSION__],
+    [t('about.commit'), __GIT_COMMIT__],
+    [t('about.buildDate'), new Date(__BUILD_DATE__).toLocaleString()],
     ['Vue', deps.vue],
     ['Pinia', deps.pinia],
     ['Naive UI', deps['naive-ui']],
@@ -34,14 +34,14 @@ const aboutRows = computed<Array<[string, string]>>(() => {
   if (rt?.chrome) rows.push(['Chromium', rt.chrome])
   if (rt?.node) rows.push(['Node.js', rt.node])
   if (rt?.v8) rows.push(['V8', rt.v8])
-  rows.push(['平台', window.electron?.platform ?? navigator.platform])
+  rows.push([t('about.platform'), window.electron?.platform ?? navigator.platform])
   return rows
 })
 
 function copyAbout() {
-  const text = [`${APP_NAME}`, ...aboutRows.value.map(([k, v]) => `${k}: ${v}`)].join('\n')
+  const text = [`${t('app.name')}`, ...aboutRows.value.map(([k, v]) => `${k}: ${v}`)].join('\n')
   navigator.clipboard?.writeText(text)
-  message.success('已复制版本信息')
+  message.success(t('about.versionCopied'))
 }
 
 /** 勾选标记：选中项左侧显示 ✓，未选中留出等宽占位以对齐 */
@@ -50,23 +50,23 @@ function check(selected: boolean) {
 }
 
 const fileMenu = computed<DropdownOption[]>(() => [
-  { label: '自动保存配置', key: 'auto-save', icon: check(settingsStore.autoSave) },
+  { label: t('menu.autoSave'), key: 'auto-save', icon: check(settingsStore.autoSave) },
   { type: 'divider', key: 'd1' },
-  { label: '导出日志', key: 'export-log' }
+  { label: t('menu.exportLog'), key: 'export-log' }
 ])
 
-const helpMenu: DropdownOption[] = [
-  { label: '关于', key: 'about' },
-  { label: '许可证', key: 'license' },
+const helpMenu = computed<DropdownOption[]>(() => [
+  { label: t('menu.about'), key: 'about' },
+  { label: t('menu.license'), key: 'license' },
   { type: 'divider', key: 'd1' },
-  { label: '开发者工具', key: 'devtools' }
-]
+  { label: t('menu.devtools'), key: 'devtools' }
+])
 
 /** 导出接收/发送记录为纯文本日志：每行 [时间戳] RX/TX: 解码文本 */
 function exportLog() {
   const list = messages.messages
   if (list.length === 0) {
-    message.warning('暂无日志可导出')
+    message.warning(t('log.empty'))
     return
   }
   const enc = settingsStore.settings.encoding
@@ -95,7 +95,7 @@ function handleSelect(key: string) {
       if (window.electron?.toggleDevTools) {
         window.electron.toggleDevTools()
       } else {
-        message.info('浏览器环境请使用 F12 / Ctrl+Shift+I 打开开发者工具')
+        message.info(t('about.browserDevtools'))
       }
       break
   }
@@ -105,17 +105,17 @@ function handleSelect(key: string) {
 <template>
   <div class="menubar">
     <NDropdown trigger="click" :options="fileMenu" @select="handleSelect">
-      <NButton size="tiny" quaternary>文件</NButton>
+      <NButton size="tiny" quaternary>{{ t('menu.file') }}</NButton>
     </NDropdown>
     <NDropdown trigger="click" :options="helpMenu" @select="handleSelect">
-      <NButton size="tiny" quaternary>帮助</NButton>
+      <NButton size="tiny" quaternary>{{ t('menu.help') }}</NButton>
     </NDropdown>
   </div>
 
-  <NModal v-model:show="showAbout" preset="card" title="关于" style="width: 420px">
+  <NModal v-model:show="showAbout" preset="card" :title="t('menu.about')" style="width: 420px">
     <div class="about">
-      <div class="app-name">{{ APP_NAME }}</div>
-      <p class="desc">嵌入式串口调试助手 —— 阶段 1：前端 UI（模拟数据驱动）</p>
+      <div class="app-name">{{ t('app.name') }}</div>
+      <p class="desc">{{ t('app.desc') }}</p>
       <div class="versions">
         <template v-for="[k, v] in aboutRows" :key="k">
           <span class="ver-key">{{ k }}</span>
@@ -125,15 +125,15 @@ function handleSelect(key: string) {
     </div>
     <template #footer>
       <div style="display: flex; justify-content: flex-end">
-        <NButton size="small" @click="copyAbout">复制</NButton>
+        <NButton size="small" @click="copyAbout">{{ t('menu.copy') }}</NButton>
       </div>
     </template>
   </NModal>
 
-  <NModal v-model:show="showLicense" preset="card" title="许可证" style="width: 420px">
+  <NModal v-model:show="showLicense" preset="card" :title="t('menu.license')" style="width: 420px">
     <div class="license">
-      <p>本项目为演示用途（private），未对外发布。</p>
-      <p>使用的开源组件（均为 MIT 许可）：</p>
+      <p>{{ t('about.licenseText') }}</p>
+      <p>{{ t('about.ossNotice') }}</p>
       <ul>
         <li>Vue 3 — MIT</li>
         <li>Pinia — MIT</li>

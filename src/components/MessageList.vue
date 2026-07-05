@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, useDialog, useMessage } from 'naive-ui'
@@ -18,6 +19,7 @@ const messagesStore = useMessagesStore()
 const settingsStore = useSettingsStore()
 const dialog = useDialog()
 const toast = useMessage()
+const { t } = useI18n()
 
 const dirFilter = ref<'all' | Direction>('all')
 const keyword = ref('')
@@ -175,7 +177,7 @@ function copySelected() {
     )
     .join('\n')
   navigator.clipboard?.writeText(lines)
-  toast.success(`已复制 ${selectedCount.value} 条`)
+  toast.success(t('msgList.copiedN', { n: selectedCount.value }))
 }
 
 function exportSelected() {
@@ -190,17 +192,17 @@ function exportSelected() {
       )
       .join('\n') + '\n'
   downloadTextFile('serial-log-selected.txt', lines)
-  toast.success(`已导出 ${selectedCount.value} 条`)
+  toast.success(t('msgList.exportedN', { n: selectedCount.value }))
 }
 
 function deleteSelected() {
   const n = selectedCount.value
   if (n === 0) return
   dialog.warning({
-    title: '删除选中帧？',
-    content: `将删除 ${n} 条消息，此操作不可撤销。`,
-    positiveText: '删除',
-    negativeText: '取消',
+    title: t('msgList.deleteDialogTitle'),
+    content: t('msgList.deleteDialogContent', { n }),
+    positiveText: t('msgList.deleteDialogOk'),
+    negativeText: t('msgList.deleteDialogCancel'),
     onPositiveClick: () => {
       messagesStore.removeByIds([...selected])
       selected.clear()
@@ -217,7 +219,11 @@ watch(
       const start = messagesStore.pauseStartTime
       const dur = Math.max(1, Math.round((Date.now() - start) / 1000))
       toast.warning(
-        `暂停期间未显示数据: ${formatTimestamp(start, 'short')} – ${formatTimestamp(Date.now(), 'short')} (${dur}s)`,
+        t('msgList.pauseNotice', {
+          start: formatTimestamp(start, 'short'),
+          end: formatTimestamp(Date.now(), 'short'),
+          dur
+        }),
         { duration: 5000 }
       )
     }
@@ -229,18 +235,18 @@ watch(
   <div class="list-wrap">
     <div class="toolbar">
       <NButtonGroup size="tiny">
-        <NButton :type="dirFilter === 'all' ? 'primary' : 'default'" @click="dirFilter = 'all'">全部</NButton>
+        <NButton :type="dirFilter === 'all' ? 'primary' : 'default'" @click="dirFilter = 'all'">{{ t('msgList.all') }}</NButton>
         <NButton :type="dirFilter === 'rx' ? 'primary' : 'default'" @click="dirFilter = 'rx'">RX</NButton>
         <NButton :type="dirFilter === 'tx' ? 'primary' : 'default'" @click="dirFilter = 'tx'">TX</NButton>
       </NButtonGroup>
       <NButtonGroup size="tiny">
-        <NButton :type="searchMode === 'text' ? 'primary' : 'default'" @click="searchMode = 'text'">文本</NButton>
+        <NButton :type="searchMode === 'text' ? 'primary' : 'default'" @click="searchMode = 'text'">{{ t('msgList.text') }}</NButton>
         <NButton :type="searchMode === 'hex' ? 'primary' : 'default'" @click="searchMode = 'hex'">HEX</NButton>
       </NButtonGroup>
       <NInput
         v-model:value="keyword"
         size="tiny"
-        :placeholder="searchMode === 'hex' ? '搜索 HEX 字节' : '搜索关键字'"
+        :placeholder="searchMode === 'hex' ? t('msgList.searchHex') : t('msgList.searchKeyword')"
         clearable
         style="width: 180px"
         @keydown.enter="onSearchKeydown"
@@ -248,28 +254,28 @@ watch(
       <span v-if="hexError" class="hex-err">{{ hexError }}</span>
       <!-- 匹配导航 -->
       <span v-if="matchCount > 0" class="match-nav">
-        <NButton size="tiny" quaternary :disabled="matchCount < 2" title="上一项 (Shift+Enter)" @click="goToMatch(-1)">↑</NButton>
+        <NButton size="tiny" quaternary :disabled="matchCount < 2" :title="t('msgList.prevMatch')" @click="goToMatch(-1)">↑</NButton>
         <span class="match-pos">{{ matchIndex + 1 }}/{{ matchCount }}</span>
-        <NButton size="tiny" quaternary :disabled="matchCount < 2" title="下一项 (Enter)" @click="goToMatch(1)">↓</NButton>
+        <NButton size="tiny" quaternary :disabled="matchCount < 2" :title="t('msgList.nextMatch')" @click="goToMatch(1)">↓</NButton>
       </span>
-      <NTag size="small" :bordered="false">{{ filtered.length }} 帧</NTag>
+      <NTag size="small" :bordered="false">{{ filtered.length }} {{ t('msgList.frames') }}</NTag>
       <div class="spacer" />
       <NButton
         size="tiny"
         :type="showTimeFilter || timeStart !== null || timeEnd !== null ? 'primary' : 'default'"
-        title="时间筛选"
+        :title="t('msgList.timeFilter')"
         @click="showTimeFilter = !showTimeFilter"
         >⏱</NButton
       >
       <NButton size="tiny" :type="messagesStore.paused ? 'warning' : 'default'" @click="messagesStore.togglePause()">
-        {{ messagesStore.paused ? '已暂停' : '暂停' }}
+        {{ messagesStore.paused ? t('msgList.paused') : t('msgList.pause') }}
       </NButton>
-      <NButton size="tiny" @click="messagesStore.clear()">清空</NButton>
+      <NButton size="tiny" @click="messagesStore.clear()">{{ t('msgList.clearAll') }}</NButton>
     </div>
 
     <!-- 时间筛选行 -->
     <div v-if="showTimeFilter" class="toolbar time-row">
-      <span class="time-label">时间范围</span>
+      <span class="time-label">{{ t('msgList.timeRange') }}</span>
       <NInput
         v-model:value="timeInputStart"
         size="tiny"
@@ -287,7 +293,7 @@ watch(
         :status="timeEndInvalid ? 'error' : undefined"
         style="width: 110px"
       />
-      <NButton size="tiny" quaternary @click="clearTimeFilter">清除</NButton>
+      <NButton size="tiny" quaternary @click="clearTimeFilter">{{ t('msgList.clear') }}</NButton>
     </div>
 
     <div class="scroll-area">
@@ -326,19 +332,19 @@ watch(
 
       <Transition name="fade">
         <NButton v-if="!multiSelect && !follow" class="jump-btn" size="small" type="primary" @click="jumpLatest">
-          ↓ 回到最新
+          {{ t('msgList.backToLatest') }}
         </NButton>
       </Transition>
 
       <!-- 多选操作栏 -->
       <div v-if="multiSelect" class="action-bar">
-        <NTag size="small" :bordered="false" type="info">已选 {{ selectedCount }}</NTag>
-        <NButton size="small" :disabled="selectedCount === 0" @click="copySelected">复制</NButton>
-        <NButton size="small" :disabled="selectedCount === 0" @click="exportSelected">导出 txt</NButton>
-        <NButton size="small" type="error" :disabled="selectedCount === 0" @click="deleteSelected">删除</NButton>
-        <NButton size="small" @click="selectAllVisible">全选</NButton>
+        <NTag size="small" :bordered="false" type="info">{{ t('msgList.selected', { n: selectedCount }) }}</NTag>
+        <NButton size="small" :disabled="selectedCount === 0" @click="copySelected">{{ t('msgList.copy') }}</NButton>
+        <NButton size="small" :disabled="selectedCount === 0" @click="exportSelected">{{ t('msgList.exportTxt') }}</NButton>
+        <NButton size="small" type="error" :disabled="selectedCount === 0" @click="deleteSelected">{{ t('msgList.delete') }}</NButton>
+        <NButton size="small" @click="selectAllVisible">{{ t('msgList.selectAll') }}</NButton>
         <div class="spacer" />
-        <NButton size="small" quaternary @click="exitMultiSelect">取消</NButton>
+        <NButton size="small" quaternary @click="exitMultiSelect">{{ t('msgList.cancel') }}</NButton>
       </div>
     </div>
   </div>

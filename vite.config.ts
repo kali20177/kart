@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import electron from 'vite-plugin-electron/simple'
 import { fileURLToPath, URL } from 'node:url'
 import { execSync } from 'node:child_process'
@@ -60,6 +61,12 @@ export default defineConfig({
   },
   plugins: [
     vue(),
+    // 预编译 i18n 消息 + 切到 vue-i18n 运行时构建（无 new Function/eval）。
+    // 项目 CSP 为 script-src 'self'（禁 unsafe-eval），必须避免运行时消息编译。
+    VueI18nPlugin({
+      include: [fileURLToPath(new URL('./src/locales/**', import.meta.url))],
+      runtimeOnly: true
+    }),
     ...(isElectron
       ? [
           electron({

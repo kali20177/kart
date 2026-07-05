@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { NButton, NTag, useMessage } from 'naive-ui'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
+import { useI18n } from 'vue-i18n'
 import { useWaveformStore } from '@/stores/waveform'
 import { useSettingsStore } from '@/stores/settings'
 import { useIsDark } from '@/composables/useIsDark'
@@ -11,6 +12,7 @@ import { formatTimestamp } from '@/utils/message-format'
 const waveform = useWaveformStore()
 const settings = useSettingsStore()
 const isDark = useIsDark()
+const { t } = useI18n()
 
 const containerRef = ref<HTMLDivElement | null>(null)
 const toast = useMessage()
@@ -66,7 +68,7 @@ function drawResumeBreak(u: uPlot) {
   ctx.font = '11px sans-serif'
   ctx.fillStyle = '#ff8800'
   ctx.textAlign = 'center'
-  ctx.fillText('⏸ 断点', px, top + h - 4)
+  ctx.fillText(t('waveform.breakLabel'), px, top + h - 4)
   ctx.restore()
 }
 
@@ -277,7 +279,7 @@ watch(
       const start = waveform.pauseStartTime
       const dur = Math.max(1, Math.round((Date.now() - start) / 1000))
       toast.warning(
-        `暂停期间未显示数据: ${formatTimestamp(start, 'short')} – ${formatTimestamp(Date.now(), 'short')} (${dur}s)`,
+        t('waveform.pauseNotice', { start: formatTimestamp(start, 'short'), end: formatTimestamp(Date.now(), 'short'), dur }),
         { duration: 5000 }
       )
     }
@@ -342,28 +344,28 @@ const zoomLevel = computed(() => {
 <template>
   <div class="wave-wrap">
     <div class="toolbar">
-      <NTag size="small" :bordered="false">{{ pointCount }} 点</NTag>
-      <NTag size="small" :bordered="false">{{ channels() }} 通道</NTag>
-      <NTag v-if="waveform.paused" size="small" :bordered="false" type="info">拖拽回看历史</NTag>
+      <NTag size="small" :bordered="false">{{ t('waveform.points', { n: pointCount }) }}</NTag>
+      <NTag size="small" :bordered="false">{{ t('waveform.channels', { n: channels() }) }}</NTag>
+      <NTag v-if="waveform.paused" size="small" :bordered="false" type="info">{{ t('waveform.dragHistory') }}</NTag>
       <NTag v-if="waveform.viewOffset > 0" size="small" :bordered="false" type="warning">
-        回看 −{{ backSeconds.toFixed(1) }}s
+        {{ t('waveform.backSeconds', { s: backSeconds.toFixed(1) }) }}
       </NTag>
       <NTag v-if="waveform.zoomed" size="small" :bordered="false" type="success">
-        放大 ×{{ zoomLevel.toFixed(1) }}
+        {{ t('waveform.zoomLevel', { x: zoomLevel.toFixed(1) }) }}
       </NTag>
       <div class="spacer" />
-      <NButton v-if="waveform.zoomed" size="tiny" @click="waveform.resetZoom()">重置缩放</NButton>
+      <NButton v-if="waveform.zoomed" size="tiny" @click="waveform.resetZoom()">{{ t('waveform.resetZoom') }}</NButton>
       <NButton v-if="waveform.viewOffset > 0" size="tiny" @click="waveform.resetView()">
-        回到最新
+        {{ t('waveform.backToLatest') }}
       </NButton>
       <NButton
         size="tiny"
         :type="waveform.paused ? 'warning' : 'default'"
         @click="waveform.togglePause()"
       >
-        {{ waveform.paused ? '已暂停' : '暂停' }}
+        {{ waveform.paused ? t('waveform.paused') : t('waveform.pause') }}
       </NButton>
-      <NButton size="tiny" @click="waveform.clear()">清空</NButton>
+      <NButton size="tiny" @click="waveform.clear()">{{ t('waveform.clear') }}</NButton>
     </div>
     <div ref="containerRef" class="chart-area" />
   </div>

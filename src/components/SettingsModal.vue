@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import {
   NModal,
   NForm,
@@ -9,8 +9,10 @@ import {
   NInputNumber,
   NSwitch,
   NButton,
+  NButtonGroup,
   useMessage
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useSerialStore } from '@/stores/serial'
 import { parseHexInput } from '@/utils/hex'
@@ -19,30 +21,31 @@ const show = defineModel<boolean>('show', { default: false })
 const settingsStore = useSettingsStore()
 const serial = useSerialStore()
 const message = useMessage()
+const { t } = useI18n()
 const s = settingsStore.settings
 
 const activeTab = ref('receive')
 
-const encodingOptions = [
+const encodingOptions = computed(() => [
   { label: 'UTF-8', value: 'utf-8' },
   { label: 'ASCII', value: 'ascii' },
   { label: 'GBK', value: 'gbk' }
-]
-const strategyOptions = [
-  { label: '空闲超时（gap-timeout）', value: 'gap-timeout' },
-  { label: '分隔符（delimiter）', value: 'delimiter' },
-  { label: '定长（fixed-length）', value: 'fixed-length' }
-]
-const viewOptions = [
+])
+const strategyOptions = computed(() => [
+  { label: t('settings.gapTimeout'), value: 'gap-timeout' },
+  { label: t('settings.delimiter'), value: 'delimiter' },
+  { label: t('settings.fixedLength'), value: 'fixed-length' }
+])
+const viewOptions = computed(() => [
   { label: 'ASCII', value: 'ascii' },
   { label: 'HEX', value: 'hex' }
-]
-const themeOptions = [
-  { label: '暗色', value: 'dark' },
-  { label: '亮色', value: 'light' },
-  { label: '跟随系统', value: 'system' }
-]
-const numericTypeOptions = [
+])
+const themeOptions = computed(() => [
+  { label: t('settings.dark'), value: 'dark' },
+  { label: t('settings.light'), value: 'light' },
+  { label: t('settings.system'), value: 'system' }
+])
+const numericTypeOptions = computed(() => [
   { label: 'uint8 (1B)', value: 'uint8' },
   { label: 'int8 (1B)', value: 'int8' },
   { label: 'uint16 (2B)', value: 'uint16' },
@@ -51,7 +54,7 @@ const numericTypeOptions = [
   { label: 'int32 (4B)', value: 'int32' },
   { label: 'float32 (4B)', value: 'float32' },
   { label: 'float64 (8B)', value: 'float64' }
-]
+])
 
 // 模拟注入
 const injectText = ref('Hello from MCU\r\n')
@@ -62,14 +65,14 @@ const injectModeOptions = [
 ]
 function doInject() {
   if (!serial.connected) {
-    message.warning('请先连接端口')
+    message.warning(t('settings.injectNeedConnect'))
     return
   }
   let bytes: Uint8Array
   if (injectMode.value === 'hex') {
     const r = parseHexInput(injectText.value)
     if (!r.ok) {
-      message.error(r.error ?? 'HEX 解析失败')
+      message.error(r.error ?? t('settings.injectHexError'))
       return
     }
     bytes = r.bytes
@@ -86,38 +89,38 @@ interface NavItem {
   icon: string // SVG path data (simple, 16x16 viewBox)
 }
 
-const navItems: NavItem[] = [
+const navItems = computed<NavItem[]>(() => [
   {
     key: 'receive',
-    label: '接收',
+    label: t('settings.receive'),
     icon: 'M8 2v10M4 8l4 4 4-4M2 14h12'
   },
   {
     key: 'display',
-    label: '显示',
+    label: t('settings.display'),
     icon: 'M2 4h12v9H2zM5 13v1h6v-1'
   },
   {
     key: 'waveform',
-    label: '波形解析',
+    label: t('settings.waveform'),
     icon: 'M1 8l3-5 3 7 3-9 3 11 2-4'
   },
   {
     key: 'connection',
-    label: '连接',
+    label: t('settings.connection'),
     icon: 'M8 3v10M3 8h10M5 5l6 6M11 5l-6 6'
   },
   {
     key: 'baud',
-    label: '波特率',
+    label: t('settings.baudRate'),
     icon: 'M8 5a3 3 0 100 6 3 3 0 000-6zM5.5 8h5M8 5.5v5'
   },
   {
     key: 'mock',
-    label: '模拟',
+    label: t('settings.mock'),
     icon: 'M4 12l2-7h4l2 7M3 12h10v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1zM8 6v3'
   }
-]
+])
 </script>
 
 <template>
@@ -125,7 +128,7 @@ const navItems: NavItem[] = [
     v-model:show="show"
     :style="{ maxWidth: '800px', width: '92vw' }"
     preset="card"
-    title="设置"
+    :title="t('settings.title')"
     closable
     :bordered="false"
     :mask-closable="false"
@@ -153,7 +156,7 @@ const navItems: NavItem[] = [
             <path d="M2 8a6 6 0 0111.3-3M14 8a6 6 0 01-11.3 3" />
             <path d="M13 2v3h-3M3 14v-3h3" />
           </svg>
-          <span>恢复默认</span>
+          <span>{{ t('settings.reset') }}</span>
         </button>
       </nav>
 
@@ -161,17 +164,17 @@ const navItems: NavItem[] = [
         <div class="content-pane">
         <!-- ========== 接收 ========== -->
         <NForm v-if="activeTab === 'receive'" label-placement="top" size="small">
-          <div class="section-title">接收</div>
-          <NFormItem label="字符编码">
+          <div class="section-title">{{ t('settings.receive') }}</div>
+          <NFormItem :label="t('settings.encoding')">
             <NSelect v-model:value="s.encoding" :options="encodingOptions" />
           </NFormItem>
-          <NFormItem label="帧切分策略">
+          <NFormItem :label="t('settings.frameStrategy')">
             <NSelect v-model:value="s.frame.strategy" :options="strategyOptions" />
           </NFormItem>
-          <NFormItem v-if="s.frame.strategy === 'gap-timeout'" label="空闲超时 (ms)">
+          <NFormItem v-if="s.frame.strategy === 'gap-timeout'" :label="t('settings.gapMs')">
             <NInputNumber v-model:value="s.frame.gapMs" :min="1" :max="1000" style="width: 100%" />
           </NFormItem>
-          <NFormItem v-if="s.frame.strategy === 'delimiter'" label="分隔符 (HEX)">
+          <NFormItem v-if="s.frame.strategy === 'delimiter'" :label="t('settings.delimiterHex')">
             <NSelect
               v-model:value="s.frame.delimiterHex"
               :options="[
@@ -183,47 +186,61 @@ const navItems: NavItem[] = [
               filterable
             />
           </NFormItem>
-          <NFormItem v-if="s.frame.strategy === 'fixed-length'" label="每帧字节数">
+          <NFormItem v-if="s.frame.strategy === 'fixed-length'" :label="t('settings.fixedLengthBytes')">
             <NInputNumber v-model:value="s.frame.fixedLength" :min="1" :max="4096" style="width: 100%" />
           </NFormItem>
-          <NFormItem label="缓冲上限（帧）">
+          <NFormItem :label="t('settings.bufferLimit')">
             <NInputNumber v-model:value="s.bufferLimit" :min="100" :max="100000" :step="500" style="width: 100%" />
           </NFormItem>
         </NForm>
 
         <!-- ========== 显示 ========== -->
         <NForm v-if="activeTab === 'display'" label-placement="top" size="small">
-          <div class="section-title">显示</div>
-          <NFormItem label="默认视图">
+          <div class="section-title">{{ t('settings.display') }}</div>
+          <NFormItem :label="t('settings.defaultView')">
             <NSelect v-model:value="s.defaultView" :options="viewOptions" />
           </NFormItem>
-          <NFormItem label="主题">
+          <NFormItem :label="t('settings.theme')">
             <NSelect v-model:value="s.theme" :options="themeOptions" />
           </NFormItem>
-          <NFormItem label="字号 (px)">
+          <NFormItem :label="t('settings.fontSize')">
             <NInputNumber v-model:value="s.fontSize" :min="10" :max="20" style="width: 100%" />
           </NFormItem>
-          <NFormItem label="暂停提示">
+          <NFormItem :label="t('settings.lang')">
+            <NButtonGroup>
+              <NButton
+                :type="s.locale === 'zh-CN' ? 'primary' : 'default'"
+                @click="s.locale = 'zh-CN'"
+                size="small"
+              >中文</NButton>
+              <NButton
+                :type="s.locale === 'en-US' ? 'primary' : 'default'"
+                @click="s.locale = 'en-US'"
+                size="small"
+              >English</NButton>
+            </NButtonGroup>
+          </NFormItem>
+          <NFormItem :label="t('settings.pauseNotify')">
             <NSwitch v-model:value="s.showPauseNotification">
-              <template #checked>恢复时提示缺失数据时间段</template>
-              <template #unchecked>不提示</template>
+              <template #checked>{{ t('settings.pauseNotifyOn') }}</template>
+              <template #unchecked>{{ t('settings.pauseNotifyOff') }}</template>
             </NSwitch>
           </NFormItem>
         </NForm>
 
         <!-- ========== 波形解析 ========== -->
         <NForm v-if="activeTab === 'waveform'" label-placement="top" size="small">
-          <div class="section-title">波形解析</div>
-          <NFormItem label="数值类型">
+          <div class="section-title">{{ t('settings.waveform') }}</div>
+          <NFormItem :label="t('settings.numericType')">
             <NSelect v-model:value="s.waveform.parse.type" :options="numericTypeOptions" />
           </NFormItem>
-          <NFormItem label="字节序">
+          <NFormItem :label="t('settings.byteOrder')">
             <NSwitch v-model:value="s.waveform.parse.littleEndian">
-              <template #checked>小端 LE</template>
-              <template #unchecked>大端 BE</template>
+              <template #checked>{{ t('settings.littleEndian') }}</template>
+              <template #unchecked>{{ t('settings.bigEndian') }}</template>
             </NSwitch>
           </NFormItem>
-          <NFormItem label="通道数">
+          <NFormItem :label="t('settings.channels')">
             <NInputNumber
               v-model:value="s.waveform.parse.channels"
               :min="1"
@@ -231,7 +248,7 @@ const navItems: NavItem[] = [
               style="width: 100%"
             />
           </NFormItem>
-          <NFormItem label="字节偏移（帧头）">
+          <NFormItem :label="t('settings.byteOffset')">
             <NInputNumber
               v-model:value="s.waveform.parse.byteOffset"
               :min="0"
@@ -239,7 +256,7 @@ const navItems: NavItem[] = [
               style="width: 100%"
             />
           </NFormItem>
-          <NFormItem label="采样率 (Hz)">
+          <NFormItem :label="t('settings.sampleRate')">
             <NInputNumber
               v-model:value="s.waveform.sampleRate"
               :min="1"
@@ -248,7 +265,7 @@ const navItems: NavItem[] = [
               style="width: 100%"
             />
           </NFormItem>
-          <NFormItem label="最大点数">
+          <NFormItem :label="t('settings.maxPoints')">
             <NInputNumber
               v-model:value="s.waveform.maxPoints"
               :min="100"
@@ -261,17 +278,17 @@ const navItems: NavItem[] = [
 
         <!-- ========== 连接 ========== -->
         <NForm v-if="activeTab === 'connection'" label-placement="top" size="small">
-          <div class="section-title">连接</div>
-          <NFormItem label="掉线自动重连（阶段 2 生效）">
+          <div class="section-title">{{ t('settings.connection') }}</div>
+          <NFormItem :label="t('settings.autoReconnect')">
             <NSwitch v-model:value="s.autoReconnect" />
           </NFormItem>
         </NForm>
 
         <!-- ========== 自定义波特率 ========== -->
         <div v-if="activeTab === 'baud'" class="baud-section">
-          <div class="section-title">自定义波特率</div>
+          <div class="section-title">{{ t('settings.customBaud') }}</div>
           <div v-if="serial.customBaudRates.length === 0" class="empty-hint">
-            在连接栏波特率框输入新数值即可添加；预设档位不可删除。
+            {{ t('settings.baudEmpty') }}
           </div>
           <div
             v-for="item in serial.customBaudRates"
@@ -282,7 +299,7 @@ const navItems: NavItem[] = [
             <NInput
               size="small"
               :value="item.note ?? ''"
-              placeholder="标注（可选）"
+              :placeholder="t('settings.baudNote')"
               @update:value="(v: string) => serial.updateCustomBaudNote(item.baud, v)"
             />
             <NButton
@@ -291,22 +308,22 @@ const navItems: NavItem[] = [
               type="error"
               @click="serial.removeCustomBaudRate(item.baud)"
             >
-              删除
+              {{ t('settings.delete') }}
             </NButton>
           </div>
         </div>
 
         <!-- ========== 模拟数据 ========== -->
         <div v-if="activeTab === 'mock'" class="mock-section">
-          <div class="section-title">模拟数据（阶段 1）</div>
+          <div class="section-title">{{ t('settings.mockTitle') }}</div>
           <NForm label-placement="top" size="small">
-            <NFormItem label="注入内容">
+            <NFormItem :label="t('settings.injectContent')">
               <NSelect v-model:value="injectMode" :options="injectModeOptions" style="width: 100px" />
             </NFormItem>
             <NFormItem>
               <div style="display: flex; gap: 8px; width: 100%">
                 <input v-model="injectText" class="inject-input" />
-                <NButton size="small" type="primary" @click="doInject">注入</NButton>
+                <NButton size="small" type="primary" @click="doInject">{{ t('settings.inject') }}</NButton>
               </div>
             </NFormItem>
           </NForm>

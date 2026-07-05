@@ -11,6 +11,7 @@ import {
   NDropdown,
   useMessage
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useCommandsStore } from '@/stores/commands'
 import { useSerialStore } from '@/stores/serial'
 import type { DataMode, LineEnding, QuickCommand } from '@/types'
@@ -22,14 +23,15 @@ const emit = defineEmits<{
 const store = useCommandsStore()
 const serial = useSerialStore()
 const message = useMessage()
+const { t } = useI18n()
 
 const modeOptions = [
   { label: 'ASCII', value: 'ascii' },
   { label: 'HEX', value: 'hex' }
 ]
 const endingOptions = [
-  { label: '沿用发送框', value: 'inherit' },
-  { label: '无', value: 'none' },
+  { label: t('commands.inherit'), value: 'inherit' },
+  { label: t('composer.none'), value: 'none' },
   { label: '\\r', value: 'cr' },
   { label: '\\n', value: 'lf' },
   { label: '\\r\\n', value: 'crlf' }
@@ -56,7 +58,7 @@ function openEdit(c: QuickCommand) {
 }
 function saveEdit() {
   if (!editing.value.name.trim()) {
-    message.warning('请填写名称')
+    message.warning(t('commands.needName'))
     return
   }
   if (isNew.value) {
@@ -72,15 +74,15 @@ function saveEdit() {
 async function sendCmd(c: QuickCommand) {
   const ending: LineEnding = c.appendNewline === 'inherit' ? 'crlf' : c.appendNewline
   const r = await serial.send(c.payload, c.mode, ending, 'utf-8')
-  if (!r.ok) message.error(r.error ?? '发送失败')
+  if (!r.ok) message.error(r.error ?? t('commands.sendFailed'))
 }
 
 function menuOptions(c: QuickCommand) {
   return [
-    { label: '编辑', key: 'edit' },
-    { label: '调到发送框', key: 'to-composer' },
-    { label: '复制', key: 'dup' },
-    { label: '删除', key: 'del' }
+    { label: t('commands.edit'), key: 'edit' },
+    { label: t('commands.toComposer'), key: 'to-composer' },
+    { label: t('commands.duplicate'), key: 'dup' },
+    { label: t('commands.delete'), key: 'del' }
   ].map((o) => ({ ...o, cmd: c }))
 }
 function onMenu(key: string, c: QuickCommand) {
@@ -116,8 +118,8 @@ function onFile(e: Event) {
   const reader = new FileReader()
   reader.onload = () => {
     const r = store.importJson(String(reader.result))
-    if (r.ok) message.success('导入成功')
-    else message.error(r.error ?? '导入失败')
+    if (r.ok) message.success(t('commands.importOk'))
+    else message.error(r.error ?? t('commands.importFail'))
   }
   reader.readAsText(f)
   ;(e.target as HTMLInputElement).value = ''
@@ -127,8 +129,8 @@ function onFile(e: Event) {
 <template>
   <div class="panel">
     <div class="head">
-      <span class="title">快速命令</span>
-      <NButton size="tiny" @click="openNew">+ 新建</NButton>
+      <span class="title">{{ t('commands.title') }}</span>
+      <NButton size="tiny" @click="openNew">{{ t('commands.new') }}</NButton>
     </div>
 
     <div class="list">
@@ -156,42 +158,42 @@ function onFile(e: Event) {
           <NButton size="tiny" quaternary>⋯</NButton>
         </NDropdown>
       </div>
-      <div v-if="store.commands.length === 0" class="empty">暂无命令，点击「新建」添加</div>
+      <div v-if="store.commands.length === 0" class="empty">{{ t('commands.empty') }}</div>
     </div>
 
     <div class="foot">
-      <NButton size="tiny" @click="doImportClick">导入</NButton>
-      <NButton size="tiny" @click="doExport">导出</NButton>
+      <NButton size="tiny" @click="doImportClick">{{ t('commands.import') }}</NButton>
+      <NButton size="tiny" @click="doExport">{{ t('commands.export') }}</NButton>
       <input ref="fileInput" type="file" accept="application/json" hidden @change="onFile" />
     </div>
 
     <NModal
       v-model:show="showEdit"
       preset="card"
-      :title="isNew ? '新建命令' : '编辑命令'"
+      :title="isNew ? t('commands.newCmd') : t('commands.editCmd')"
       style="width: 420px"
     >
       <NForm label-placement="left" label-width="72">
-        <NFormItem label="名称">
-          <NInput v-model:value="editing.name" placeholder="如：查询信号质量" />
+        <NFormItem :label="t('commands.name')">
+          <NInput v-model:value="editing.name" :placeholder="t('commands.namePlaceholder')" />
         </NFormItem>
-        <NFormItem label="内容">
-          <NInput v-model:value="editing.payload" placeholder="ASCII 文本或 HEX 字节" />
+        <NFormItem :label="t('commands.content')">
+          <NInput v-model:value="editing.payload" :placeholder="t('commands.payloadPlaceholder')" />
         </NFormItem>
-        <NFormItem label="模式">
+        <NFormItem :label="t('commands.mode')">
           <NSelect v-model:value="editing.mode" :options="modeOptions" />
         </NFormItem>
-        <NFormItem label="行尾">
+        <NFormItem :label="t('commands.lineEnding')">
           <NSelect v-model:value="editing.appendNewline" :options="endingOptions" />
         </NFormItem>
-        <NFormItem label="标签色">
+        <NFormItem :label="t('commands.color')">
           <NColorPicker v-model:value="editing.color" :show-alpha="false" />
         </NFormItem>
       </NForm>
       <template #footer>
         <div style="display: flex; justify-content: flex-end; gap: 8px">
-          <NButton @click="showEdit = false">取消</NButton>
-          <NButton type="primary" @click="saveEdit">保存</NButton>
+          <NButton @click="showEdit = false">{{ t('commands.cancel') }}</NButton>
+          <NButton type="primary" @click="saveEdit">{{ t('commands.save') }}</NButton>
         </div>
       </template>
     </NModal>

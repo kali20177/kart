@@ -5,7 +5,10 @@ import type { SelectOption } from 'naive-ui'
 import { useSerialStore } from '@/stores/serial'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
+import { useI18n } from 'vue-i18n'
 import type { MockScenarioId } from '@/types'
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'open-ascii'): void
@@ -69,7 +72,7 @@ const renderBaudOption: RenderOption = (info) => {
         'button',
         {
           type: 'button',
-          title: '编辑标注',
+          title: t('conn.editNoteTooltip'),
           style: baudBtnStyle,
           onMousedown: (e: Event) => e.stopPropagation(),
           onClick: (e: Event) => {
@@ -83,7 +86,7 @@ const renderBaudOption: RenderOption = (info) => {
         'button',
         {
           type: 'button',
-          title: '删除该自定义波特率',
+          title: t('conn.deleteBaud'),
           style: baudBtnStyle,
           onMousedown: (e: Event) => e.stopPropagation(),
           onClick: (e: Event) => {
@@ -120,13 +123,13 @@ function onBaudChange(v: number | string) {
     return
   }
   if (!/^\d+$/.test(s)) {
-    message.error('波特率必须为正整数')
+    message.error(t('conn.baudMustBeInt'))
     cleanup()
     return
   }
   const n = parseInt(s, 10)
   if (!isValidBaud(n)) {
-    message.error(`波特率范围 ${BAUD_MIN} ~ ${BAUD_MAX.toLocaleString()}`)
+    message.error(`${t('conn.baudRange')} ${BAUD_MIN} ~ ${BAUD_MAX.toLocaleString()}`)
     cleanup()
     return
   }
@@ -178,7 +181,7 @@ async function toggle() {
       v-model:value="serial.selectedPort"
       :options="portOptions"
       size="small"
-      placeholder="选择端口"
+      :placeholder="t('conn.selectPort')"
       style="width: 130px"
       :disabled="serial.connected"
     />
@@ -186,7 +189,7 @@ async function toggle() {
       <template #trigger>
         <NButton size="small" :disabled="serial.connected" @click="serial.refreshPorts()">⟳</NButton>
       </template>
-      刷新端口列表
+      {{ t('conn.refreshPorts') }}
     </NTooltip>
 
     <NSelect
@@ -200,7 +203,7 @@ async function toggle() {
       :render-option="renderBaudOption"
       size="small"
       style="width: 120px"
-      placeholder="波特率"
+      :placeholder="t('conn.baudRate')"
       :disabled="serial.connected"
       @update:value="onBaudChange"
     />
@@ -232,12 +235,12 @@ async function toggle() {
       strong
       @click="toggle"
     >
-      {{ serial.connected ? '断开' : '连接' }}
+      {{ serial.connected ? t('conn.disconnect') : t('conn.connect') }}
     </NButton>
 
     <div class="divider" />
 
-    <span class="mock-label">模拟场景</span>
+    <span class="mock-label">{{ t('conn.mockScene') }}</span>
     <NSelect
       :value="serial.scenario"
       :options="scenarioOptions"
@@ -248,23 +251,23 @@ async function toggle() {
 
     <div class="spacer" />
 
-    <NButton size="small" quaternary @click="emit('open-ascii')">ASCII 表</NButton>
-    <NButton size="small" quaternary @click="emit('open-settings')">设置</NButton>
+    <NButton size="small" quaternary @click="emit('open-ascii')">{{ t('conn.asciiTable') }}</NButton>
+    <NButton size="small" quaternary @click="emit('open-settings')">{{ t('conn.settings') }}</NButton>
   </div>
 
-  <NModal v-model:show="showNoteModal" preset="card" title="编辑标注" style="width: 360px">
+  <NModal v-model:show="showNoteModal" preset="card" :title="t('conn.editNoteTitle')" style="width: 360px">
     <div class="note-edit">
-      <div class="note-baud-line">波特率 <span class="note-baud-num">{{ editingBaud }}</span></div>
+      <div class="note-baud-line">{{ t('conn.baudRate') }} <span class="note-baud-num">{{ editingBaud }}</span></div>
       <NInput
         v-model:value="noteDraft"
-        placeholder="如：自定义设备、复位波特率（留空清除标注）"
+        :placeholder="t('conn.notePlaceholder')"
         @keydown.enter="confirmNote"
       />
     </div>
     <template #footer>
       <div class="note-footer">
-        <NButton size="small" @click="showNoteModal = false">取消</NButton>
-        <NButton size="small" type="primary" @click="confirmNote">保存</NButton>
+        <NButton size="small" @click="showNoteModal = false">{{ t('conn.cancel') }}</NButton>
+        <NButton size="small" type="primary" @click="confirmNote">{{ t('conn.save') }}</NButton>
       </div>
     </template>
   </NModal>

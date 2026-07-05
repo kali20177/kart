@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import type { DataMode, Encoding, Message } from '@/types'
 import { bytesToHex, hexDump } from '@/utils/hex'
@@ -34,6 +35,7 @@ const emit = defineEmits<{
   (e: 'contextmenu', ev: MouseEvent): void
 }>()
 
+const { t } = useI18n()
 const toast = useMessage()
 
 const isTx = computed(() => props.message.direction === 'tx')
@@ -143,13 +145,13 @@ function copyCurrent() {
       timeStyle: 'short'
     })
   )
-  toast.success('已复制')
+  toast.success(t('bubble.coped'))
 }
 
 /** 复制为纯 HEX（不带前缀，喂脚本 / 编辑器用） */
 function copyHex() {
   navigator.clipboard?.writeText(bytesToHex(props.message.bytes))
-  toast.success('已复制')
+  toast.success(t('bubble.coped'))
 }
 
 /** 多选模式下左键切换选中；非多选不响应（气泡本身不可点） */
@@ -181,9 +183,9 @@ function onRowContext(e: MouseEvent) {
         <span v-if="message.error" class="err-badge">⚠ {{ message.error }}</span>
         <span class="spacer" />
         <span v-if="!selectable" class="actions">
-          <button title="复制本帧（带时间戳与方向）" @click="copyCurrent">复制</button>
-          <button title="复制为 HEX" @click="copyHex">Hex</button>
-          <button v-if="isTx" title="再次发送" @click="emit('resend', message.bytes)">重发</button>
+          <button :title="t('bubble.copyFrame')" @click="copyCurrent">{{ t('bubble.copy') }}</button>
+          <button :title="t('bubble.copyHex')" @click="copyHex">Hex</button>
+          <button v-if="isTx" :title="t('bubble.resend')" @click="emit('resend', message.bytes)">{{ t('bubble.resend') }}</button>
         </span>
       </div>
 

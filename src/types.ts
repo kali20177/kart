@@ -117,6 +117,7 @@ export interface AppSettings {
   defaultView: DataMode
   theme: ThemeMode
   fontSize: number
+  locale: 'zh-CN' | 'en-US'
   // 波形
   waveform: WaveformSettings
   // 连接

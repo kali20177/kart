@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, zhCN, dateZhCN, type GlobalThemeOverrides } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, zhCN, dateZhCN, enUS, dateEnUS, type GlobalThemeOverrides } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import MenuBar from './components/MenuBar.vue'
 import ConnectionBar from './components/ConnectionBar.vue'
 import MessageList from './components/MessageList.vue'
@@ -18,6 +19,22 @@ import type { AsciiEntry } from './utils/ascii-table'
 
 const serial = useSerialStore()
 const settingsStore = useSettingsStore()
+const { t, locale } = useI18n()
+
+// 语言切换：同步 settings → vue-i18n + html lang
+watch(
+  () => settingsStore.settings.locale,
+  (l) => {
+    locale.value = l
+    document.documentElement.setAttribute('lang', l === 'zh-CN' ? 'zh-CN' : 'en')
+    document.title = t('app.name')
+  },
+  { immediate: true }
+)
+
+// Naive UI 语言包
+const naiveLocale = computed(() => (settingsStore.settings.locale === 'zh-CN' ? zhCN : enUS))
+const naiveDateLocale = computed(() => (settingsStore.settings.locale === 'zh-CN' ? dateZhCN : dateEnUS))
 
 // 主区域视图：[消息] / [波形]。v-show 切换（不卸载），波形隐藏时仍缓冲数据
 const mainView = ref<'messages' | 'waveform'>('messages')
@@ -137,7 +154,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides" :locale="naiveLocale" :date-locale="naiveDateLocale">
     <NMessageProvider>
       <NDialogProvider>
       <div class="app">
@@ -152,14 +169,14 @@ onMounted(() => {
                 :class="{ active: mainView === 'messages' }"
                 @click="mainView = 'messages'"
               >
-                消息
+                {{ t('app.msg') }}
               </button>
               <button
                 class="tab"
                 :class="{ active: mainView === 'waveform' }"
                 @click="mainView = 'waveform'"
               >
-                波形
+                {{ t('app.waveform') }}
               </button>
             </div>
 

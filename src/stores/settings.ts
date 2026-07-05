@@ -15,6 +15,7 @@ const DEFAULTS: AppSettings = {
   defaultView: 'ascii',
   theme: 'dark',
   fontSize: 13,
+  locale: 'zh-CN',
   waveform: {
     parse: {
       type: 'int16',

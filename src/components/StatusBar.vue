@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSerialStore } from '@/stores/serial'
+import { useI18n } from 'vue-i18n'
 
 const serial = useSerialStore()
+const { t } = useI18n()
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -21,7 +23,7 @@ const signalList = computed(() => [
 <template>
   <div class="status">
     <span class="led" :class="{ on: serial.connected }" />
-    <span class="port">{{ serial.connected ? serial.selectedPort : '未连接' }}</span>
+    <span class="port">{{ serial.connected ? serial.selectedPort : t('status.notConnected') }}</span>
     <span v-if="serial.connected" class="summary">{{ serial.summary }}</span>
 
     <div class="spacer" />

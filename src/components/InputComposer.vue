@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, onMounted, nextTick } from 'vue'
 import { NInput, NButton, NButtonGroup, NSelect, NInputNumber, NSwitch, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
@@ -14,6 +15,7 @@ const mode = defineModel<DataMode>('mode', { default: 'ascii' })
 const serial = useSerialStore()
 const settings = useSettingsStore()
 const message = useMessage()
+const { t } = useI18n()
 const history = useSendHistory()
 
 const lineEnding = ref<LineEnding>('crlf')
@@ -38,23 +40,23 @@ const sendPreview = computed(() => {
 
   if (mode.value === 'hex') {
     const r = parseHexInput(text.value)
-    if (r.ok) return { ok: true, msg: `${r.bytes.length} 字节` }
-    return { ok: false, msg: r.error ?? '解析失败' }
+    if (r.ok) return { ok: true, msg: t('composer.byteCount', { n: r.bytes.length }) }
+    return { ok: false, msg: r.error ?? t('composer.parseFailed') }
   }
 
   // ASCII 模式：展示转义解析后的实际发送字节（不含行尾，行尾在 selector 里可见）
   const body = encodeWithEscapes(text.value)
-  return { ok: true, msg: `${bytesToHex(body)}  (${body.length} 字节)` }
+  return { ok: true, msg: `${bytesToHex(body)}  (${t('composer.byteCount', { n: body.length })})` }
 })
 
 async function sendOnce(): Promise<boolean> {
   if (!serial.connected) {
-    message.warning('请先连接端口')
+    message.warning(t('composer.needConnect'))
     return false
   }
   const r = await serial.send(text.value, mode.value, lineEnding.value, settings.settings.encoding)
   if (!r.ok) {
-    message.error(r.error ?? '发送失败')
+    message.error(r.error ?? t('composer.sendFailed'))
     return false
   }
   return true
@@ -69,7 +71,7 @@ type StopReason = 'manual' | 'completed' | 'disconnect' | 'silent'
 
 function startRepeat() {
   if (!serial.connected) {
-    message.warning('请先连接端口')
+    message.warning(t('composer.needConnect'))
     return
   }
   repeatSent.value = 0
@@ -77,8 +79,8 @@ function startRepeat() {
   const interval = Math.max(10, repeatInterval.value)
   message.info(
     total > 0
-      ? `开始循环发送 · 共 ${total} 次 · 间隔 ${interval} ms`
-      : `开始循环发送 · 无限次 · 间隔 ${interval} ms`,
+      ? t('composer.loopStartCount', { total, interval })
+      : t('composer.loopStartInfinite', { interval }),
     { duration: 2000 }
   )
   repeating.value = true
@@ -102,11 +104,11 @@ function stopRepeat(reason: StopReason = 'manual') {
   repeatTimer = null
   repeating.value = false
   if (reason === 'completed') {
-    message.success(`循环发送完成 · 共发送 ${repeatSent.value} 次`, { duration: 3000 })
+    message.success(t('composer.loopDone', { n: repeatSent.value }), { duration: 3000 })
   } else if (reason === 'manual') {
-    message.info(`循环发送已停止 · 已发送 ${repeatSent.value} 次`, { duration: 2000 })
+    message.info(t('composer.loopStopped', { n: repeatSent.value }), { duration: 2000 })
   } else if (reason === 'disconnect') {
-    message.warning(`连接断开，循环已停止 · 已发送 ${repeatSent.value} 次`, { duration: 3000 })
+    message.warning(t('composer.loopDisconnect', { n: repeatSent.value }), { duration: 3000 })
   }
   // silent: 不提示（卸载、或发送错误已自行弹窗）
 }
@@ -199,17 +201,17 @@ onBeforeUnmount(() => {
         <NButton :type="mode === 'hex' ? 'primary' : 'default'" @click="mode = 'hex'">HEX</NButton>
       </NButtonGroup>
 
-      <span class="lbl">行尾</span>
+      <span class="lbl">{{ t('composer.lineEnding') }}</span>
       <NSelect v-model:value="lineEnding" :options="endingOptions" size="tiny" style="width: 84px" />
 
-      <span class="lbl">循环</span>
+      <span class="lbl">{{ t('composer.loop') }}</span>
       <NSwitch v-model:value="repeatOn" size="small" />
       <template v-if="repeatOn">
         <NInputNumber v-model:value="repeatInterval" size="tiny" :min="10" :step="100" style="width: 110px">
           <template #suffix>ms</template>
         </NInputNumber>
-        <NInputNumber v-model:value="repeatCount" size="tiny" :min="0" style="width: 96px" placeholder="次数">
-          <template #suffix>次</template>
+        <NInputNumber v-model:value="repeatCount" size="tiny" :min="0" style="width: 96px" :placeholder="t('composer.count')">
+          <template #suffix>{{ t('composer.count') }}</template>
         </NInputNumber>
         <span v-if="repeating" class="repeat-count">
           <span class="dot" />
@@ -222,14 +224,14 @@ onBeforeUnmount(() => {
 
     <div class="input-row">
       <div class="input-wrap">
-        <div class="grip" @pointerdown="onGripDown" title="拖动调整高度" />
+        <div class="grip" @pointerdown="onGripDown" :title="t('composer.dragResize')" />
         <NInput
           ref="inputComp"
           v-model:value="text"
           type="textarea"
           :rows="2"
           :resizable="false"
-          :placeholder="mode === 'hex' ? '输入 HEX，可多行（换行仅作分隔）；如 AA 55 01 0x02 ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史' : '输入文本，可多行（换行仅作分隔，不发送字节）；支持 \\r \\n \\t \\\\ \\0 \\xHH ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史'"
+          :placeholder="mode === 'hex' ? t('composer.hexPlaceholder') : t('composer.asciiPlaceholder')"
           class="mono"
           @keydown="onKeydown"
         />
@@ -241,12 +243,12 @@ onBeforeUnmount(() => {
         >
           <template v-if="repeating">
             <span class="spinner" />
-            停止
+            {{ t('composer.stop') }}
           </template>
-          <template v-else>开始循环</template>
+          <template v-else>{{ t('composer.startLoop') }}</template>
         </NButton>
       </span>
-      <NButton type="primary" :disabled="repeating" @click="onSend">发送</NButton>
+      <NButton type="primary" :disabled="repeating" @click="onSend">{{ t('composer.send') }}</NButton>
     </div>
   </div>
 </template>

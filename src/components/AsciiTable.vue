@@ -1,28 +1,30 @@
 <script setup lang="ts">
 import { NDrawer, NDrawerContent } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { ASCII_TABLE, type AsciiEntry } from '@/utils/ascii-table'
 
 const show = defineModel<boolean>('show', { default: false })
 const emit = defineEmits<{ (e: 'insert', entry: AsciiEntry): void }>()
+const { t } = useI18n()
 </script>
 
 <template>
   <NDrawer v-model:show="show" :width="460" placement="right">
     <NDrawerContent
-      title="ASCII 对照表"
+      :title="t('ascii.title')"
       closable
       :body-content-style="{ padding: '0 24px 16px' }"
     >
-      <p class="tip">点击任意行插入到发送框（按当前 ASCII/HEX 模式）。</p>
+      <p class="tip">{{ t('ascii.tip') }}</p>
       <table class="ascii">
         <thead>
           <tr>
-            <th>DEC</th>
-            <th>HEX</th>
-            <th>OCT</th>
-            <th>字符</th>
-            <th>名称</th>
-            <th>转义</th>
+            <th>{{ t('ascii.dec') }}</th>
+            <th>{{ t('ascii.hex') }}</th>
+            <th>{{ t('ascii.oct') }}</th>
+            <th>{{ t('ascii.char') }}</th>
+            <th>{{ t('ascii.name') }}</th>
+            <th>{{ t('ascii.escape') }}</th>
           </tr>
         </thead>
         <tbody>
