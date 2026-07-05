@@ -41,6 +41,7 @@ export const useWaveformStore = defineStore('waveform', () => {
   // 可视切片（组件渲染这层）
   const data = shallowRef<number[][]>(buildEmpty())
   const paused = ref(false)
+  const pauseStartTime = ref(0)
   // 从尾部向回偏移的采样数：0 = 跟随最新；暂停后拖拽增大以回看更早历史
   const viewOffset = ref(0)
   // 可视窗口跨度（采样数）：默认 = maxPoints；滚轮缩放时独立变化（zoomed=true）。
@@ -55,6 +56,8 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   // 跨回调承接的半截采样零头（非响应式）
   let carryover: Uint8Array = new Uint8Array(0)
+  // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
+  const resumeBreakX = ref(-1)
   // 全局采样计数器（单调递增），决定 X 时间戳
   let sampleIndex = 0
   // 当前 history 第一个点对应的全局索引（裁剪后推进，用于采样率变更时重算 X）
@@ -135,6 +138,7 @@ export const useWaveformStore = defineStore('waveform', () => {
   /** 清空缓冲（计数器一并重置，X 轴从下一批采样重新起算；缩放一并重置） */
   function clear() {
     carryover = new Uint8Array(0)
+    resumeBreakX.value = -1
     sampleIndex = 0
     windowStartIndex = 0
     startTime = -1
@@ -148,8 +152,13 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   function togglePause() {
     paused.value = !paused.value
+    if (paused.value) pauseStartTime.value = Date.now()
     // 恢复时回到最新（避免停留在历史里错过新数据）
     if (!paused.value) {
+      // 计算断点 X：下一个采样将被放置的位置
+      const rate = Math.max(1, settingsStore.settings.waveform.sampleRate)
+      const dt = 1000 / rate
+      resumeBreakX.value = startTime >= 0 ? startTime + sampleIndex * dt : -1
       viewOffset.value = 0
       recomputeView()
     }
@@ -245,5 +254,5 @@ export const useWaveformStore = defineStore('waveform', () => {
   // 订阅原始字节流（在 messages store 帧切分之前的同一份字节）
   serial.onData((bytes) => ingest(bytes))
 
-  return { data, history, version, paused, viewOffset, viewSize, zoomed, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
+  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
 })

@@ -121,6 +121,9 @@ export interface AppSettings {
   waveform: WaveformSettings
   // 连接
   autoReconnect: boolean
+  // 暂停
+  /** 恢复时是否 toast 提示缺失数据时间段 */
+  showPauseNotification: boolean
 }
 
 /** 模拟场景标识（阶段 1 专属） */

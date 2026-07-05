@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
-import { NButton, NTag } from 'naive-ui'
+import { NButton, NTag, useMessage } from 'naive-ui'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useWaveformStore } from '@/stores/waveform'
 import { useSettingsStore } from '@/stores/settings'
 import { useIsDark } from '@/composables/useIsDark'
+import { formatTimestamp } from '@/utils/message-format'
 
 const waveform = useWaveformStore()
 const settings = useSettingsStore()
 const isDark = useIsDark()
 
 const containerRef = ref<HTMLDivElement | null>(null)
+const toast = useMessage()
 
 // 通道配色（与主题无关，固定调色板，保证通道可辨识）
 const PALETTE = ['#4098fc', '#50c878', '#f0a850', '#ec5b5b', '#a855f7', '#06b6d4', '#ec4899', '#84cc16']
@@ -38,6 +40,34 @@ function themeColors() {
 
 function channels(): number {
   return Math.max(1, settings.settings.waveform.parse.channels)
+}
+
+/** 在 uPlot canvas 上画暂停恢复断点竖线 + 标签 */
+function drawResumeBreak(u: uPlot) {
+  const x = waveform.resumeBreakX
+  if (x <= 0) return
+  const xScale = u.scales.x
+  if (!xScale || xScale.min == null || xScale.max == null || x < xScale.min || x > xScale.max) return
+
+  const px = u.valToPos(x, 'x')
+  const top = u.bbox.top
+  const h = u.bbox.height
+  const ctx = u.ctx
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.setLineDash([6, 4])
+  ctx.strokeStyle = '#ff8800'
+  ctx.lineWidth = 1.5
+  ctx.moveTo(px, top)
+  ctx.lineTo(px, top + h)
+  ctx.stroke()
+
+  ctx.font = '11px sans-serif'
+  ctx.fillStyle = '#ff8800'
+  ctx.textAlign = 'center'
+  ctx.fillText('⏸ 断点', px, top + h - 4)
+  ctx.restore()
 }
 
 function buildOpts(ch: number, w: number, h: number): uPlot.Options {
@@ -73,7 +103,10 @@ function buildOpts(ch: number, w: number, h: number): uPlot.Options {
     ],
     // 关闭 uPlot 默认拖框放大（drag.setScale）；x/y:false 彻底不画选择框。
     // 暂停时的回看平移由组件自实现（见 onPanDown），不复用 uPlot 的 drag。
-    cursor: { points: { show: false }, drag: { setScale: false, x: false, y: false } }
+    cursor: { points: { show: false }, drag: { setScale: false, x: false, y: false } },
+    hooks: {
+      draw: [drawResumeBreak]
+    }
   }
 }
 
@@ -237,9 +270,24 @@ watch(isDark, () => rebuild())
 // 暂停状态切换 → 更新覆盖层光标（grab / 默认）；拖拽中不打断
 watch(
   () => waveform.paused,
-  (p) => {
+  (p, wasPaused) => {
     if (chart && !panActive) chart.over.style.cursor = p ? 'grab' : ''
+    // 暂停恢复时提醒缺失数据时间范围
+    if (wasPaused && !p && settings.settings.showPauseNotification) {
+      const start = waveform.pauseStartTime
+      const dur = Math.max(1, Math.round((Date.now() - start) / 1000))
+      toast.warning(
+        `暂停期间未显示数据: ${formatTimestamp(start, 'short')} – ${formatTimestamp(Date.now(), 'short')} (${dur}s)`,
+        { duration: 5000 }
+      )
+    }
   }
+)
+
+// 断点标记变化 → 重绘（新断点出现 or 清空擦除）
+watch(
+  () => waveform.resumeBreakX,
+  () => { if (chart) chart.redraw() }
 )
 
 onMounted(() => {

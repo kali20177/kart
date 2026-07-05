@@ -203,6 +203,12 @@ const navItems: NavItem[] = [
           <NFormItem label="字号 (px)">
             <NInputNumber v-model:value="s.fontSize" :min="10" :max="20" style="width: 100%" />
           </NFormItem>
+          <NFormItem label="暂停提示">
+            <NSwitch v-model:value="s.showPauseNotification">
+              <template #checked>恢复时提示缺失数据时间段</template>
+              <template #unchecked>不提示</template>
+            </NSwitch>
+          </NFormItem>
         </NForm>
 
         <!-- ========== 波形解析 ========== -->

@@ -25,7 +25,8 @@ const DEFAULTS: AppSettings = {
     sampleRate: 640,
     maxPoints: 5000
   },
-  autoReconnect: false
+  autoReconnect: false,
+  showPauseNotification: true
 }
 
 export const useSettingsStore = defineStore('settings', () => {

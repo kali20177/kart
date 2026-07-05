@@ -10,6 +10,7 @@ export const useMessagesStore = defineStore('messages', () => {
   // 用 shallowRef + 手动 triggerRef，避免逐条 push 触发深度响应式开销
   const messages = shallowRef<Message[]>([])
   const paused = ref(false)
+  const pauseStartTime = ref(0)
   const rxFrames = ref(0)
 
   let nextId = 1
@@ -99,7 +100,8 @@ export const useMessagesStore = defineStore('messages', () => {
 
   function togglePause() {
     paused.value = !paused.value
+    if (paused.value) pauseStartTime.value = Date.now()
   }
 
-  return { messages, paused, rxFrames, ingestRx, addTx, clear, removeByIds, togglePause }
+  return { messages, paused, pauseStartTime, rxFrames, ingestRx, addTx, clear, removeByIds, togglePause }
 })

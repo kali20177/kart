@@ -8,7 +8,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
 import type { DataMode, Direction, Message } from '@/types'
-import { formatMessageLine } from '@/utils/message-format'
+import { formatMessageLine, formatTimestamp } from '@/utils/message-format'
 import { downloadTextFile } from '@/utils/download'
 
 const props = defineProps<{ viewMode: DataMode }>()
@@ -208,6 +208,21 @@ function deleteSelected() {
     }
   })
 }
+
+// 暂停恢复时提醒缺失数据时间范围
+watch(
+  () => messagesStore.paused,
+  (p, wasPaused) => {
+    if (wasPaused && !p && settingsStore.settings.showPauseNotification) {
+      const start = messagesStore.pauseStartTime
+      const dur = Math.max(1, Math.round((Date.now() - start) / 1000))
+      toast.warning(
+        `暂停期间未显示数据: ${formatTimestamp(start, 'short')} – ${formatTimestamp(Date.now(), 'short')} (${dur}s)`,
+        { duration: 5000 }
+      )
+    }
+  }
+)
 </script>
 
 <template>

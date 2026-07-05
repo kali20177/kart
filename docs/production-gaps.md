@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-07-03。已完成项标注 ✅。
+> 最近更新：2026-07-05。已完成项标注 ✅。
 
 ## 一、生产环境缺失功能
 
@@ -13,7 +13,7 @@
 3. **发送无 CRC/校验和，接收无校验** — `serial.send` 只拼行尾。嵌入式协议普遍带 CRC8/16/32 或累加和。接收侧 `Message.error` 只用于发送失败，无校验位不符标记。
 4. **文件发送（二进制整包下发）** — `InputComposer` 只能手敲文本/HEX。固件烧录、bin 下发、批量回灌需选文件发送，可选限速/分包。
 5. **DTR/RTS/Break 控制** — `SerialDriver` 只有 `getSignals`（只读），无 `setSignals`。ESP32/STM32 bootloader、复位、ISP 靠 DTR/RTS 组合 + Break。前端无按钮，接口契约无。〔依赖 Web Serial 驱动〕
-6. **暂停时数据直接丢弃** — `messages.ingestRx` 和 `waveform.ingest` 都是 `if (paused) return`，静默丢失，不缓冲不提示。暂停看历史可能漏关键回包。
+6. ✅ **暂停时数据直接丢弃** — 暂停时数据仍不缓冲保留（波形追加缓冲无意义：恢复瞬间刷新长段 + 超缓冲区截断后数据不全），恢复时通过 warning toast 提示用户缺失数据的时间段（`HH:MM:SS.mmm – HH:MM:SS.mmm (Xs)`），消息列表与波形图均有各自独立提示。
 7. **布局与发送历史不持久化** — 右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM）不存；`useSendHistory` 仅内存。每天重开归零。
 8. ✅ **自定义波特率** — 已完成（filterable+tag 输入、自定义档位+标注、预设标注、校验、持久化）。
 
