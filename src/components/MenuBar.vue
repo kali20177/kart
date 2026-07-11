@@ -4,8 +4,7 @@ import { NDropdown, NButton, NModal, useMessage } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
-import { formatMessageLine } from '@/utils/message-format'
-import { downloadTextFile } from '@/utils/download'
+import ExportDialog from './ExportDialog.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -16,6 +15,7 @@ const message = useMessage()
 const showAbout = ref(false)
 const showLicense = ref(false)
 const showShortcuts = ref(false)
+const showExportDialog = ref(false)
 
 /** 检测是否为 macOS（userAgent + platform 双保险，部分浏览器 platform 已被屏蔽） */
 const isMac = computed(() => {
@@ -83,28 +83,17 @@ const helpMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.devtools'), key: 'devtools' }
 ])
 
-/** 导出接收/发送记录为纯文本日志：每行 [时间戳] RX/TX: 解码文本 */
-function exportLog() {
-  const list = messages.messages
-  if (list.length === 0) {
-    message.warning(t('log.empty'))
-    return
-  }
-  const enc = settingsStore.settings.encoding
-  const lines =
-    list
-      .map((m) => formatMessageLine(m, { viewMode: 'ascii', encoding: enc, timeStyle: 'full' }))
-      .join('\n') + '\n'
-  downloadTextFile('serial-log.txt', lines)
-}
-
 function handleSelect(key: string) {
   switch (key) {
     case 'auto-save':
       settingsStore.autoSave = !settingsStore.autoSave
       break
     case 'export-log':
-      exportLog()
+      if (messages.messages.length === 0) {
+        message.warning(t('log.empty'))
+        return
+      }
+      showExportDialog.value = true
       break
     case 'about':
       showAbout.value = true
@@ -176,6 +165,12 @@ function handleSelect(key: string) {
       </div>
     </div>
   </NModal>
+
+  <ExportDialog
+    v-if="showExportDialog"
+    :messages="messages.messages"
+    @close="showExportDialog = false"
+  />
 </template>
 
 <style scoped>

@@ -153,6 +153,19 @@ export function lineEndingBytes(ending: LineEnding): Uint8Array {
   }
 }
 
+/**
+ * 将解码后的文本中的控制字符替换为可见转义/占位符，用于导出场景。
+ * \r\n → \r\n（保持 CRLF 可辨识）、\r → \r、\n → \n、
+ * 其余 0x00-0x1F 及 0x7F → ·
+ */
+export function sanitizeForExport(text: string): string {
+  return text
+    .replace(/\r\n/g, '\\r\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/g, '·')
+}
+
 /** 拼接多个字节数组 */
 export function concatBytes(...chunks: Uint8Array[]): Uint8Array {
   const total = chunks.reduce((n, c) => n + c.length, 0)

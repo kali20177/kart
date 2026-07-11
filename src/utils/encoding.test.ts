@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decodeBytes, encodeText, encodeWithEscapes, lineEndingBytes, concatBytes } from '@/utils/encoding'
+import { decodeBytes, encodeText, encodeWithEscapes, lineEndingBytes, concatBytes, sanitizeForExport } from '@/utils/encoding'
 
 describe('decodeBytes', () => {
   it('ascii 模式不可打印替换为 ·', () => {
@@ -149,5 +149,37 @@ describe('encodeText 集成转义解析', () => {
     const all = concatBytes(body, lineEndingBytes('crlf'))
     // CMD + 外部追加的 CR LF
     expect(Array.from(all)).toEqual([0x43, 0x4d, 0x44, 0x0d, 0x0a])
+  })
+})
+
+describe('sanitizeForExport', () => {
+  it('replaces CRLF with visible escapes', () => {
+    expect(sanitizeForExport('AT\r\nOK')).toBe('AT\\r\\nOK')
+  })
+
+  it('replaces lone CR with visible escape', () => {
+    expect(sanitizeForExport('AT\rOK')).toBe('AT\\rOK')
+  })
+
+  it('replaces lone LF with visible escape', () => {
+    expect(sanitizeForExport('AT\nOK')).toBe('AT\\nOK')
+  })
+
+  it('replaces control chars with ·', () => {
+    // \x00, \x01, \x1f, \x7f → ·
+    expect(sanitizeForExport('\x00A\x01B\x1fC\x7fD')).toBe('·A·B·C·D')
+  })
+
+  it('preserves tab character since it has no dedicated escape', () => {
+    // \x09 (tab) falls in control range → becomes ·
+    expect(sanitizeForExport('A\tB')).toBe('A·B')
+  })
+
+  it('passes through normal text unchanged', () => {
+    expect(sanitizeForExport('Hello World 123')).toBe('Hello World 123')
+  })
+
+  it('handles mixed content', () => {
+    expect(sanitizeForExport('OK\r\nERR\n\x00\x01END')).toBe('OK\\r\\nERR\\n··END')
   })
 })

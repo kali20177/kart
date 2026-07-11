@@ -111,6 +111,19 @@ export interface WaveformSettings {
   maxPoints: number
 }
 
+/** 导出偏好（持久化到 localStorage） */
+export interface ExportPreferences {
+  format: 'txt' | 'csv' | 'json' | 'binary'
+  direction: 'all' | 'rx' | 'tx'
+  dataMode: DataMode
+  timeStyle: 'full' | 'short' | 'none'
+  showFrameNum: boolean
+  showDelta: boolean
+  showByteCount: boolean
+  showElapsed: boolean
+  showError: boolean
+}
+
 /** 全局设置 */
 export interface AppSettings {
   // 接收

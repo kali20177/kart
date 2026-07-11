@@ -12,6 +12,7 @@ export const useMessagesStore = defineStore('messages', () => {
   const paused = ref(false)
   const pauseStartTime = ref(0)
   const rxFrames = ref(0)
+  const txFrames = ref(0)
 
   let nextId = 1
   const splitter = new FrameSplitter(settingsStore.settings.frame)
@@ -80,11 +81,13 @@ export const useMessagesStore = defineStore('messages', () => {
   /** 添加一条发送消息（TX 不切分，用户发什么就是一帧） */
   function addTx(bytes: Uint8Array, error?: string) {
     pending.push(makeMessage('tx', bytes, error))
+    txFrames.value++
     scheduleFlush()
   }
 
   /** 添加一条文件下发气泡消息 */
   function addFileTransfer(transferId: string, _filename: string, _size: number) {
+    txFrames.value++
     pending.push({
       id: nextId++,
       direction: 'tx',
@@ -100,6 +103,7 @@ export const useMessagesStore = defineStore('messages', () => {
     messages.value = []
     pending = []
     rxFrames.value = 0
+    txFrames.value = 0
     triggerRef(messages)
   }
 
@@ -116,5 +120,5 @@ export const useMessagesStore = defineStore('messages', () => {
     if (paused.value) pauseStartTime.value = Date.now()
   }
 
-  return { messages, paused, pauseStartTime, rxFrames, ingestRx, addTx, addFileTransfer, clear, removeByIds, togglePause }
+  return { messages, paused, pauseStartTime, rxFrames, txFrames, ingestRx, addTx, addFileTransfer, clear, removeByIds, togglePause }
 })

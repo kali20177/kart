@@ -10,3 +10,13 @@ export function downloadTextFile(filename: string, text: string): void {
   a.click()
   URL.revokeObjectURL(a.href)
 }
+
+/** 把原始字节作为二进制文件下载 */
+export function downloadBinaryFile(filename: string, bytes: Uint8Array): void {
+  const blob = new Blob([bytes as BlobPart], { type: 'application/octet-stream' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}

@@ -32,6 +32,7 @@ export const useSerialStore = defineStore('serial', () => {
   const signals = ref<SerialSignals>({ dcd: false, cts: false, dsr: false, ri: false })
   const rxBytes = ref(0)
   const txBytes = ref(0)
+  const sessionStartedAt = ref<number | null>(null)
 
   // 用户自定义波特率（可带标注，持久化）。预设档位不在此列、不可删除。
   // 读取时兼容旧版 number[] 格式（见 loadCustomBaudRates）。
@@ -72,6 +73,7 @@ export const useSerialStore = defineStore('serial', () => {
     storage.set('portOptions', { ...options })
     rxBytes.value = 0
     txBytes.value = 0
+    sessionStartedAt.value = Date.now()
     unsubscribe = driver.onData((bytes) => {
       rxBytes.value += bytes.length
       // 先 fan-out 给外部消费者（波形管线订阅原始字节），再入消息列表。
@@ -97,6 +99,7 @@ export const useSerialStore = defineStore('serial', () => {
     }
     await driver.close()
     connected.value = false
+    sessionStartedAt.value = null
     signals.value = { dcd: false, cts: false, dsr: false, ri: false }
   }
 
@@ -210,6 +213,7 @@ export const useSerialStore = defineStore('serial', () => {
     signals,
     rxBytes,
     txBytes,
+    sessionStartedAt,
     customBaudRates,
     summary,
     refreshPorts,

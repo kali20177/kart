@@ -11,7 +11,7 @@ import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
 import type { DataMode, Direction, Message } from '@/types'
 import { formatMessageLine, formatTimestamp } from '@/utils/message-format'
-import { downloadTextFile } from '@/utils/download'
+import ExportDialog from './ExportDialog.vue'
 
 const props = defineProps<{ viewMode: DataMode }>()
 const emit = defineEmits<{
@@ -90,6 +90,7 @@ const selectedCount = computed(() => selected.size)
 
 const scroller = ref<InstanceType<typeof DynamicScroller> | null>(null)
 const follow = ref(true)
+const showExportDialog = ref(false)
 let scrollEl: HTMLElement | null = null
 
 function onScroll() {
@@ -185,18 +186,8 @@ function copySelected() {
 }
 
 function exportSelected() {
-  const lines =
-    selectedMessages()
-      .map((m) =>
-        formatMessageLine(m, {
-          viewMode: props.viewMode,
-          encoding: settingsStore.settings.encoding,
-          timeStyle: 'full'
-        })
-      )
-      .join('\n') + '\n'
-  downloadTextFile('serial-log-selected.txt', lines)
-  toast.success(t('msgList.exportedN', { n: selectedCount.value }))
+  if (selectedCount.value === 0) return
+  showExportDialog.value = true
 }
 
 function deleteSelected() {
@@ -345,13 +336,21 @@ watch(
       <div v-if="multiSelect" class="action-bar">
         <NTag size="small" :bordered="false" type="info">{{ t('msgList.selected', { n: selectedCount }) }}</NTag>
         <NButton size="small" :disabled="selectedCount === 0" @click="copySelected">{{ t('msgList.copy') }}</NButton>
-        <NButton size="small" :disabled="selectedCount === 0" @click="exportSelected">{{ t('msgList.exportTxt') }}</NButton>
+        <NButton size="small" :disabled="selectedCount === 0" @click="exportSelected">{{ t('export.exportBtn') }}</NButton>
         <NButton size="small" type="error" :disabled="selectedCount === 0" @click="deleteSelected">{{ t('msgList.delete') }}</NButton>
         <NButton size="small" @click="selectAllVisible">{{ t('msgList.selectAll') }}</NButton>
         <div class="spacer" />
         <NButton size="small" quaternary @click="exitMultiSelect">{{ t('msgList.cancel') }}</NButton>
       </div>
     </div>
+
+    <ExportDialog
+      v-if="showExportDialog"
+      :messages="messagesStore.messages"
+      :selected-messages="selectedMessages()"
+      default-scope="selected"
+      @close="showExportDialog = false"
+    />
   </div>
 </template>
 
