@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import path from 'node:path'
 
 // 主/预加载产物以 CommonJS 输出（.cjs），__dirname 始终可用。
@@ -27,6 +27,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // 移除 Electron 默认菜单（File/Edit/View/Window/Help），
+  // 避免与渲染进程的自定义 MenuBar 组件在 Windows/Linux 上冲突。
+  Menu.setApplicationMenu(null)
+
   // 切换开发者工具（由渲染进程通过 IPC 触发）
   ipcMain.on('toggle-devtools', () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
