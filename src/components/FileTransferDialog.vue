@@ -13,7 +13,7 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSerialStore } from '@/stores/serial'
-import { useTransferStore } from '@/stores/transfer'
+import { useTransferStore, PRESETS } from '@/stores/transfer'
 import type { FileTransferConfig, ChunkFraming, AckMode, LineEnding, TransferPresetId } from '@/types'
 
 const props = defineProps<{
@@ -106,18 +106,10 @@ const chunkSizeOptions = [
   { label: '8 KB', value: 8192 }
 ]
 
-// ── 预设配置映射 ──
-const PRESET_CONFIGS: Record<string, Partial<FileTransferConfig>> = {
-  raw: { chunkSize: 0, interChunkDelay: 0, bytesPerSecond: 0, retries: 0, framing: 'raw', chunkSuffix: 'none', waitForAck: false, ackMode: 'any', ackByte: 0x06, ackTimeout: 1000, startOffset: 0, repeat: 0, logEachChunk: false, injectCorruptEveryN: 0, injectSkipAckEveryN: 0 },
-  'stm32-isp': { chunkSize: 256, interChunkDelay: 10, bytesPerSecond: 0, retries: 3, framing: 'seq-crc', chunkSuffix: 'none', waitForAck: true, ackMode: 'byte', ackByte: 0x06, ackTimeout: 2000, startOffset: 0, repeat: 0, logEachChunk: false, injectCorruptEveryN: 0, injectSkipAckEveryN: 0 },
-  esp32: { chunkSize: 4096, interChunkDelay: 5, bytesPerSecond: 0, retries: 2, framing: 'len-prefix', chunkSuffix: 'none', waitForAck: true, ackMode: 'any', ackByte: 0x06, ackTimeout: 3000, startOffset: 0, repeat: 0, logEachChunk: false, injectCorruptEveryN: 0, injectSkipAckEveryN: 0 },
-  stress: { chunkSize: 512, interChunkDelay: 20, bytesPerSecond: 0, retries: 3, framing: 'raw', chunkSuffix: 'none', waitForAck: false, ackMode: 'any', ackByte: 0x06, ackTimeout: 1000, startOffset: 0, repeat: 10, logEachChunk: false, injectCorruptEveryN: 0, injectSkipAckEveryN: 0 }
-}
-
-// ── 预设切换 ──
+// ── 预设切换（复用 store 中的 PRESETS 避免双份维护） ──
 watch(selectedPreset, (preset) => {
   if (preset === 'custom') return
-  const cfg = PRESET_CONFIGS[preset]
+  const cfg = PRESETS[preset]
   if (!cfg) return
   chunkSize.value = cfg.chunkSize ?? 0
   interChunkDelay.value = cfg.interChunkDelay ?? 0

@@ -4,8 +4,8 @@ import type { FileTransferConfig, FileTransferState, TransferPresetId, TransferS
 import { useSerialStore } from './serial'
 import { useMessagesStore } from './messages'
 
-/** 预设配置 */
-const PRESETS: Record<TransferPresetId, Partial<FileTransferConfig>> = {
+/** 预设配置（也供 FileTransferDialog 复用） */
+export const PRESETS: Record<TransferPresetId, Partial<FileTransferConfig>> = {
   raw: {
     chunkSize: 0,
     interChunkDelay: 0,
@@ -103,7 +103,6 @@ export const useTransferStore = defineStore('transfer', () => {
   let abortFlag = false
   let pauseGate: (() => void) | null = null   // resolve 函数
   let pausePromise: Promise<void> | null = null
-  let unsubAck: (() => void) | null = null
   // 字节数组缓存（pump 循环读取）
   let fileBytes: Uint8Array | null = null
   let filePath = ''
@@ -259,25 +258,11 @@ export const useTransferStore = defineStore('transfer', () => {
     return wire
   }
 
-  // ── ACK 订阅 ──
-
-  function subscribeAck(): void {
-    if (unsubAck) return
-    unsubAck = serial.onData((_bytes: Uint8Array) => {
-      // ACK 匹配逻辑在 sendWithRetry 中同步等待，此处仅接收
-      // 真正的匹配在 sendWithRetry 内通过 serial.onData 的回调队列完成
-    })
-  }
-
-  function unsubscribeAck(): void {
-    unsubAck?.()
-    unsubAck = null
-  }
-
   // ── 发送并等待 ACK ──
 
   async function sendWithRetry(
     wire: Uint8Array,
+    chunkIndex: number,
     config: FileTransferConfig
   ): Promise<boolean> {
     for (let attempt = 0; attempt <= config.retries; attempt++) {
@@ -290,6 +275,16 @@ export const useTransferStore = defineStore('transfer', () => {
       }
 
       if (!config.waitForAck) return true
+
+      // 错误注入：跳过 ACK（模拟丢包触发超时→重试）
+      if (
+        config.injectSkipAckEveryN > 0 &&
+        chunkIndex > 0 &&
+        chunkIndex % config.injectSkipAckEveryN === 0
+      ) {
+        if (attempt < config.retries) continue
+        return false
+      }
 
       // 等待 ACK
       const ackOk = await waitForAck(config)
@@ -362,9 +357,6 @@ export const useTransferStore = defineStore('transfer', () => {
     // 添加消息气泡
     messages.addFileTransfer(id, filename, bytes.length)
 
-    // 订阅 ACK
-    if (config.waitForAck) subscribeAck()
-
     const startTime = Date.now()
     let totalSent = 0
     let seq = Math.floor(config.startOffset / (config.chunkSize || 1))
@@ -411,7 +403,7 @@ export const useTransferStore = defineStore('transfer', () => {
         wire = maybeInjectError(wire, chunkIndex, config)
 
         // 发送
-        const ok = await sendWithRetry(wire, config)
+        const ok = await sendWithRetry(wire, chunkIndex, config)
         if (!ok) {
           cleanupPump(id, 'error', chunkIndex)
           return
@@ -470,7 +462,6 @@ export const useTransferStore = defineStore('transfer', () => {
 
   function cleanupPump(id: string, status: TransferStatus, failedChunk?: number) {
     pumpRunning = false
-    unsubscribeAck()
     fileBytes = null
     filePath = ''
 
@@ -593,7 +584,6 @@ export const useTransferStore = defineStore('transfer', () => {
           pauseGate = null
         }
         pumpRunning = false
-        unsubscribeAck()
       }
     }
   )
