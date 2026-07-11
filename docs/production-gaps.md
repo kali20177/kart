@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-07-05。已完成项标注 ✅。
+> 最近更新：2026-07-11。已完成项标注 ✅。
 
 ## 一、生产环境缺失功能
 
@@ -11,7 +11,12 @@
 1. **帧间时间差 Δt** — `MessageBubble` 只显示绝对时间 `HH:MM:SS.mmm`，缺与上一帧的 Δt、会话起点 elapsed。嵌入式调试时序刚需。
 2. ✅ **搜索只能过滤、不能高亮，且搜不了 HEX** — 已完成：文本/HEX 双模式搜索（HEX 复用 `parseHexInput`，宽容分隔）、命中高亮（原生配对：text+ascii / hex+hex；交叉配对仅过滤+导航+flash，避免字节/字符偏移错位）、上一项/下一项导航（`当前/总数` + 自动滚动 + 活动色 + flash）、当日时间范围筛选（`HH:MM:SS[.mmm]`，非法红框）。**不做正则**（嵌入式调试用处不大）。匹配逻辑抽到 `src/utils/search.ts` + `hex.ts#findByteRanges`，响应式编排抽到 `src/composables/useMessageSearch.ts`，均有单测。已知限制：交叉配对无内联高亮、时间筛选不支持跨午夜区间。
 3. **发送无 CRC/校验和，接收无校验** — `serial.send` 只拼行尾。嵌入式协议普遍带 CRC8/16/32 或累加和。接收侧 `Message.error` 只用于发送失败，无校验位不符标记。
-4. **文件发送（二进制整包下发）** — `InputComposer` 只能手敲文本/HEX。固件烧录、bin 下发、批量回灌需选文件发送，可选限速/分包。
+4. ✅ **文件发送（二进制整包下发）** - 已完成 UI 交互与引擎（基于 Mock 驱动）。详细设计见 [docs/file-transfer-design.md](./file-transfer-design.md)。落地内容：
+   - **引擎层**（`src/stores/transfer.ts`）：async pump 调度循环 + 状态机（queued/sending/paused/completed/aborted/error）、分包切片、三种协议封装（raw / len-prefix / seq-crc，CRC16-Modbus 内联）、限速（包间延时 + 字节速率令牌桶，取更严者）、ACK 流控（any/byte/echo-crc 三策略 + 超时/NACK 重试）、循环下发（`repeat`）、断点续传（`startOffset` + seq 对齐）、错误注入（破坏 CRC / 跳过 ACK）、断线自动中止。
+   - **UX 层**：`FileTransferDialog`（预设：原始整包/STM32-ISP/ESP32/压测/自定义 + 文件拖拽与移除）、`FileTransferBubble`（消息流内单条文件气泡：进度条/速率/ETA/暂停继续中止重试详情，按 `Message.kind==='file'` 委托渲染）、`InputComposer` 📎 按钮 + 拖拽入口、`StatusBar` 活跃下发紧凑条。
+   - **限速语义可视化**：字节速率输入框实时显示当前波特率对应的物理层上限（按 `dataBits/parity/stopBits` 推算 bit/字节），超限橙色警告。明确「有效速度 = min(波特率 B/s, 字节速率)」，二者作用层不同（物理硬天花板 vs 应用软节流保护设备缓冲）。
+   - **Mock 阶段局限**：`MockSerialSource.write()` 立即返回不按波特率节流，当前传输速率纯属 `sleep()` 软节流，波特率暂无真实约束。阶段 2 接入 Web Serial 后波特率才成为真实物理天花板，届时 UI 提示即准确生效（前端已按未来行为设计，后端切换零改动）。
+   - **待补**：① 纯逻辑工具（crc/chunk-framer/rate-limit）当前内联在 transfer.ts，设计稿规划的独立 `utils/*.ts` + 单测尚未拆分；② ACK `echo-crc` 策略暂简化为「收到任意字节即 ACK」，未做 CRC 回吐比对；③ 真实 Web Serial 驱动接入（阶段 2）；④ 大文件流式读（v1 用 `File.arrayBuffer()`，数百 MB 内 OK）。
 5. **DTR/RTS/Break 控制** — `SerialDriver` 只有 `getSignals`（只读），无 `setSignals`。ESP32/STM32 bootloader、复位、ISP 靠 DTR/RTS 组合 + Break。前端无按钮，接口契约无。〔依赖 Web Serial 驱动〕
 6. ✅ **暂停时数据直接丢弃** — 暂停时数据仍不缓冲保留（波形追加缓冲无意义：恢复瞬间刷新长段 + 超缓冲区截断后数据不全），恢复时通过 warning toast 提示用户缺失数据的时间段（`HH:MM:SS.mmm – HH:MM:SS.mmm (Xs)`），消息列表与波形图均有各自独立提示。
 7. **布局与发送历史不持久化** — 右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM）不存；`useSendHistory` 仅内存。每天重开归零。

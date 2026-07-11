@@ -32,11 +32,14 @@
       "Bash(curl -s http://127.0.0.1:*)",
       "Read",
       "Glob",
-      "Grep"
+      "Grep",
+      "Edit",
+      "Write"
     ],
     "deny": [
       "Bash(rm -rf /*)",
-      "Bash(rm -rf ~*)"
+      "Bash(rm -rf ~*)",
+      "Bash(git push*)"
     ]
   }
 }
