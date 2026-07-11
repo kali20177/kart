@@ -83,6 +83,19 @@ export const useMessagesStore = defineStore('messages', () => {
     scheduleFlush()
   }
 
+  /** 添加一条文件下发气泡消息 */
+  function addFileTransfer(transferId: string, _filename: string, _size: number) {
+    pending.push({
+      id: nextId++,
+      direction: 'tx',
+      bytes: new Uint8Array(0),
+      timestamp: Date.now(),
+      kind: 'file',
+      transferId
+    })
+    scheduleFlush()
+  }
+
   function clear() {
     messages.value = []
     pending = []
@@ -103,5 +116,5 @@ export const useMessagesStore = defineStore('messages', () => {
     if (paused.value) pauseStartTime.value = Date.now()
   }
 
-  return { messages, paused, pauseStartTime, rxFrames, ingestRx, addTx, clear, removeByIds, togglePause }
+  return { messages, paused, pauseStartTime, rxFrames, ingestRx, addTx, addFileTransfer, clear, removeByIds, togglePause }
 })

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSerialStore } from '@/stores/serial'
+import { useTransferStore } from '@/stores/transfer'
 import { useI18n } from 'vue-i18n'
 
 const serial = useSerialStore()
+const transferStore = useTransferStore()
 const { t } = useI18n()
 
 function fmtBytes(n: number): string {
@@ -30,6 +32,16 @@ const signalList = computed(() => [
 
     <span class="counter">RX {{ fmtBytes(serial.rxBytes) }}</span>
     <span class="counter">TX {{ fmtBytes(serial.txBytes) }}</span>
+
+    <!-- 活跃下发指示 -->
+    <template v-if="transferStore.activeTransfer">
+      <div class="divider" />
+      <span class="transfer-indicator">
+        📎 {{ transferStore.activeTransfer.filename }}
+        {{ Math.round((transferStore.activeTransfer.sent / transferStore.activeTransfer.total) * 100) }}%
+        <span class="transfer-rate">{{ fmtBytes(transferStore.activeTransfer.bytesPerSec) }}/s</span>
+      </span>
+    </template>
 
     <div class="divider" />
 
@@ -91,5 +103,17 @@ const signalList = computed(() => [
 .signal.active {
   color: var(--ok);
   border-color: var(--ok);
+}
+.transfer-indicator {
+  color: var(--accent);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.transfer-rate {
+  color: var(--text-dim);
+  font-size: 11px;
 }
 </style>

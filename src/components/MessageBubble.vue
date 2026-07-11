@@ -6,6 +6,7 @@ import type { DataMode, Encoding, Message } from '@/types'
 import { bytesToHex, hexDump } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
 import { formatMessageLine, formatTimestamp } from '@/utils/message-format'
+import FileTransferBubble from './FileTransferBubble.vue'
 
 interface Range {
   start: number
@@ -175,7 +176,15 @@ function onRowContext(e: MouseEvent) {
   >
     <span v-if="selectable" class="check" :class="{ checked: selected }">{{ selected ? '✓' : '' }}</span>
     <div class="bubble" :class="isTx ? 'bubble-tx' : 'bubble-rx'">
-      <div class="meta">
+      <!-- 文件下发气泡：委托给 FileTransferBubble -->
+      <FileTransferBubble
+        v-if="message.kind === 'file' && message.transferId"
+        :transfer-id="message.transferId"
+        :timestamp="message.timestamp"
+      />
+      <!-- 普通帧气泡 -->
+      <template v-else>
+        <div class="meta">
         <span class="dir">{{ isTx ? 'TX ▸' : '◂ RX' }}</span>
         <span class="time">{{ timeLabel }}</span>
         <span class="len">{{ message.bytes.length }} B</span>
@@ -226,6 +235,7 @@ function onRowContext(e: MouseEvent) {
           </span>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>

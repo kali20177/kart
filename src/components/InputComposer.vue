@@ -12,6 +12,10 @@ import type { DataMode, LineEnding } from '@/types'
 const text = defineModel<string>('text', { default: '' })
 const mode = defineModel<DataMode>('mode', { default: 'ascii' })
 
+const emit = defineEmits<{
+  (e: 'open-file-transfer', file?: File): void
+}>()
+
 const serial = useSerialStore()
 const settings = useSettingsStore()
 const message = useMessage()
@@ -141,6 +145,29 @@ watch(() => serial.connected, (c) => { if (!c) stopRepeat('disconnect') })
 
 onBeforeUnmount(() => stopRepeat('silent'))
 
+// —— 文件拖入 ——
+const dragOver = ref(false)
+
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+  dragOver.value = true
+}
+
+function onDragLeave() {
+  dragOver.value = false
+}
+
+function onDrop(e: DragEvent) {
+  e.preventDefault()
+  dragOver.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (file) emit('open-file-transfer', file)
+}
+
+function onOpenFileTransfer() {
+  emit('open-file-transfer')
+}
+
 // —— 输入框高度拖拽 ——
 // Naive UI 原生 resize 手柄在右下角且为「向上压」语义，交互反直觉；
 // 这里改用输入框上边缘的横向拖拽条：向上拖增大、向下拖减小。
@@ -194,7 +221,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="composer">
+  <div class="composer" :class="{ 'drag-over': dragOver }" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
     <div class="chips">
       <NButtonGroup size="tiny">
         <NButton :type="mode === 'ascii' ? 'primary' : 'default'" @click="mode = 'ascii'">ASCII</NButton>
@@ -248,6 +275,7 @@ onBeforeUnmount(() => {
           <template v-else>{{ t('composer.startLoop') }}</template>
         </NButton>
       </span>
+      <NButton :title="t('fileTransfer.attachFile')" @click="onOpenFileTransfer" :disabled="repeating" style="margin-right: 4px">📎</NButton>
       <NButton type="primary" :disabled="repeating" @click="onSend">{{ t('composer.send') }}</NButton>
     </div>
   </div>
@@ -388,5 +416,11 @@ onBeforeUnmount(() => {
   0%   { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
   70%  { box-shadow: 0 0 0 6px transparent; opacity: 0.6; }
   100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+}
+
+/* 文件拖入高亮 */
+.composer.drag-over {
+  border-top-color: var(--accent);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15), inset 0 0 0 2px var(--accent);
 }
 </style>

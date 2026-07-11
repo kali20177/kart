@@ -11,6 +11,7 @@ import QuickCommandsPanel from './components/QuickCommandsPanel.vue'
 import AsciiTable from './components/AsciiTable.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import StatusBar from './components/StatusBar.vue'
+import FileTransferDialog from './components/FileTransferDialog.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
 import { useIsDark } from './composables/useIsDark'
@@ -43,6 +44,8 @@ const viewMode = ref<DataMode>(settingsStore.settings.defaultView)
 const composerText = ref('')
 const showAscii = ref(false)
 const showSettings = ref(false)
+const showFileTransfer = ref(false)
+const fileTransferDropFile = ref<File | null>(null)
 const commandsCollapsed = ref(false)
 
 // —— 快速命令侧边栏宽度拖拽 ——
@@ -138,6 +141,11 @@ function onToComposer(p: { text: string; mode: DataMode }) {
 /** 编码器支持的命名转义（与 encodeWithEscapes 的 switch 保持一致） */
 const NAMED_ESCAPES = new Set([0, 9, 10, 13])
 
+function onOpenFileTransfer(file?: File) {
+  fileTransferDropFile.value = file ?? null
+  showFileTransfer.value = true
+}
+
 function onInsertAscii(e: AsciiEntry) {
   if (viewMode.value === 'hex') {
     composerText.value += (composerText.value && !composerText.value.endsWith(' ') ? ' ' : '') + e.hex + ' '
@@ -182,7 +190,7 @@ onMounted(() => {
 
             <MessageList v-show="mainView === 'messages'" :view-mode="viewMode" @resend="onResend" />
             <WaveformChart v-show="mainView === 'waveform'" />
-            <InputComposer v-model:text="composerText" v-model:mode="viewMode" />
+            <InputComposer v-model:text="composerText" v-model:mode="viewMode" @open-file-transfer="onOpenFileTransfer" />
           </div>
           <div
             class="right"
@@ -207,6 +215,7 @@ onMounted(() => {
 
       <AsciiTable v-model:show="showAscii" @insert="onInsertAscii" />
       <SettingsModal v-model:show="showSettings" />
+      <FileTransferDialog v-model:show="showFileTransfer" :drop-file="fileTransferDropFile" @started="showFileTransfer = false" />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>

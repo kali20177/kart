@@ -168,6 +168,24 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  /**
+   * 原始字节下发（文件引擎用）。不追加行尾、不强制建气泡。
+   * record=true 时建一条 TX 帧气泡（调试用）。
+   */
+  async function sendRaw(bytes: Uint8Array, record = true): Promise<{ ok: boolean; error?: string }> {
+    if (!connected.value) return { ok: false, error: '未连接' }
+    try {
+      await driver.write(bytes)
+      txBytes.value += bytes.length
+      if (record) messages.addTx(bytes)
+      return { ok: true }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (record) messages.addTx(bytes, msg)
+      return { ok: false, error: msg }
+    }
+  }
+
   /** 直接重发原始字节（气泡"重发"按钮用，bytes 已含行尾） */
   async function resend(bytes: Uint8Array): Promise<{ ok: boolean; error?: string }> {
     if (!connected.value) return { ok: false, error: '未连接' }
@@ -203,6 +221,7 @@ export const useSerialStore = defineStore('serial', () => {
     removeCustomBaudRate,
     updateCustomBaudNote,
     send,
+    sendRaw,
     resend,
     onData
   }

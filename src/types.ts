@@ -22,6 +22,10 @@ export interface Message {
   timestamp: number
   /** 可选错误标记（如发送失败、解码替换） */
   error?: string
+  /** 消息种类：'frame'=普通帧，'file'=文件下发气泡（缺省 'frame' 向后兼容） */
+  kind?: 'frame' | 'file'
+  /** 文件下发时指向 transfer store 中的状态 */
+  transferId?: string
 }
 
 /** 串口连接参数 */
@@ -135,3 +139,68 @@ export type MockScenarioId =
   | 'high-throughput'
   | 'mixed-ascii'
   | 'waveform'
+
+// ─── 文件下发类型（阶段 1 文件传输 UI） ───
+
+/** 文件下发状态机 */
+export type TransferStatus =
+  | 'queued'
+  | 'sending'
+  | 'paused'
+  | 'completed'
+  | 'aborted'
+  | 'error'
+
+/** 分包协议封装 */
+export type ChunkFraming =
+  | 'raw'         // 裸字节
+  | 'len-prefix'  // [lenLE16] + payload
+  | 'seq-crc'     // [seqLE16][lenLE16] + payload + [crc16LE]
+
+/** ACK 匹配策略 */
+export type AckMode = 'any' | 'byte' | 'echo-crc'
+
+/** 文件下发配置 */
+export interface FileTransferConfig {
+  chunkSize: number        // 0 = 不分包，整包下发
+  interChunkDelay: number  // 包间延时 ms
+  bytesPerSecond: number   // 字节速率上限 B/s（0 = 不限）
+  retries: number          // 单包失败重试次数
+  framing: ChunkFraming
+  chunkSuffix: LineEnding  // 封装后是否追加行尾
+  waitForAck: boolean
+  ackMode: AckMode
+  ackByte: number          // ACK 字节，默认 0x06
+  ackTimeout: number       // ACK 超时 ms
+  startOffset: number      // 断点续传起始偏移
+  repeat: number           // 循环次数（0=单次）
+  logEachChunk: boolean    // 调试：每包另起一条 TX 帧气泡
+  injectCorruptEveryN: number  // 0=off；每 N 包破坏 CRC
+  injectSkipAckEveryN: number  // 0=off；每 N 包忽略 ACK
+}
+
+/** 预设标识 */
+export type TransferPresetId =
+  | 'raw'          // 原始整包下发
+  | 'stm32-isp'    // STM32 ISP (256B·ACK)
+  | 'esp32'        // ESP32 (4KB·ACK)
+  | 'stress'       // 鲁棒性压测(循环)
+  | 'custom'       // 自定义
+
+/** 一次下发的运行时状态 */
+export interface FileTransferState {
+  id: string
+  filename: string
+  size: number
+  status: TransferStatus
+  sent: number             // 已（确认）下发字节
+  total: number            // 文件总字节
+  currentChunk: number
+  totalChunks: number
+  pass: number             // 当前循环轮次
+  startedAt: number
+  elapsedMs: number
+  bytesPerSec: number      // 平滑后的实时速率
+  failedChunk?: number     // 失败包号
+  error?: string
+}
