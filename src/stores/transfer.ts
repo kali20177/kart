@@ -442,10 +442,13 @@ export const useTransferStore = defineStore('transfer', () => {
           const deltaSent = totalSent - lastSent
           const instantRate = dt > 0 ? (deltaSent / dt) * 1000 : 0
           // 首次直接用瞬时值，后续用 EMA 平滑（alpha=0.5 收敛更快）
-          const isFirstRate = state.bytesPerSec === 0
-          const bytesPerSec = isFirstRate
+          // 注意：不能从 line 358 捕获的 state 引用读取 bytesPerSec——
+          // updateTransfer 会创建新对象替换 shallowRef 数组，原引用已过期。
+          const current = transfers.value.find((t) => t.id === id)
+          const prevRate = current?.bytesPerSec ?? 0
+          const bytesPerSec = prevRate === 0
             ? instantRate
-            : state.bytesPerSec * 0.5 + instantRate * 0.5
+            : prevRate * 0.5 + instantRate * 0.5
 
           updateTransfer(id, {
             sent: totalSent,

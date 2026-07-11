@@ -50,11 +50,11 @@ const fileError = ref('')
 
 // ── 预设 ──
 const presetOptions = computed(() => [
-  { label: t('fileTransfer.preset.raw'), value: 'raw' as TransferPresetId },
-  { label: t('fileTransfer.preset.stm32Isp'), value: 'stm32-isp' as TransferPresetId },
-  { label: t('fileTransfer.preset.esp32'), value: 'esp32' as TransferPresetId },
-  { label: t('fileTransfer.preset.stress'), value: 'stress' as TransferPresetId },
-  { label: t('fileTransfer.preset.custom'), value: 'custom' as TransferPresetId }
+  { label: t('fileTransfer.presetNames.raw'), value: 'raw' as TransferPresetId },
+  { label: t('fileTransfer.presetNames.stm32Isp'), value: 'stm32-isp' as TransferPresetId },
+  { label: t('fileTransfer.presetNames.esp32'), value: 'esp32' as TransferPresetId },
+  { label: t('fileTransfer.presetNames.stress'), value: 'stress' as TransferPresetId },
+  { label: t('fileTransfer.presetNames.custom'), value: 'custom' as TransferPresetId }
 ])
 
 const selectedPreset = ref<TransferPresetId>('raw')
