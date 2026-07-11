@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
+import { storage } from '@/composables/useStorage'
 import { parseHexInput, bytesToHex } from '@/utils/hex'
 import { encodeWithEscapes } from '@/utils/encoding'
 import type { DataMode, LineEnding } from '@/types'
@@ -174,6 +175,8 @@ function onOpenFileTransfer() {
 const inputComp = ref<InstanceType<typeof NInput> | null>(null)
 const MIN_H = 40
 const MAX_H = 360
+const INPUT_HEIGHT_KEY = 'composer:inputHeight'
+const inputHeight = ref(storage.get(INPUT_HEIGHT_KEY, MIN_H * 2))
 let dragStartY = 0
 let dragStartH = 0
 
@@ -207,12 +210,17 @@ function onGripUp() {
   window.removeEventListener('pointermove', onGripMove)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
+  const ta = getTextarea()
+  if (ta) {
+    const h = parseFloat(ta.style.height)
+    if (h >= MIN_H && h <= MAX_H) storage.set(INPUT_HEIGHT_KEY, h)
+  }
 }
 
 onMounted(async () => {
   await nextTick()
   const ta = getTextarea()
-  if (ta) ta.style.height = `${MIN_H * 2}px`
+  if (ta) ta.style.height = `${inputHeight.value}px`
 })
 
 onBeforeUnmount(() => {

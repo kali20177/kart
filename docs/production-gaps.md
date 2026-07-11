@@ -19,7 +19,7 @@
    - **待补**：① 纯逻辑工具（crc/chunk-framer/rate-limit）当前内联在 transfer.ts，设计稿规划的独立 `utils/*.ts` + 单测尚未拆分；② ACK `echo-crc` 策略暂简化为「收到任意字节即 ACK」，未做 CRC 回吐比对；③ 真实 Web Serial 驱动接入（阶段 2）；④ 大文件流式读（v1 用 `File.arrayBuffer()`，数百 MB 内 OK）。
 5. **DTR/RTS/Break 控制** — `SerialDriver` 只有 `getSignals`（只读），无 `setSignals`。ESP32/STM32 bootloader、复位、ISP 靠 DTR/RTS 组合 + Break。前端无按钮，接口契约无。〔依赖 Web Serial 驱动〕
 6. ✅ **暂停时数据直接丢弃** — 暂停时数据仍不缓冲保留（波形追加缓冲无意义：恢复瞬间刷新长段 + 超缓冲区截断后数据不全），恢复时通过 warning toast 提示用户缺失数据的时间段（`HH:MM:SS.mmm – HH:MM:SS.mmm (Xs)`），消息列表与波形图均有各自独立提示。
-7. **布局与发送历史不持久化** — 右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM）不存；`useSendHistory` 仅内存。每天重开归零。
+7. ✅ **布局与发送历史不持久化** — 已完成：右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM 拖拽高度）、发送历史（`useSendHistory`）三项均通过 `useStorage` 持久化到 localStorage。发送历史限制最近 50 条，避免 localStorage 撑爆。
 8. ✅ **自定义波特率** — 已完成（filterable+tag 输入、自定义档位+标注、预设标注、校验、持久化）。
 
 ### 专业工具进阶预期（中优先级）

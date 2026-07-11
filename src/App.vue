@@ -15,6 +15,7 @@ import FileTransferDialog from './components/FileTransferDialog.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
 import { useIsDark } from './composables/useIsDark'
+import { storage } from './composables/useStorage'
 import type { DataMode } from './types'
 import type { AsciiEntry } from './utils/ascii-table'
 
@@ -52,7 +53,7 @@ const commandsCollapsed = ref(false)
 // 手柄在侧边栏左边缘：向左拖增大、向右拖减小。
 const COL_MIN = 200
 const COL_MAX = 480
-const rightWidth = ref(280)
+const rightWidth = ref(storage.get('app:rightWidth', 280))
 const dragging = ref(false)
 const rightStyle = computed(() =>
   commandsCollapsed.value ? {} : { width: rightWidth.value + 'px' }
@@ -84,6 +85,7 @@ function onColGripUp() {
   window.removeEventListener('pointermove', onColGripMove)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
+  storage.set('app:rightWidth', rightWidth.value)
 }
 
 onBeforeUnmount(() => {

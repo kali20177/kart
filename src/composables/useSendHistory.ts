@@ -1,8 +1,12 @@
 import { ref } from 'vue'
+import { storage } from './useStorage'
 
-/** 发送历史：↑/↓ 翻阅本会话发送过的内容（仅存内存） */
-export function useSendHistory(max = 100) {
-  const history = ref<string[]>([])
+const STORAGE_KEY = 'sendHistory'
+const DEFAULT_MAX = 50
+
+/** 发送历史：↑/↓ 翻阅本会话发送过的内容。自动持久化到 localStorage */
+export function useSendHistory(max = DEFAULT_MAX) {
+  const history = ref<string[]>(storage.get<string[]>(STORAGE_KEY, []))
   // cursor: -1 表示不在历史浏览态（停在当前输入）
   const cursor = ref(-1)
 
@@ -13,8 +17,13 @@ export function useSendHistory(max = 100) {
     if (history.value[0] !== trimmed) {
       history.value.unshift(trimmed)
       if (history.value.length > max) history.value.pop()
+      persist()
     }
     cursor.value = -1
+  }
+
+  function persist() {
+    storage.set(STORAGE_KEY, history.value.slice(0, max))
   }
 
   /** 上翻（更早的） */
