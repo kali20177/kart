@@ -4,6 +4,7 @@ import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } 
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, useDialog, useMessage } from 'naive-ui'
 import MessageBubble from './MessageBubble.vue'
+import SendHistoryPopover from './SendHistoryPopover.vue'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
 import { useMessageSearch } from '@/composables/useMessageSearch'
@@ -13,7 +14,10 @@ import { formatMessageLine, formatTimestamp } from '@/utils/message-format'
 import { downloadTextFile } from '@/utils/download'
 
 const props = defineProps<{ viewMode: DataMode }>()
-const emit = defineEmits<{ (e: 'resend', bytes: Uint8Array): void }>()
+const emit = defineEmits<{
+  (e: 'resend', bytes: Uint8Array): void
+  (e: 'to-composer', text: string): void
+}>()
 
 const messagesStore = useMessagesStore()
 const settingsStore = useSettingsStore()
@@ -271,6 +275,7 @@ watch(
         {{ messagesStore.paused ? t('msgList.paused') : t('msgList.pause') }}
       </NButton>
       <NButton size="tiny" @click="messagesStore.clear()">{{ t('msgList.clearAll') }}</NButton>
+      <SendHistoryPopover @to-composer="(text: string) => emit('to-composer', text)" />
     </div>
 
     <!-- 时间筛选行 -->

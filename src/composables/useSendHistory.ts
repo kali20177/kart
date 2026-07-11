@@ -4,11 +4,14 @@ import { storage } from './useStorage'
 const STORAGE_KEY = 'sendHistory'
 const DEFAULT_MAX = 50
 
+// 模块级 ref，确保所有调用方共享同一份状态
+const history = ref<string[]>(storage.get<string[]>(STORAGE_KEY, []))
+const cursor = ref(-1)
+let max = DEFAULT_MAX
+
 /** 发送历史：↑/↓ 翻阅本会话发送过的内容。自动持久化到 localStorage */
-export function useSendHistory(max = DEFAULT_MAX) {
-  const history = ref<string[]>(storage.get<string[]>(STORAGE_KEY, []))
-  // cursor: -1 表示不在历史浏览态（停在当前输入）
-  const cursor = ref(-1)
+export function useSendHistory(maxOverride = DEFAULT_MAX) {
+  max = maxOverride
 
   function add(entry: string) {
     const trimmed = entry
@@ -47,5 +50,21 @@ export function useSendHistory(max = DEFAULT_MAX) {
     cursor.value = -1
   }
 
-  return { history, add, prev, next, reset }
+  /** 删除指定索引处的历史条目 */
+  function remove(index: number) {
+    const idx = Math.max(0, Math.min(history.value.length - 1, index))
+    history.value.splice(idx, 1)
+    history.value = [...history.value]
+    persist()
+    if (cursor.value >= idx) cursor.value = Math.max(-1, cursor.value - 1)
+  }
+
+  /** 清空全部历史 */
+  function clear() {
+    history.value = []
+    cursor.value = -1
+    persist()
+  }
+
+  return { history, add, prev, next, reset, remove, clear }
 }

@@ -190,7 +190,7 @@ onMounted(() => {
               </button>
             </div>
 
-            <MessageList v-show="mainView === 'messages'" :view-mode="viewMode" @resend="onResend" />
+            <MessageList v-show="mainView === 'messages'" :view-mode="viewMode" @resend="onResend" @to-composer="composerText = $event" />
             <WaveformChart v-show="mainView === 'waveform'" />
             <InputComposer v-model:text="composerText" v-model:mode="viewMode" @open-file-transfer="onOpenFileTransfer" />
           </div>

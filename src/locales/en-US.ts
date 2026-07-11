@@ -81,6 +81,13 @@ export default {
     exportedN: 'Exported {n}',
     pauseNotice: 'Data not shown during pause: {start} – {end} ({dur}s)',
     hexError: 'Invalid HEX',
+    history: 'Send History',
+    historyEmpty: 'No history',
+    historyClearAll: 'Clear all',
+    historyClearConfirm: 'Clear all send history?',
+    historyClearOk: 'Clear',
+    historyClearCancel: 'Cancel',
+    historyInsert: 'Insert to composer',
   },
   bubble: {
     resend: 'Resend',

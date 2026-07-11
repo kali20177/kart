@@ -81,6 +81,13 @@ export default {
     exportedN: '已导出 {n} 条',
     pauseNotice: '暂停期间未显示数据: {start} – {end} ({dur}s)',
     hexError: 'HEX 格式错误',
+    history: '发送历史',
+    historyEmpty: '暂无历史',
+    historyClearAll: '清空全部',
+    historyClearConfirm: '确认清空全部发送历史？',
+    historyClearOk: '清空',
+    historyClearCancel: '取消',
+    historyInsert: '插入到输入框',
   },
   bubble: {
     resend: '重发',

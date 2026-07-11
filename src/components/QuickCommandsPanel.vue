@@ -14,7 +14,10 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useCommandsStore } from '@/stores/commands'
 import { useSerialStore } from '@/stores/serial'
+import { useSendHistory } from '@/composables/useSendHistory'
 import type { DataMode, LineEnding, QuickCommand } from '@/types'
+
+const sendHistory = useSendHistory()
 
 const emit = defineEmits<{
   (e: 'to-composer', payload: { text: string; mode: DataMode }): void
@@ -75,6 +78,7 @@ async function sendCmd(c: QuickCommand) {
   const ending: LineEnding = c.appendNewline === 'inherit' ? 'crlf' : c.appendNewline
   const r = await serial.send(c.payload, c.mode, ending, 'utf-8')
   if (!r.ok) message.error(r.error ?? t('commands.sendFailed'))
+  else sendHistory.add(c.payload)
 }
 
 function menuOptions(c: QuickCommand) {
