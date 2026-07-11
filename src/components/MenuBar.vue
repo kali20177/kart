@@ -15,6 +15,25 @@ const message = useMessage()
 
 const showAbout = ref(false)
 const showLicense = ref(false)
+const showShortcuts = ref(false)
+
+/** 检测是否为 macOS（userAgent + platform 双保险，部分浏览器 platform 已被屏蔽） */
+const isMac = computed(() => {
+  const p = window.electron?.platform ?? navigator.platform
+  return /mac|darwin/i.test(p) || /mac/i.test(navigator.userAgent)
+})
+
+/** 平台修饰键：macOS 显示 ⌘，其他显示 Ctrl */
+const modKey = computed(() => isMac.value ? '⌘' : 'Ctrl')
+
+/** 历史翻页修饰键：macOS 上 Ctrl+↑/↓ 被 Mission Control 占用，改用 Alt */
+const navModKey = computed(() => isMac.value ? 'Alt' : 'Ctrl')
+
+const shortcutList = computed(() => [
+  { combo: `${modKey.value}+Enter`, desc: t('composer.send') },
+  { combo: `${navModKey.value}+↑`, desc: t('composer.historyPrev') },
+  { combo: `${navModKey.value}+↓`, desc: t('composer.historyNext') }
+])
 
 /** 关于对话框的版本信息行（参考 VSCode：版本 / 提交 / 构建日期 / 依赖与运行时版本） */
 const aboutRows = computed<Array<[string, string]>>(() => {
@@ -56,9 +75,11 @@ const fileMenu = computed<DropdownOption[]>(() => [
 ])
 
 const helpMenu = computed<DropdownOption[]>(() => [
+  { label: t('menu.shortcuts'), key: 'shortcuts' },
+  { type: 'divider', key: 'd1' },
   { label: t('menu.about'), key: 'about' },
   { label: t('menu.license'), key: 'license' },
-  { type: 'divider', key: 'd1' },
+  { type: 'divider', key: 'd2' },
   { label: t('menu.devtools'), key: 'devtools' }
 ])
 
@@ -90,6 +111,9 @@ function handleSelect(key: string) {
       break
     case 'license':
       showLicense.value = true
+      break
+    case 'shortcuts':
+      showShortcuts.value = true
       break
     case 'devtools':
       if (window.electron?.toggleDevTools) {
@@ -143,6 +167,15 @@ function handleSelect(key: string) {
       </ul>
     </div>
   </NModal>
+
+  <NModal v-model:show="showShortcuts" preset="card" :title="t('menu.shortcuts')" style="width: 420px">
+    <div class="shortcuts">
+      <div class="shortcut-row" v-for="{ combo, desc } in shortcutList" :key="combo">
+        <span class="shortcut-keys"><kbd v-for="k in combo.split('+')" :key="k">{{ k }}</kbd></span>
+        <span class="shortcut-desc">{{ desc }}</span>
+      </div>
+    </div>
+  </NModal>
 </template>
 
 <style scoped>
@@ -188,5 +221,36 @@ function handleSelect(key: string) {
 .license ul {
   margin: 6px 0 0;
   padding-left: 20px;
+}
+.shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+}
+.shortcut-keys {
+  display: flex;
+  gap: 4px;
+  min-width: 100px;
+}
+.shortcut-keys kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.shortcut-desc {
+  color: var(--text);
 }
 </style>
