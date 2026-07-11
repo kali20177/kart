@@ -1,15 +1,16 @@
-import type { Message } from '@/types'
+import type { Message, Encoding } from '@/types'
 import { computeDeltas, formatTimestampISO } from './message-format'
-import { bytesToHex } from './hex'
-import { sanitizeForExport } from './encoding'
+import { decodeBytes, sanitizeForExport } from './encoding'
 
 export interface SessionMeta {
   port: string | null
   baudRate: number
   connectedAt: number | null
+  encoding: Encoding
   totalRxBytes: number
   totalTxBytes: number
   totalRxFrames: number
+  totalTxFrames: number
 }
 
 export interface JsonExportMessage {
@@ -34,9 +35,11 @@ export interface JsonExportRoot {
     port: string | null
     baudRate: number
     connectedAt: string | null
+    encoding: string
     totalRxBytes: number
     totalTxBytes: number
     totalRxFrames: number
+    totalTxFrames: number
   }
   messages: JsonExportMessage[]
 }
@@ -48,6 +51,15 @@ function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(bytes[i])
   }
   return btoa(binary)
+}
+
+/** 紧凑 hex 串（无分隔符），JSON 导出用 */
+function bytesToHexCompact(bytes: Uint8Array): string {
+  const parts: string[] = []
+  for (let i = 0; i < bytes.length; i++) {
+    parts.push(bytes[i].toString(16).padStart(2, '0').toUpperCase())
+  }
+  return parts.join('')
 }
 
 /**
@@ -62,10 +74,12 @@ export function exportMessagesAsJson(messages: Message[], meta: SessionMeta): st
     session: {
       port: meta.port,
       baudRate: meta.baudRate,
-      connectedAt: meta.connectedAt ? formatTimestampISO(meta.connectedAt) : null,
+      connectedAt: meta.connectedAt != null ? formatTimestampISO(meta.connectedAt) : null,
+      encoding: meta.encoding,
       totalRxBytes: meta.totalRxBytes,
       totalTxBytes: meta.totalTxBytes,
-      totalRxFrames: meta.totalRxFrames
+      totalRxFrames: meta.totalRxFrames,
+      totalTxFrames: meta.totalTxFrames
     },
     messages: messages.map((m) => {
       const d = deltas.get(m.id)
@@ -74,9 +88,9 @@ export function exportMessagesAsJson(messages: Message[], meta: SessionMeta): st
         timestamp: formatTimestampISO(m.timestamp),
         timestampMs: m.timestamp,
         direction: m.direction,
-        bytesHex: bytesToHex(m.bytes).replace(/ /g, ''),
+        bytesHex: bytesToHexCompact(m.bytes),
         bytesBase64: bytesToBase64(m.bytes),
-        bytesDecoded: sanitizeForExport(new TextDecoder().decode(m.bytes)),
+        bytesDecoded: sanitizeForExport(decodeBytes(m.bytes, meta.encoding)),
         byteCount: m.bytes.length,
         elapsedMs: d?.elapsedMs ?? 0,
         deltaMs: d?.deltaMs ?? 0,

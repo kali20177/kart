@@ -158,9 +158,11 @@ const previewLines = computed(() => {
       port: serialStore.selectedPort,
       baudRate: serialStore.options.baudRate,
       connectedAt: serialStore.sessionStartedAt,
+      encoding: settingsStore.settings.encoding,
       totalRxBytes: serialStore.rxBytes,
       totalTxBytes: serialStore.txBytes,
-      totalRxFrames: messagesStore.rxFrames
+      totalRxFrames: messagesStore.rxFrames,
+      totalTxFrames: messagesStore.txFrames
     }
     const json = exportMessagesAsJson(list, meta)
     return json.split('\n').slice(0, 20)
@@ -233,9 +235,11 @@ function doExport() {
       port: serialStore.selectedPort,
       baudRate: serialStore.options.baudRate,
       connectedAt: serialStore.sessionStartedAt,
+      encoding: settingsStore.settings.encoding,
       totalRxBytes: serialStore.rxBytes,
       totalTxBytes: serialStore.txBytes,
-      totalRxFrames: messagesStore.rxFrames
+      totalRxFrames: messagesStore.rxFrames,
+      totalTxFrames: messagesStore.txFrames
     }
     const json = exportMessagesAsJson(list, meta)
     downloadTextFile(filename.value, json)

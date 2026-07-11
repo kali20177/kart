@@ -87,6 +87,7 @@ export function formatDelta(ms: number): string {
 
 /** 格式化累计时间为人类可读字符串 */
 export function formatElapsed(ms: number): string {
+  ms = Math.floor(ms)
   if (ms < 1000) return `+0.${pad(ms, 3)}s`
   if (ms < 10000) return `+${(ms / 1000).toFixed(2)}s`
   if (ms < 60000) return `+${(ms / 1000).toFixed(1)}s`

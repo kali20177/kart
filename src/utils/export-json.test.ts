@@ -15,9 +15,11 @@ const sessionMeta: SessionMeta = {
   port: 'COM3',
   baudRate: 115200,
   connectedAt: 1700000000000,
+  encoding: 'utf-8',
   totalRxBytes: 12345,
   totalTxBytes: 678,
-  totalRxFrames: 150
+  totalRxFrames: 150,
+  totalTxFrames: 12
 }
 
 describe('exportMessagesAsJson', () => {
@@ -109,5 +111,29 @@ describe('exportMessagesAsJson', () => {
     const parsed = JSON.parse(json)
     expect(parsed.session.port).toBeNull()
     expect(parsed.session.connectedAt).toBeNull()
+  })
+
+  it('handles connectedAt 0 correctly (not falsy)', () => {
+    const meta: SessionMeta = { ...sessionMeta, connectedAt: 0 }
+    const json = exportMessagesAsJson([msg({ id: 1 })], meta)
+    const parsed = JSON.parse(json)
+    expect(parsed.session.connectedAt).not.toBeNull()
+    expect(parsed.session.connectedAt).toContain('1970-01-01')
+  })
+
+  it('includes encoding and txFrames in session', () => {
+    const json = exportMessagesAsJson([msg({ id: 1 })], sessionMeta)
+    const parsed = JSON.parse(json)
+    expect(parsed.session.encoding).toBe('utf-8')
+    expect(parsed.session.totalTxFrames).toBe(12)
+  })
+
+  it('uses meta.encoding for bytesDecoded', () => {
+    // GBK encoding: 0xBA 0xBA = "汉"
+    const meta: SessionMeta = { ...sessionMeta, encoding: 'gbk' }
+    const messages: Message[] = [msg({ id: 1, bytes: new Uint8Array([0xBA, 0xBA]) })]
+    const json = exportMessagesAsJson(messages, meta)
+    const parsed = JSON.parse(json)
+    expect(parsed.messages[0].bytesDecoded).toBe('汉')
   })
 })

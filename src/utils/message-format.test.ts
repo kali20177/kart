@@ -241,4 +241,5 @@ describe('formatElapsed', () => {
   it('ms < 10000', () => expect(formatElapsed(2500)).toBe('+2.50s'))
   it('ms < 60000', () => expect(formatElapsed(30000)).toBe('+30.0s'))
   it('ms >= 60000', () => expect(formatElapsed(125000)).toBe('+2m5.0s'))
+  it('浮点数安全截断', () => expect(formatElapsed(500.9)).toBe('+0.500s'))
 })
