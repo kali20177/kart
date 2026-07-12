@@ -10,7 +10,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
 import type { DataMode, Direction, Message } from '@/types'
-import { formatMessageLine, formatTimestamp } from '@/utils/message-format'
+import { formatMessageLine, formatTimestamp, computeDeltas } from '@/utils/message-format'
 import ExportDialog from './ExportDialog.vue'
 
 const props = defineProps<{ viewMode: DataMode }>()
@@ -43,6 +43,9 @@ const timeStartInvalid = computed(() => timeInputStart.value.trim() !== '' && ti
 const timeEndInvalid = computed(() => timeInputEnd.value.trim() !== '' && timeEnd.value === null)
 
 const encoding = computed(() => settingsStore.settings.encoding)
+
+/** 每帧的 Δt + elapsed（基于全量物理时间线，不受过滤影响） */
+const deltaMap = computed(() => computeDeltas(messagesStore.messages))
 
 const { filtered, matchRanges, matchCount, hexError } = useMessageSearch({
   messages: computed(() => messagesStore.messages),
@@ -385,6 +388,8 @@ watch(
               :search-mode="searchMode"
               :match-ranges="matchRanges.get(item.id) ?? []"
               :active-match="matchIndex === index && matchCount > 0"
+              :delta-ms="deltaMap.get(item.id)?.deltaMs"
+              :elapsed-ms="deltaMap.get(item.id)?.elapsedMs"
               @resend="emit('resend', $event)"
               @select="onBubbleSelect(item)"
               @contextmenu="(e: MouseEvent) => onBubbleContext(item, e)"

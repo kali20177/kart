@@ -5,7 +5,7 @@ import { useMessage } from 'naive-ui'
 import type { DataMode, Encoding, Message } from '@/types'
 import { bytesToHex, hexDump } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
-import { formatMessageLine, formatTimestamp } from '@/utils/message-format'
+import { formatMessageLine, formatTimestamp, formatDelta, formatElapsed } from '@/utils/message-format'
 import FileTransferBubble from './FileTransferBubble.vue'
 
 interface Range {
@@ -28,6 +28,10 @@ const props = defineProps<{
   matchRanges?: Range[]
   /** 当前为导航目标帧（命中用活动色 + 短暂 flash） */
   activeMatch?: boolean
+  /** 距上一帧时间差 ms（由 MessageList 计算下传） */
+  deltaMs?: number
+  /** 距会话首帧累计时间 ms（由 MessageList 计算下传） */
+  elapsedMs?: number
 }>()
 
 const emit = defineEmits<{
@@ -42,6 +46,13 @@ const toast = useMessage()
 const isTx = computed(() => props.message.direction === 'tx')
 
 const timeLabel = computed(() => formatTimestamp(props.message.timestamp, 'short'))
+
+const deltaLabel = computed(() =>
+  props.deltaMs != null ? formatDelta(props.deltaMs) : ''
+)
+const elapsedLabel = computed(() =>
+  props.elapsedMs != null ? formatElapsed(props.elapsedMs) : ''
+)
 
 const asciiText = computed(() => decodeBytes(props.message.bytes, props.encoding))
 const dumpLines = computed(() => hexDump(props.message.bytes, 16))
@@ -195,6 +206,8 @@ function onRowContext(e: MouseEvent) {
         <div class="meta">
         <span class="dir">{{ isTx ? 'TX ▸' : '◂ RX' }}</span>
         <span class="time">{{ timeLabel }}</span>
+        <span v-if="deltaLabel" class="delta">{{ deltaLabel }}</span>
+        <span v-if="elapsedLabel" class="elapsed">{{ elapsedLabel }}</span>
         <span class="len">{{ message.bytes.length }} B</span>
         <span class="mode-badge">{{ viewMode === 'hex' ? 'HEX' : 'ASCII' }}</span>
         <span v-if="message.error" class="err-badge">⚠ {{ message.error }}</span>
@@ -326,6 +339,16 @@ function onRowContext(e: MouseEvent) {
 }
 .dir {
   font-weight: 600;
+}
+.delta {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  color: var(--accent-cyan);
+}
+.elapsed {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  color: var(--text-dim);
 }
 .mode-badge {
   border: 1px solid var(--glass-border);

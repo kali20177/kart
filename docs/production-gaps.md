@@ -8,7 +8,7 @@
 
 ### 核心调试能力（高优先级，不补日常用会很难受）
 
-1. **帧间时间差 Δt** — `MessageBubble` 只显示绝对时间 `HH:MM:SS.mmm`，缺与上一帧的 Δt、会话起点 elapsed。嵌入式调试时序刚需。
+1. ✅ **帧间时间差 Δt** — 已完成：`MessageBubble` meta 行在绝对时间后追加 `Δ`（距上一帧间隔）和 `+elapsed`（距会话首帧累计）。计算基于全量时间线（`computeDeltas` on shallowRef），不受方向/搜索过滤影响。格式复用 `formatDelta`/`formatElapsed`，与导出保持一致。
 2. ✅ **搜索只能过滤、不能高亮，且搜不了 HEX** — 已完成：文本/HEX 双模式搜索（HEX 复用 `parseHexInput`，宽容分隔）、命中高亮（原生配对：text+ascii / hex+hex；交叉配对仅过滤+导航+flash，避免字节/字符偏移错位）、上一项/下一项导航（`当前/总数` + 自动滚动 + 活动色 + flash）、当日时间范围筛选（`HH:MM:SS[.mmm]`，非法红框）。**不做正则**（嵌入式调试用处不大）。匹配逻辑抽到 `src/utils/search.ts` + `hex.ts#findByteRanges`，响应式编排抽到 `src/composables/useMessageSearch.ts`，均有单测。已知限制：交叉配对无内联高亮、时间筛选不支持跨午夜区间。
 3. **发送无 CRC/校验和，接收无校验** — `serial.send` 只拼行尾。嵌入式协议普遍带 CRC8/16/32 或累加和。接收侧 `Message.error` 只用于发送失败，无校验位不符标记。
 4. ✅ **文件发送（二进制整包下发）** - 已完成 UI 交互与引擎（基于 Mock 驱动）。详细设计见 [docs/file-transfer-design.md](./file-transfer-design.md)。落地内容：
