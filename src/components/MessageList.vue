@@ -27,11 +27,12 @@ const { t } = useI18n()
 
 const dirFilter = ref<'all' | Direction>('all')
 const keyword = ref('')
-const searchMode = ref<'text' | 'hex'>('text')
 const timeInputStart = ref('')
 const timeInputEnd = ref('')
 const showTimeFilter = ref(false)
 const matchIndex = ref(0)
+/** 搜索类型跟随当前视图模式 —— ASCII 视图搜索文本，HEX 视图搜索原始字节 */
+const searchMode = computed(() => props.viewMode === 'ascii' ? 'text' : 'hex')
 
 /** HH:MM:SS[.mmm] / HH:MM → 当日毫秒数；非法返回 null */
 const timeStart = computed(() => parseTimeInput(timeInputStart.value))
@@ -234,10 +235,6 @@ watch(
         <NButton :type="dirFilter === 'rx' ? 'primary' : 'default'" @click="dirFilter = 'rx'">RX</NButton>
         <NButton :type="dirFilter === 'tx' ? 'primary' : 'default'" @click="dirFilter = 'tx'">TX</NButton>
       </NButtonGroup>
-      <NButtonGroup size="tiny">
-        <NButton :type="searchMode === 'text' ? 'primary' : 'default'" @click="searchMode = 'text'">{{ t('msgList.text') }}</NButton>
-        <NButton :type="searchMode === 'hex' ? 'primary' : 'default'" @click="searchMode = 'hex'">HEX</NButton>
-      </NButtonGroup>
       <NInput
         v-model:value="keyword"
         size="tiny"
@@ -247,6 +244,13 @@ watch(
         @keydown.enter="onSearchKeydown"
       />
       <span v-if="hexError" class="hex-err">{{ hexError }}</span>
+      <NButton
+        size="tiny"
+        :type="showTimeFilter || timeStart !== null || timeEnd !== null ? 'primary' : 'default'"
+        :title="t('msgList.timeFilter')"
+        @click="showTimeFilter = !showTimeFilter"
+        >⏱</NButton
+      >
       <!-- 匹配导航 -->
       <span v-if="matchCount > 0" class="match-nav">
         <NButton size="tiny" quaternary :disabled="matchCount < 2" :title="t('msgList.prevMatch')" @click="goToMatch(-1)">↑</NButton>
@@ -255,13 +259,6 @@ watch(
       </span>
       <NTag size="small" :bordered="false">{{ filtered.length }} {{ t('msgList.frames') }}</NTag>
       <div class="spacer" />
-      <NButton
-        size="tiny"
-        :type="showTimeFilter || timeStart !== null || timeEnd !== null ? 'primary' : 'default'"
-        :title="t('msgList.timeFilter')"
-        @click="showTimeFilter = !showTimeFilter"
-        >⏱</NButton
-      >
       <NButton size="tiny" :type="messagesStore.paused ? 'warning' : 'default'" @click="messagesStore.togglePause()">
         {{ messagesStore.paused ? t('msgList.paused') : t('msgList.pause') }}
       </NButton>
