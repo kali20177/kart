@@ -30,6 +30,7 @@ const keyword = ref('')
 const timeInputStart = ref('')
 const timeInputEnd = ref('')
 const showTimeFilter = ref(false)
+const hasNote = ref(false)
 const matchIndex = ref(0)
 /** 搜索类型跟随当前视图模式 —— ASCII 视图搜索文本，HEX 视图搜索原始字节 */
 const searchMode = computed(() => props.viewMode === 'ascii' ? 'text' : 'hex')
@@ -50,11 +51,12 @@ const { filtered, matchRanges, matchCount, hexError } = useMessageSearch({
   encoding,
   dirFilter,
   timeStart,
-  timeEnd
+  timeEnd,
+  hasNote
 })
 
 // 任何筛选条件变化 → 导航从头开始（命中集合已变）
-watch([keyword, searchMode, dirFilter, timeStart, timeEnd], () => {
+watch([keyword, searchMode, dirFilter, timeStart, timeEnd, hasNote], () => {
   matchIndex.value = 0
 })
 // 实时流式收帧时 matchCount 会变，夹取 matchIndex 防越界（避免 5/3 这种显示）
@@ -311,6 +313,13 @@ watch(
         :title="t('msgList.timeFilter')"
         @click="showTimeFilter = !showTimeFilter"
         >⏱</NButton
+      >
+      <NButton
+        size="tiny"
+        :type="hasNote ? 'primary' : 'default'"
+        :title="t('msgList.filterNote')"
+        @click="hasNote = !hasNote"
+        >📌</NButton
       >
       <!-- 匹配导航 -->
       <span v-if="matchCount > 0" class="match-nav">

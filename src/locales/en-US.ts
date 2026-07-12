@@ -89,6 +89,7 @@ export default {
     nextMatch: 'Next (Enter)',
     frames: 'frames',
     timeFilter: 'Time Filter',
+    filterNote: 'Show only annotated messages',
     timeRange: 'Time Range',
     clear: 'Clear',
     pause: 'Pause',

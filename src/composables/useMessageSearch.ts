@@ -15,6 +15,8 @@ export interface SearchOptions {
   /** 当日毫秒数，null 表示无该侧约束 */
   timeStart: Ref<number | null>
   timeEnd: Ref<number | null>
+  /** 仅显示有标注的消息 */
+  hasNote?: Ref<boolean>
 }
 
 export interface Range {
@@ -70,6 +72,7 @@ export function useMessageSearch(opts: SearchOptions): SearchResult {
     const t1 = timeEnd.value
     const mode = searchMode.value
     const parsed = hexParse.value
+    const noteOnly = opts.hasNote?.value ?? false
 
     return messages.value.filter((m) => {
       // 方向过滤
@@ -81,6 +84,9 @@ export function useMessageSearch(opts: SearchOptions): SearchResult {
         if (t0 !== null && tod < t0) return false
         if (t1 !== null && tod > t1) return false
       }
+
+      // 仅显示有标注的消息
+      if (noteOnly && !m.note) return false
 
       // 关键字过滤
       if (kw) {

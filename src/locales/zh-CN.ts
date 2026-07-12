@@ -89,6 +89,7 @@ export default {
     nextMatch: '下一项 (Enter)',
     frames: '帧',
     timeFilter: '时间筛选',
+    filterNote: '仅显示有标注的消息',
     timeRange: '时间范围',
     clear: '清除',
     pause: '暂停',
