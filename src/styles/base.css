@@ -1,0 +1,50 @@
+/* 与主题无关的基础样式 —— 不随主题变化，从 tokens.css 抽取 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+/* NConfigProvider 会在 #app 与 .app 之间插入 div.n-config-provider，
+   它默认 height:auto，会打断高度链导致 .app 被内容撑破。补上 100% 接通链。 */
+.n-config-provider {
+  height: 100%;
+}
+
+body {
+  font-family: var(--ui-font);
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* 全局平滑过渡（主题切换） */
+html,
+body,
+#app,
+.n-config-provider,
+.app {
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}

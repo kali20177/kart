@@ -1,20 +1,21 @@
-/* 设计令牌 —— 工业风主题，亮/暗双色，跟随 data-theme 切换 */
+/* 设计令牌 —— fallback 默认值层。
+   useTheme 会通过 applyTokens() 覆盖这些值，此文件确保在 JS 执行前页面有合理的默认值。
+   值 = glass-industrial 暗色。若默认主题改为其他，同步更新此处以避免首屏闪烁。 */
 
 :root {
   --mono-font: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
   --ui-font: 'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --radius-sm: 4px;
   --radius-md: 6px;
-  --radius: 6px;       /* 快捷别名，保持兼容 */
+  --radius: 6px;
   --radius-lg: 8px;
   --radius-xl: 10px;
   --gap: 8px;
 
-  /* 毛玻璃及阴影 —— 会被各主题覆盖 */
   --glass-blur: 12px;
   --glass-blur-sm: 8px;
 
-  /* 亮色默认值 */
+  /* 亮色默认值（light fallback） */
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(0, 0, 0, 0.06);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -22,7 +23,7 @@
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
 }
 
-/* 亮色 */
+/* 亮色（glass-industrial light） */
 :root,
 [data-theme='light'] {
   --bg: #edf2f7;
@@ -46,14 +47,13 @@
   --warn: #d97706;
   --err: #dc2626;
 
-  /* 搜索高亮：所有命中 / 当前导航目标命中 */
   --search-highlight-bg: #fde047;
   --search-highlight-text: #0f172a;
   --search-active-bg: #f59e0b;
   --search-active-text: #0f172a;
 }
 
-/* 暗色 */
+/* 暗色（glass-industrial dark） */
 [data-theme='dark'] {
   --bg: #0d1117;
   --bg-panel: #161b22;
@@ -76,65 +76,14 @@
   --warn: #f0a850;
   --err: #ec5b5b;
 
-  /* 搜索高亮：所有命中 / 当前导航目标命中 */
   --search-highlight-bg: #665a00;
   --search-highlight-text: #ffe066;
   --search-active-bg: #a85c00;
   --search-active-text: #ffe066;
 
-  /* 暗色毛玻璃 & 阴影覆写 */
   --glass-bg: rgba(22, 27, 34, 0.75);
   --glass-border: rgba(255, 255, 255, 0.08);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4), 0 4px 6px rgba(0, 0, 0, 0.2);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#app {
-  height: 100%;
-  margin: 0;
-}
-
-/* NConfigProvider 会在 #app 与 .app 之间插入 div.n-config-provider，
-   它默认 height:auto，会打断高度链导致 .app 被内容撑破。补上 100% 接通链。 */
-.n-config-provider {
-  height: 100%;
-}
-
-body {
-  font-family: var(--ui-font);
-  background: var(--bg);
-  color: var(--text);
-  overflow: hidden;
-}
-
-/* 全局平滑过渡（主题切换） */
-html,
-body,
-#app,
-.n-config-provider,
-.app {
-  transition: background 0.3s ease, color 0.3s ease;
-}
-
-/* 细滚动条 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-dim);
 }

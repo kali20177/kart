@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useSerialStore } from '@/stores/serial'
 import { parseHexInput } from '@/utils/hex'
+import { listThemes } from '@/themes'
 
 const show = defineModel<boolean>('show', { default: false })
 const settingsStore = useSettingsStore()
@@ -40,10 +41,9 @@ const viewOptions = computed(() => [
   { label: 'ASCII', value: 'ascii' },
   { label: 'HEX', value: 'hex' }
 ])
-const themeOptions = computed(() => [
-  { label: t('settings.dark'), value: 'dark' },
-  { label: t('settings.light'), value: 'light' },
-])
+const themeOptions = computed(() =>
+  listThemes().map(t => ({ label: t.name, value: t.id }))
+)
 const numericTypeOptions = computed(() => [
   { label: 'uint8 (1B)', value: 'uint8' },
   { label: 'int8 (1B)', value: 'int8' },
@@ -200,7 +200,7 @@ const navItems = computed<NavItem[]>(() => [
             <NSelect v-model:value="s.defaultView" :options="viewOptions" />
           </NFormItem>
           <NFormItem :label="t('settings.theme')">
-            <NSelect v-model:value="s.theme" :options="themeOptions" />
+            <NSelect v-model:value="s.themeId" :options="themeOptions" />
           </NFormItem>
           <NFormItem :label="t('settings.fontSize')">
             <NInputNumber v-model:value="s.fontSize" :min="10" :max="20" style="width: 100%" />

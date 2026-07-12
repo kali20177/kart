@@ -132,7 +132,8 @@ export interface AppSettings {
   bufferLimit: number
   // 显示
   defaultView: DataMode
-  theme: ThemeMode
+  // 主题
+  themeId: string
   fontSize: number
   locale: 'zh-CN' | 'en-US'
   // 波形

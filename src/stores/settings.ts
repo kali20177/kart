@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
 import type { AppSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
+import { getTheme } from '@/themes'
 
 const DEFAULTS: AppSettings = {
   encoding: 'utf-8',
@@ -13,7 +14,7 @@ const DEFAULTS: AppSettings = {
   },
   bufferLimit: 5000,
   defaultView: 'ascii',
-  theme: 'dark',
+  themeId: 'glass-industrial-dark',
   fontSize: 13,
   locale: 'zh-CN',
   waveform: {
@@ -31,8 +32,30 @@ const DEFAULTS: AppSettings = {
 }
 
 export const useSettingsStore = defineStore('settings', () => {
+  // 从存储读取持久化数据
+  const persisted = storage.get<Partial<AppSettings & { theme?: string; themeMode?: string }>>('settings', {})
+
+  // 迁移：旧版 theme → themeId
+  if ('theme' in persisted) {
+    const old = persisted.theme
+    persisted.themeId = old === 'light' ? 'glass-industrial-light' : ('glass-industrial-dark' as string)
+    delete persisted.theme
+    storage.set('settings', persisted)
+  }
+  // 二次迁移：上一版 themeMode（已被删除）→ glass-industrial 对应主题
+  if ('themeMode' in persisted && !('themeId' in persisted)) {
+    persisted.themeId = persisted.themeMode === 'light' ? 'glass-industrial-light' : 'glass-industrial-dark'
+    delete persisted.themeMode
+    storage.set('settings', persisted)
+  }
+  // 三次迁移：上一轮 themeId='glass-industrial'（无 dark/light 后缀）→ 暗色
+  if (persisted.themeId && !getTheme(persisted.themeId)) {
+    persisted.themeId = 'glass-industrial-dark'
+    storage.set('settings', persisted)
+  }
+
   const settings = reactive<AppSettings>(
-    structuredClone({ ...DEFAULTS, ...storage.get('settings', {}) })
+    structuredClone({ ...DEFAULTS, ...persisted })
   )
 
   // 是否自动把配置落盘（菜单「文件 ▸ 自动保存配置」开关）。

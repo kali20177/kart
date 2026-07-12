@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, zhCN, dateZhCN, enUS, dateEnUS, type GlobalThemeOverrides } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import MenuBar from './components/MenuBar.vue'
 import ConnectionBar from './components/ConnectionBar.vue'
@@ -14,7 +14,7 @@ import StatusBar from './components/StatusBar.vue'
 import FileTransferDialog from './components/FileTransferDialog.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
-import { useIsDark } from './composables/useIsDark'
+import { useTheme } from './composables/useTheme'
 import { storage } from './composables/useStorage'
 import type { DataMode } from './types'
 import type { AsciiEntry } from './utils/ascii-table'
@@ -22,6 +22,9 @@ import type { AsciiEntry } from './utils/ascii-table'
 const serial = useSerialStore()
 const settingsStore = useSettingsStore()
 const { t, locale } = useI18n()
+
+// 主题（替代 useIsDark + 手动 themeOverrides）
+const { naiveTheme, naiveOverrides } = useTheme()
 
 // 语言切换：同步 settings → vue-i18n + html lang
 watch(
@@ -92,39 +95,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onColGripMove)
 })
 
-// 主题：system → 跟随媒体查询（逻辑抽到 useIsDark，WaveformChart 共用）
-const isDark = useIsDark()
-const naiveTheme = computed(() => (isDark.value ? darkTheme : null))
-const themeOverrides = computed<GlobalThemeOverrides>(() => ({
-  common: {
-    primaryColor: isDark.value ? '#58a6ff' : '#2563eb',
-    primaryColorHover: isDark.value ? '#79c0ff' : '#3b82f6',
-    primaryColorPressed: isDark.value ? '#388bfd' : '#1d4ed8',
-    borderRadius: '6px',
-  },
-  Button: {
-    borderRadiusTiny: '4px',
-    borderRadiusSmall: '6px',
-    borderRadiusMedium: '6px',
-  },
-  Input: {
-    borderRadius: '6px',
-  },
-  Select: {
-    menuBoxShadow: isDark.value
-      ? '0 10px 15px rgba(0,0,0,0.4), 0 4px 6px rgba(0,0,0,0.2)'
-      : '0 10px 15px rgba(0,0,0,0.08)',
-  },
-  Tag: {
-    borderRadius: '4px',
-  },
-}))
-
-watch(
-  isDark,
-  (dark) => document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light'),
-  { immediate: true }
-)
 watch(
   () => settingsStore.settings.fontSize,
   (px) => document.documentElement.style.setProperty('--bubble-font-size', px + 'px'),
@@ -164,7 +134,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides" :locale="naiveLocale" :date-locale="naiveDateLocale">
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="naiveOverrides" :locale="naiveLocale" :date-locale="naiveDateLocale">
     <NMessageProvider>
       <NDialogProvider>
       <div class="app">

@@ -6,12 +6,12 @@ import 'uplot/dist/uPlot.min.css'
 import { useI18n } from 'vue-i18n'
 import { useWaveformStore } from '@/stores/waveform'
 import { useSettingsStore } from '@/stores/settings'
-import { useIsDark } from '@/composables/useIsDark'
+import { useTheme } from '@/composables/useTheme'
 import { formatTimestamp } from '@/utils/message-format'
 
 const waveform = useWaveformStore()
 const settings = useSettingsStore()
-const isDark = useIsDark()
+const { isDark } = useTheme()
 const { t } = useI18n()
 
 const containerRef = ref<HTMLDivElement | null>(null)

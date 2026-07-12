@@ -1,0 +1,72 @@
+import type { ThemeDefinition } from '../types'
+
+/**
+ * Glass Industrial 亮色 — 浅色工业风。
+ */
+export const glassIndustrialLight: ThemeDefinition = {
+  id: 'glass-industrial-light',
+  name: 'Glass Industrial 亮色',
+  description: '浅色工业风（亮色），带毛玻璃和圆角',
+  isDark: false,
+  tokens: {
+    '--bg': '#edf2f7',
+    '--bg-panel': '#ffffff',
+    '--bg-elevated': '#f1f5f9',
+    '--border': '#d1d5db',
+    '--text': '#0f172a',
+    '--text-dim': '#64748b',
+    '--accent': '#2563eb',
+    '--accent-cyan': '#0891b2',
+    '--accent-teal': '#0d9488',
+    '--rx-bg': 'rgba(59, 130, 246, 0.08)',
+    '--rx-border': 'rgba(59, 130, 246, 0.25)',
+    '--rx-text': '#0f172a',
+    '--tx-bg': 'rgba(16, 185, 129, 0.08)',
+    '--tx-border': 'rgba(16, 185, 129, 0.25)',
+    '--tx-text': '#0f172a',
+    '--ok': '#16a34a',
+    '--warn': '#d97706',
+    '--err': '#dc2626',
+    '--search-highlight-bg': '#fde047',
+    '--search-highlight-text': '#0f172a',
+    '--search-active-bg': '#f59e0b',
+    '--search-active-text': '#0f172a',
+    '--glass-bg': 'rgba(255, 255, 255, 0.72)',
+    '--glass-border': 'rgba(0, 0, 0, 0.06)',
+    '--glass-blur': '12px',
+    '--glass-blur-sm': '8px',
+    '--shadow-sm': '0 1px 3px rgba(0, 0, 0, 0.08)',
+    '--shadow-md': '0 4px 6px rgba(0, 0, 0, 0.06)',
+    '--shadow-lg': '0 10px 15px rgba(0, 0, 0, 0.05)',
+    '--radius': '6px',
+    '--radius-sm': '4px',
+    '--radius-md': '6px',
+    '--radius-lg': '8px',
+    '--radius-xl': '10px',
+    '--gap': '8px',
+    '--mono-font': "'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace",
+    '--ui-font': "'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+  },
+  naiveOverrides: {
+    common: {
+      primaryColor: '#2563eb',
+      primaryColorHover: '#3b82f6',
+      primaryColorPressed: '#1d4ed8',
+      borderRadius: '6px',
+    },
+    Button: {
+      borderRadiusTiny: '4px',
+      borderRadiusSmall: '6px',
+      borderRadiusMedium: '6px',
+    },
+    Input: {
+      borderRadius: '6px',
+    },
+    Select: {
+      menuBoxShadow: '0 10px 15px rgba(0,0,0,0.08)',
+    },
+    Tag: {
+      borderRadius: '4px',
+    },
+  },
+}
