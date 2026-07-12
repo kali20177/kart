@@ -55,7 +55,9 @@ const DEFAULT_PREFS: ExportPreferences = {
   showDelta: true,
   showByteCount: true,
   showElapsed: false,
-  showError: true
+  showError: true,
+  includeDividers: false,
+  includeNotes: false
 }
 
 const saved = storage.get<ExportPreferences>('export-preferences', DEFAULT_PREFS)
@@ -70,6 +72,8 @@ const showDelta = ref(saved.showDelta ?? DEFAULT_PREFS.showDelta)
 const showByteCount = ref(saved.showByteCount ?? DEFAULT_PREFS.showByteCount)
 const showElapsed = ref(saved.showElapsed ?? DEFAULT_PREFS.showElapsed)
 const showError = ref(saved.showError ?? DEFAULT_PREFS.showError)
+const includeDividers = ref(saved.includeDividers ?? false)
+const includeNotes = ref(saved.includeNotes ?? false)
 
 const formatOptions = computed(() => [
   { label: 'TXT', value: 'txt' as const },
@@ -106,6 +110,17 @@ const filteredMessages = computed<Message[]>(() => {
 
 const messageCount = computed(() => filteredMessages.value.length)
 
+/** 按用户偏好过滤后的导出消息（排除分隔线 / 剥离标注） */
+const filteredForExport = computed<Message[]>(() => {
+  let list = filteredMessages.value
+  if (!includeDividers.value) list = list.filter((m) => m.kind !== 'divider')
+  if (!includeNotes.value) list = list.map((m) => {
+    if (m.kind === 'divider') return m // 分隔线标签不属于"标注"
+    return { ...m, note: undefined }
+  })
+  return list
+})
+
 /** 生成的文件名 */
 const defaultFilename = computed(() => {
   const now = new Date()
@@ -126,7 +141,7 @@ watch(format, () => {
 
 /** 预览前三行 */
 const previewLines = computed(() => {
-  const list = filteredMessages.value.slice(0, 3)
+  const list = filteredForExport.value.slice(0, 3)
   if (list.length === 0) return [t('export.emptyWarn')]
 
   if (isTxt.value) {
@@ -168,9 +183,10 @@ const previewLines = computed(() => {
     return json.split('\n').slice(0, 20)
   }
 
-  // binary: show summary
-  const totalBytes = list.reduce((sum, m) => sum + m.bytes.length, 0)
-  return [`[Binary] ${list.length} frames, ${totalBytes} total bytes`]
+  // binary: show summary (排除分隔线，它们无字节数据)
+  const binaryList = list.filter((m) => m.kind !== 'divider')
+  const totalBytes = binaryList.reduce((sum, m) => sum + m.bytes.length, 0)
+  return [`[Binary] ${binaryList.length} frames, ${totalBytes} total bytes`]
 })
 
 function savePreferences() {
@@ -183,7 +199,9 @@ function savePreferences() {
     showDelta: showDelta.value,
     showByteCount: showByteCount.value,
     showElapsed: showElapsed.value,
-    showError: showError.value
+    showError: showError.value,
+    includeDividers: includeDividers.value,
+    includeNotes: includeNotes.value
   })
 }
 
@@ -198,7 +216,7 @@ function handleAfterLeave() {
 }
 
 function doExport() {
-  const list = filteredMessages.value
+  const list = filteredForExport.value
   if (list.length === 0) {
     toast.warning(t('export.emptyWarn'))
     return
@@ -244,7 +262,10 @@ function doExport() {
     const json = exportMessagesAsJson(list, meta)
     downloadTextFile(filename.value, json)
   } else if (isBinary.value) {
-    const allBytes: Uint8Array[] = list.map((m) => m.bytes).filter((b) => b.length > 0)
+    const allBytes: Uint8Array[] = list
+      .filter((m) => m.kind !== 'divider')
+      .map((m) => m.bytes)
+      .filter((b) => b.length > 0)
     const merged = allBytes.length > 0 ? concatBytes(...allBytes) : new Uint8Array(0)
     downloadBinaryFile(filename.value, merged)
   }
@@ -309,6 +330,17 @@ function doExport() {
             <NCheckbox v-model:checked="showByteCount">{{ t('export.fieldByteCount') }}</NCheckbox>
             <NCheckbox v-model:checked="showElapsed">{{ t('export.fieldElapsed') }}</NCheckbox>
             <NCheckbox v-model:checked="showError">{{ t('export.fieldError') }}</NCheckbox>
+          </NSpace>
+        </NFormItem>
+      </template>
+
+      <!-- 分隔线／标注选项 -->
+      <template v-if="!isBinary">
+        <NDivider style="margin: 8px 0" />
+        <NFormItem :label="t('export.extraContent')">
+          <NSpace>
+            <NCheckbox v-model:checked="includeDividers">{{ t('export.includeDividers') }}</NCheckbox>
+            <NCheckbox v-model:checked="includeNotes">{{ t('export.includeNotes') }}</NCheckbox>
           </NSpace>
         </NFormItem>
       </template>

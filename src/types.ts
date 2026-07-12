@@ -22,10 +22,12 @@ export interface Message {
   timestamp: number
   /** 可选错误标记（如发送失败、解码替换） */
   error?: string
-  /** 消息种类：'frame'=普通帧，'file'=文件下发气泡（缺省 'frame' 向后兼容） */
-  kind?: 'frame' | 'file'
+  /** 消息种类：'frame'=普通帧，'file'=文件下发气泡，'divider'=分隔线（缺省 'frame' 向后兼容） */
+  kind?: 'frame' | 'file' | 'divider'
   /** 文件下发时指向 transfer store 中的状态 */
   transferId?: string
+  /** 用户标注文本：附在帧数据上的注释（仅 kind='frame' 有意义）；分隔线用作标签文本 */
+  note?: string
 }
 
 /** 串口连接参数 */
@@ -119,6 +121,8 @@ export interface ExportPreferences {
   showByteCount: boolean
   showElapsed: boolean
   showError: boolean
+  includeDividers: boolean
+  includeNotes: boolean
 }
 
 /** 全局设置 */

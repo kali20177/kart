@@ -170,12 +170,20 @@ function onRowContext(e: MouseEvent) {
 <template>
   <div
     class="row"
-    :class="[isTx ? 'row-tx' : 'row-rx', { selectable, selected, flash }]"
+    :class="[isTx ? 'row-tx' : 'row-rx', message.kind === 'divider' ? 'row-divider' : '', { selectable, selected, flash }]"
     @click="onRowClick"
     @contextmenu="onRowContext"
   >
     <span v-if="selectable" class="check" :class="{ checked: selected }">{{ selected ? '✓' : '' }}</span>
-    <div class="bubble" :class="isTx ? 'bubble-tx' : 'bubble-rx'">
+    <!-- 分隔线：不套 bubble 容器 -->
+    <div v-if="message.kind === 'divider'" class="divider">
+      <div class="divider-line" />
+      <span v-if="message.note" class="divider-label">{{ message.note }}</span>
+      <div class="divider-line" />
+      <span class="divider-time">{{ timeLabel }}</span>
+    </div>
+    <!-- 文件下发／普通帧：套 bubble 容器 -->
+    <div v-else class="bubble" :class="isTx ? 'bubble-tx' : 'bubble-rx'">
       <!-- 文件下发气泡：委托给 FileTransferBubble -->
       <FileTransferBubble
         v-if="message.kind === 'file' && message.transferId"
@@ -235,6 +243,12 @@ function onRowContext(e: MouseEvent) {
           </span>
         </div>
       </div>
+
+      <!-- 用户标注 -->
+      <div v-if="message.note" class="note-bar">
+        <span class="note-icon">📌</span>
+        <span class="note-text">{{ message.note }}</span>
+      </div>
       </template>
     </div>
   </div>
@@ -253,6 +267,9 @@ function onRowContext(e: MouseEvent) {
 }
 .row-tx {
   justify-content: flex-end;
+}
+.row-divider {
+  justify-content: center;
 }
 .check {
   flex: none;
@@ -367,6 +384,54 @@ function onRowContext(e: MouseEvent) {
   color: var(--text-dim);
   white-space: pre;
 }
+
+/* 分隔线样式 */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  width: 100%;
+}
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--glass-border);
+}
+.divider-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+.divider-time {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* 用户标注条 */
+.note-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--glass-border);
+}
+.note-icon {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+}
+.note-text {
+  font-size: 11px;
+  color: var(--accent-cyan);
+  line-height: 1.3;
+  word-break: break-all;
+}
+
 
 /* 搜索高亮：mark 默认黄底重置为透明，仅 .hl / .hl-active 着色 */
 mark {

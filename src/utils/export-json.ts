@@ -27,6 +27,7 @@ export interface JsonExportMessage {
   error: string | null
   kind: string
   transferId?: string
+  note?: string
 }
 
 export interface JsonExportRoot {
@@ -82,6 +83,16 @@ export function exportMessagesAsJson(messages: Message[], meta: SessionMeta): st
       totalTxFrames: meta.totalTxFrames
     },
     messages: messages.map((m) => {
+      if (m.kind === 'divider') {
+        const msg: JsonExportMessage = {
+          id: 0, timestamp: '--', timestampMs: 0,
+          direction: '--', bytesHex: '--', bytesBase64: '--', bytesDecoded: '--',
+          byteCount: 0, elapsedMs: 0, deltaMs: 0, error: null,
+          kind: 'divider'
+        }
+        if (m.note) msg.note = m.note
+        return msg
+      }
       const d = deltas.get(m.id)
       const msg: JsonExportMessage = {
         id: m.id,
@@ -98,6 +109,7 @@ export function exportMessagesAsJson(messages: Message[], meta: SessionMeta): st
         kind: m.kind ?? 'frame'
       }
       if (m.transferId) msg.transferId = m.transferId
+      if (m.note) msg.note = m.note
       return msg
     })
   }

@@ -84,6 +84,9 @@ export function useMessageSearch(opts: SearchOptions): SearchResult {
 
       // 关键字过滤
       if (kw) {
+        // 分隔线始终可见，不参与关键字过滤
+        if (m.kind === 'divider') return true
+
         if (mode === 'hex') {
           // 解析失败 → 不按关键字过滤（让用户看到错误徽标，列表不空）
           if (!parsed || !parsed.ok) return true

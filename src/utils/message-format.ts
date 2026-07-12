@@ -106,6 +106,14 @@ export function formatMessageLine(m: Message, opts: FormatLineOptions): string {
   const timeStyle = opts.timeStyle ?? 'short'
   const withDirection = opts.withDirection ?? true
 
+  // 分隔线特殊格式化（无字节数据，不参与常规帧格式化）
+  if (m.kind === 'divider') {
+    const prefix = timeStyle !== 'none' ? `[${formatTimestamp(m.timestamp, timeStyle)}]` : ''
+    const label = m.note ? ` ${m.note} ` : ''
+    const line = '─'.repeat(20)
+    return prefix ? `${prefix} ${line}${label}${line}` : `${line}${label}${line}`
+  }
+
   const content = viewMode === 'hex' ? bytesToHex(m.bytes) : decodeBytes(m.bytes, encoding)
 
   const prefixParts: string[] = []
@@ -138,6 +146,10 @@ export function formatMessageLine(m: Message, opts: FormatLineOptions): string {
 
   if (opts.withError && m.error) {
     line += ` [ERR: ${m.error}]`
+  }
+
+  if (m.note) {
+    line += ` [Note: ${m.note}]`
   }
 
   return line

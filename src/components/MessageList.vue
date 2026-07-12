@@ -2,7 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import { NButton, NInput, NButtonGroup, NTag, useDialog, useMessage } from 'naive-ui'
+import { NButton, NInput, NButtonGroup, NTag, NDropdown, NModal, useDialog, useMessage } from 'naive-ui'
 import MessageBubble from './MessageBubble.vue'
 import SendHistoryPopover from './SendHistoryPopover.vue'
 import { useMessagesStore } from '@/stores/messages'
@@ -143,15 +143,76 @@ function toggleSelect(id: number) {
   else selected.add(id)
 }
 
-/** 右键气泡：非多选→进入多选并选中该条；已多选→切换该条 */
-function onBubbleContext(item: Message) {
-  if (!multiSelect.value) {
+// —— 右键上下文菜单 ——
+const showContextMenu = ref(false)
+const contextX = ref(0)
+const contextY = ref(0)
+const contextMessage = ref<Message | null>(null)
+
+// 分隔线插入对话框
+const showDividerDialog = ref(false)
+const dividerText = ref('')
+const dividerTargetId = ref(0)
+
+// 标注编辑对话框
+const showNoteDialog = ref(false)
+const noteText = ref('')
+const noteTargetId = ref(0)
+
+function onBubbleContext(item: Message, ev: MouseEvent) {
+  ev.preventDefault()
+  contextMessage.value = item
+  contextX.value = ev.clientX
+  contextY.value = ev.clientY
+  showContextMenu.value = true
+}
+
+function onContextMenuSelect(key: string) {
+  showContextMenu.value = false
+  const target = contextMessage.value
+  if (!target) return
+
+  if (key === 'multi-select') {
     multiSelect.value = true
-    selected.add(item.id)
-  } else {
-    toggleSelect(item.id)
+    selected.add(target.id)
+  } else if (key === 'insert-divider') {
+    dividerTargetId.value = target.id
+    dividerText.value = ''
+    showDividerDialog.value = true
+  } else if (key === 'add-note') {
+    noteTargetId.value = target.id
+    noteText.value = target.note ?? ''
+    showNoteDialog.value = true
+  } else if (key === 'remove-note') {
+    messagesStore.setMessageNote(target.id, null)
   }
 }
+
+function onInsertDivider() {
+  messagesStore.insertDividerBefore(dividerTargetId.value, dividerText.value)
+  showDividerDialog.value = false
+}
+
+function onSaveNote() {
+  messagesStore.setMessageNote(noteTargetId.value, noteText.value || null)
+  showNoteDialog.value = false
+}
+
+const contextMenuOptions = computed(() => {
+  const target = contextMessage.value
+  const opts: any[] = [
+    { label: t('msgList.insertDividerBefore'), key: 'insert-divider' },
+  ]
+  if (target && target.kind !== 'divider' && target.kind !== 'file') {
+    opts.push({ label: t('msgList.addNote'), key: 'add-note' })
+    if (target.note) {
+      opts.push({ label: t('msgList.removeNote'), key: 'remove-note' })
+    }
+  }
+  opts.push({ type: 'divider' as const, key: 'd1' })
+  opts.push({ label: t('msgList.multiSelectMode'), key: 'multi-select' })
+  return opts
+})
 
 function onBubbleSelect(item: Message) {
   toggleSelect(item.id)
@@ -317,7 +378,7 @@ watch(
               :active-match="matchIndex === index && matchCount > 0"
               @resend="emit('resend', $event)"
               @select="onBubbleSelect(item)"
-              @contextmenu="onBubbleContext(item)"
+              @contextmenu="(e: MouseEvent) => onBubbleContext(item, e)"
             />
           </DynamicScrollerItem>
         </template>
@@ -348,6 +409,59 @@ watch(
       default-scope="selected"
       @close="showExportDialog = false"
     />
+
+    <!-- 右键上下文菜单 -->
+    <NDropdown
+      trigger="manual"
+      :show="showContextMenu"
+      :x="contextX"
+      :y="contextY"
+      :options="contextMenuOptions"
+      @clickoutside="showContextMenu = false"
+      @select="onContextMenuSelect"
+    />
+
+    <!-- 分隔线插入对话框 -->
+    <NModal v-model:show="showDividerDialog" preset="card" :title="t('msgList.insertDividerTitle')" style="width: 400px" :mask-closable="false">
+      <div class="marker-dialog-body">
+        <div class="marker-dialog-field">
+          <span class="marker-dialog-label">{{ t('msgList.dividerLabel') }}</span>
+          <NInput
+            v-model:value="dividerText"
+            type="textarea"
+            :rows="2"
+            :placeholder="t('msgList.dividerLabelPlaceholder')"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <NButton @click="showDividerDialog = false">{{ t('msgList.cancel') }}</NButton>
+          <NButton type="primary" @click="onInsertDivider">{{ t('msgList.insert') }}</NButton>
+        </div>
+      </template>
+    </NModal>
+
+    <!-- 标注编辑对话框 -->
+    <NModal v-model:show="showNoteDialog" preset="card" :title="t('msgList.editNoteTitle')" style="width: 400px" :mask-closable="false">
+      <div class="marker-dialog-body">
+        <div class="marker-dialog-field">
+          <span class="marker-dialog-label">{{ t('msgList.noteText') }}</span>
+          <NInput
+            v-model:value="noteText"
+            type="textarea"
+            :rows="3"
+            :placeholder="t('msgList.notePlaceholder')"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <NButton @click="showNoteDialog = false">{{ t('msgList.cancel') }}</NButton>
+          <NButton type="primary" @click="onSaveNote">{{ t('msgList.saveNote') }}</NButton>
+        </div>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -447,5 +561,21 @@ watch(
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 标记对话框 */
+.marker-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.marker-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.marker-dialog-label {
+  font-size: 13px;
+  color: var(--text-dim);
 }
 </style>
