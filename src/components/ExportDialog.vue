@@ -103,8 +103,9 @@ const showTextOptions = computed(() => isTxt.value || isCsv.value)
 /** 按方向和范围过滤后的消息 */
 const filteredMessages = computed<Message[]>(() => {
   let list = scope.value === 'selected' && props.selectedMessages ? props.selectedMessages : props.messages
-  if (direction.value === 'rx') list = list.filter((m) => m.direction === 'rx')
-  else if (direction.value === 'tx') list = list.filter((m) => m.direction === 'tx')
+  // 分隔线是结构性标记（direction='tx' 仅为占位），不受方向过滤影响
+  if (direction.value === 'rx') list = list.filter((m) => m.kind === 'divider' || m.direction === 'rx')
+  else if (direction.value === 'tx') list = list.filter((m) => m.kind === 'divider' || m.direction === 'tx')
   return list
 })
 
@@ -113,11 +114,13 @@ const messageCount = computed(() => filteredMessages.value.length)
 /** 按用户偏好过滤后的导出消息（排除分隔线 / 剥离标注） */
 const filteredForExport = computed<Message[]>(() => {
   let list = filteredMessages.value
-  if (!includeDividers.value) list = list.filter((m) => m.kind !== 'divider')
-  if (!includeNotes.value) list = list.map((m) => {
-    if (m.kind === 'divider') return m // 分隔线标签不属于"标注"
-    return { ...m, note: undefined }
-  })
+  if (!includeDividers.value) {
+    // 排除分隔线后，剩余消息均为普通帧 / 文件帧，可无条件根据 includeNotes 剥离标注
+    list = includeNotes.value ? list : list.map((m) => ({ ...m, note: undefined }))
+  } else {
+    // 分隔线保留：其 note 用作标签（非用户标注），不参与 includeNotes 剥离
+    list = includeNotes.value ? list : list.map((m) => m.kind === 'divider' ? m : { ...m, note: undefined })
+  }
   return list
 })
 

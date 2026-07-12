@@ -136,4 +136,44 @@ describe('exportMessagesAsJson', () => {
     const parsed = JSON.parse(json)
     expect(parsed.messages[0].bytesDecoded).toBe('汉')
   })
+
+  it('includes note when set on a frame', () => {
+    const messages: Message[] = [msg({ id: 1, note: 'kickoff' })]
+    const json = exportMessagesAsJson(messages, sessionMeta)
+    const parsed = JSON.parse(json)
+    expect(parsed.messages[0].note).toBe('kickoff')
+  })
+
+  it('omits note when not set', () => {
+    const messages: Message[] = [msg({ id: 1 })]
+    const json = exportMessagesAsJson(messages, sessionMeta)
+    const parsed = JSON.parse(json)
+    expect(parsed.messages[0].note).toBeUndefined()
+  })
+
+  it('renders divider as a placeholder message', () => {
+    const messages: Message[] = [
+      msg({ id: 1 }),
+      { id: 2, direction: 'tx', bytes: new Uint8Array(0), timestamp: 1700000000050, kind: 'divider', note: 'mark' }
+    ]
+    const json = exportMessagesAsJson(messages, sessionMeta)
+    const parsed = JSON.parse(json)
+    const d = parsed.messages[1]
+    expect(d.kind).toBe('divider')
+    expect(d.id).toBe(0)
+    expect(d.direction).toBe('--')
+    expect(d.bytesHex).toBe('--')
+    expect(d.byteCount).toBe(0)
+    expect(d.note).toBe('mark')
+  })
+
+  it('divider placeholder omits note when no label', () => {
+    const messages: Message[] = [
+      { id: 1, direction: 'tx', bytes: new Uint8Array(0), timestamp: 1700000000000, kind: 'divider' }
+    ]
+    const json = exportMessagesAsJson(messages, sessionMeta)
+    const parsed = JSON.parse(json)
+    expect(parsed.messages[0].note).toBeUndefined()
+    expect(parsed.messages[0].kind).toBe('divider')
+  })
 })

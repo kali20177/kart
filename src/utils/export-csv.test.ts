@@ -96,4 +96,41 @@ describe('exportMessagesAsCsv', () => {
     expect(csv).toContain(',RX,')
     expect(csv).toContain(',TX,')
   })
+
+  it('emits note column value when set', () => {
+    const messages: Message[] = [msg({ id: 1, note: 'kickoff' })]
+    const csv = exportMessagesAsCsv(messages, { encoding: 'utf-8' })
+    const line = csv.split('\n')[1]
+    expect(line.endsWith(',kickoff')).toBe(true)
+  })
+
+  it('emits empty note column when not set', () => {
+    const messages: Message[] = [msg({ id: 1 })]
+    const csv = exportMessagesAsCsv(messages, { encoding: 'utf-8' })
+    const line = csv.split('\n')[1]
+    expect(line.endsWith(',')).toBe(true)
+  })
+
+  it('renders divider as a placeholder row with 10 columns', () => {
+    const messages: Message[] = [
+      msg({ id: 1, direction: 'rx' }),
+      { id: 2, direction: 'tx', bytes: new Uint8Array(0), timestamp: 1700000000050, kind: 'divider', note: 'mark' },
+      msg({ id: 3, timestamp: 1700000000100 })
+    ]
+    const csv = exportMessagesAsCsv(messages, { encoding: 'utf-8' })
+    const lines = csv.split('\n')
+    expect(lines[2]).toBe('--,--,--,--,--,--,--,--,--,mark')
+    // 列数与 header 一致（10 列）
+    expect(lines[0].replace('﻿', '').split(',').length).toBe(10)
+    expect(lines[2].split(',').length).toBe(10)
+  })
+
+  it('escapes divider label that contains commas/quotes', () => {
+    const messages: Message[] = [
+      { id: 1, direction: 'tx', bytes: new Uint8Array(0), timestamp: 1700000000000, kind: 'divider', note: 'a, "b"' }
+    ]
+    const csv = exportMessagesAsCsv(messages, { encoding: 'utf-8' })
+    const line = csv.split('\n')[1]
+    expect(line.endsWith(',"a, ""b"""')).toBe(true)
+  })
 })

@@ -99,19 +99,6 @@ export const useMessagesStore = defineStore('messages', () => {
     scheduleFlush()
   }
 
-  /** 在消息列表末尾追加一条分隔线 */
-  function addDivider(text?: string) {
-    pending.push({
-      id: nextId++,
-      direction: 'tx',
-      bytes: new Uint8Array(0),
-      timestamp: Date.now(),
-      kind: 'divider',
-      note: text || undefined
-    })
-    scheduleFlush()
-  }
-
   /** 在指定消息之前插入分隔线（无 pending 阶段，直接写入已刷入的消息列表） */
   function insertDividerBefore(beforeId: number, text?: string) {
     const divider: Message = {
@@ -169,5 +156,5 @@ export const useMessagesStore = defineStore('messages', () => {
     if (paused.value) pauseStartTime.value = Date.now()
   }
 
-  return { messages, paused, pauseStartTime, rxFrames, txFrames, ingestRx, addTx, addFileTransfer, addDivider, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
+  return { messages, paused, pauseStartTime, rxFrames, txFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
 })

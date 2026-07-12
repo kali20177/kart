@@ -171,6 +171,40 @@ describe('formatMessageLine', () => {
     ).toBe('[14:23:05.128] RX: OK')
   })
 
+  it('adds Note suffix when note set', () => {
+    expect(
+      formatMessageLine(mk({ note: 'boot' }), {
+        viewMode: 'ascii',
+        encoding: 'utf-8',
+        withError: true
+      })
+    ).toBe('[14:23:05.128] RX: OK [Note: boot]')
+  })
+
+  it('divider: 线 + 居中标签', () => {
+    const line = formatMessageLine(
+      mk({ kind: 'divider', note: 'section A', bytes: new Uint8Array(0) }),
+      { viewMode: 'ascii', encoding: 'utf-8', timeStyle: 'short' }
+    )
+    expect(line).toBe(`[14:23:05.128] ${'─'.repeat(20)} section A ${'─'.repeat(20)}`)
+  })
+
+  it('divider: 无标签只有线', () => {
+    const line = formatMessageLine(
+      mk({ kind: 'divider', bytes: new Uint8Array(0) }),
+      { viewMode: 'ascii', encoding: 'utf-8', timeStyle: 'short' }
+    )
+    expect(line).toBe(`[14:23:05.128] ${'─'.repeat(20)}${'─'.repeat(20)}`)
+  })
+
+  it('divider: timeStyle none 无前缀', () => {
+    const line = formatMessageLine(
+      mk({ kind: 'divider', note: 'x', bytes: new Uint8Array(0) }),
+      { viewMode: 'ascii', encoding: 'utf-8', timeStyle: 'none' }
+    )
+    expect(line).toBe(`${'─'.repeat(20)} x ${'─'.repeat(20)}`)
+  })
+
   it('all fields combined', () => {
     expect(
       formatMessageLine(mk({ error: 'fail' }), {

@@ -42,6 +42,9 @@ export interface SearchResult {
  *   - 文本搜索：在 decodeBytes 解码后的字符串上匹配，命中为字符偏移（高亮前合并重叠区间）。
  *   - HEX 搜索：在原始 bytes 上匹配，命中为字节偏移（高亮按字节 Set 天然去重）。
  *
+ * 分隔线（kind='divider'）始终放行：它是结构性标记而非真实 TX 帧，
+ * 不受方向/时间/关键字/按标注过滤影响。
+ *
  * HEX 解析失败时：hexError 给出原因，filtered 不按关键字过滤（仅方向+时间），
  * matchRanges 为空、matchCount=0（导航隐藏），用户可看到错误并修正输入。
  */
@@ -75,6 +78,10 @@ export function useMessageSearch(opts: SearchOptions): SearchResult {
     const noteOnly = opts.hasNote?.value ?? false
 
     return messages.value.filter((m) => {
+      // 分隔线是结构性标记而非真实 TX 帧：始终放行，不受方向/时间/关键字过滤影响，
+      // 否则切到 RX 时插入的全部分隔线（连同标注标签）会一并消失
+      if (m.kind === 'divider') return true
+
       // 方向过滤
       if (dir !== 'all' && m.direction !== dir) return false
 
@@ -85,14 +92,11 @@ export function useMessageSearch(opts: SearchOptions): SearchResult {
         if (t1 !== null && tod > t1) return false
       }
 
-      // 仅显示有标注的消息
+      // 仅显示带标注的普通帧（分隔线不参与"按标注筛选"——它是结构标记，不是被标注对象）
       if (noteOnly && !m.note) return false
 
       // 关键字过滤
       if (kw) {
-        // 分隔线始终可见，不参与关键字过滤
-        if (m.kind === 'divider') return true
-
         if (mode === 'hex') {
           // 解析失败 → 不按关键字过滤（让用户看到错误徽标，列表不空）
           if (!parsed || !parsed.ok) return true

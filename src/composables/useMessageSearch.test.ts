@@ -9,6 +9,11 @@ function msg(direction: 'rx' | 'tx', bytes: number[], time: { h: number; m: numb
   return { id: ++seq, direction, bytes: new Uint8Array(bytes), timestamp: d.getTime() }
 }
 
+function divider(note: string, time: { h: number; m: number; s?: number; ms?: number }): Message {
+  const d = new Date(2026, 0, 1, time.h, time.m, time.s ?? 0, time.ms ?? 0)
+  return { id: ++seq, direction: 'tx', bytes: new Uint8Array(0), timestamp: d.getTime(), kind: 'divider', note: note || undefined }
+}
+
 // seq 为模块级计数器，每条用例前重置，保证 id 从 1 开始且不跨用例累积
 beforeEach(() => {
   seq = 0
@@ -21,6 +26,7 @@ function mount(messages: Message[], opts: {
   dirFilter?: 'all' | 'rx' | 'tx'
   timeStart?: number | null
   timeEnd?: number | null
+  hasNote?: boolean
 }) {
   const r = useMessageSearch({
     messages: ref(messages),
@@ -29,7 +35,8 @@ function mount(messages: Message[], opts: {
     encoding: ref(opts.encoding ?? 'utf-8'),
     dirFilter: ref(opts.dirFilter ?? 'all'),
     timeStart: ref(opts.timeStart ?? null),
-    timeEnd: ref(opts.timeEnd ?? null)
+    timeEnd: ref(opts.timeEnd ?? null),
+    hasNote: ref(opts.hasNote ?? false)
   })
   return r
 }
@@ -143,5 +150,65 @@ describe('useMessageSearch — 方向 + 时间过滤', () => {
     })
     expect(r.filtered.value.map((m) => m.id)).toEqual([1])
     expect(r.matchCount.value).toBe(1)
+  })
+})
+
+describe('useMessageSearch — 按标注筛选', () => {
+  it('hasNote=true 仅保留带标注的普通帧', () => {
+    const enc = new TextEncoder()
+    const ms = [
+      msg('rx', Array.from(enc.encode('A')), { h: 10, m: 0 }),
+      msg('rx', Array.from(enc.encode('B')), { h: 10, m: 1, ms: 0 })
+    ]
+    // 第二条加标注
+    ms[1].note = 'mark'
+    const r = mount(ms, { hasNote: true })
+    expect(r.filtered.value.map((m) => m.id)).toEqual([2])
+  })
+
+  it('hasNote=true 时分隔线作为结构标记始终保留（不带标注的亦保留）', () => {
+    const enc = new TextEncoder()
+    const ms = [
+      msg('rx', Array.from(enc.encode('A')), { h: 10, m: 0 }),
+      divider('', { h: 10, m: 1 }) // 无标签分隔线
+    ]
+    const r = mount(ms, { hasNote: true })
+    // 分隔线是结构标记，不受"按标注筛选"约束
+    expect(r.filtered.value.map((m) => m.id)).toEqual([2])
+  })
+})
+
+describe('useMessageSearch — 分隔线不受方向过滤', () => {
+  it('dirFilter=rx 仍保留分隔线（即便 direction=tx）', () => {
+    const enc = new TextEncoder()
+    const ms = [
+      msg('rx', Array.from(enc.encode('A')), { h: 10, m: 0 }),
+      divider('mark', { h: 10, m: 1 }),
+      msg('tx', Array.from(enc.encode('B')), { h: 10, m: 2 })
+    ]
+    const r = mount(ms, { dirFilter: 'rx' })
+    expect(r.filtered.value.map((m) => m.id)).toEqual([1, 2])
+  })
+
+  it('dirFilter=tx 仍保留分隔线', () => {
+    const enc = new TextEncoder()
+    const ms = [
+      msg('rx', Array.from(enc.encode('A')), { h: 10, m: 0 }),
+      divider('mark', { h: 10, m: 1 }),
+      msg('tx', Array.from(enc.encode('B')), { h: 10, m: 2 })
+    ]
+    const r = mount(ms, { dirFilter: 'tx' })
+    expect(r.filtered.value.map((m) => m.id)).toEqual([2, 3])
+  })
+
+  it('关键字过滤时分隔线始终可见', () => {
+    const enc = new TextEncoder()
+    const ms = [
+      msg('rx', Array.from(enc.encode('OK')), { h: 10, m: 0 }),
+      divider('section', { h: 10, m: 1 }),
+      msg('rx', Array.from(enc.encode('NX')), { h: 10, m: 2 })
+    ]
+    const r = mount(ms, { keyword: 'ok' })
+    expect(r.filtered.value.map((m) => m.id)).toEqual([1, 2])
   })
 })
