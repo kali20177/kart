@@ -43,7 +43,6 @@ const viewOptions = computed(() => [
 const themeOptions = computed(() => [
   { label: t('settings.dark'), value: 'dark' },
   { label: t('settings.light'), value: 'light' },
-  { label: t('settings.system'), value: 'system' }
 ])
 const numericTypeOptions = computed(() => [
   { label: 'uint8 (1B)', value: 'uint8' },

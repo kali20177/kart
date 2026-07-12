@@ -168,7 +168,6 @@ export default {
     theme: '主题',
     dark: '暗色',
     light: '亮色',
-    system: '跟随系统',
     fontSize: '字号 (px)',
     pauseNotify: '暂停提示',
     pauseNotifyOn: '恢复时提示缺失数据时间段',

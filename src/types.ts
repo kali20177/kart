@@ -77,7 +77,7 @@ export interface FrameConfig {
 }
 
 /** 主题 */
-export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemeMode = 'light' | 'dark'
 
 /** 波形数值类型 —— 决定每采样字节数与 DataView 读取方法 */
 export type NumericType =

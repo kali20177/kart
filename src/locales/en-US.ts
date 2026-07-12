@@ -166,7 +166,6 @@ export default {
     theme: 'Theme',
     dark: 'Dark',
     light: 'Light',
-    system: 'System',
     fontSize: 'Font Size (px)',
     pauseNotify: 'Pause Notification',
     pauseNotifyOn: 'Show missing data period on resume',
