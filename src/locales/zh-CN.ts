@@ -251,7 +251,6 @@ export default {
   },
   waveform: {
     points: '{n} 点',
-    channels: '{n} 通道',
     dragHistory: '拖拽回看历史',
     backSeconds: '回看 −{s}s',
     zoomLevel: '放大 ×{x}',

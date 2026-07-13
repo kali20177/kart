@@ -29,10 +29,12 @@ let lastH = 0
 
 // 光标 tooltip 状态
 const tooltipVisible = ref(false)
+const tooltipBelow = ref(false)
 const tooltipX = ref(0)
 const tooltipY = ref(0)
 const tooltipTime = ref('')
 const tooltipValues = ref<{ label: string; value: string; color: string }[]>([])
+const tooltipRef = ref<HTMLDivElement | null>(null)
 
 // 通道可见性：boolean[] 长度 = 当前通道数，true=可见
 const channelVisible = ref<boolean[]>([])
@@ -147,11 +149,18 @@ function onSetCursor(u: uPlot) {
   // u.cursor.left/top 相对于 uPlot 绘图区，需加上 over 在 container 内的偏移
   const overRect = u.over.getBoundingClientRect()
   const containerRect = containerRef.value!.getBoundingClientRect()
-  const cx = overRect.left - containerRect.left + u.cursor.left!
+  let cx = overRect.left - containerRect.left + u.cursor.left!
   const cy = overRect.top - containerRect.top + u.cursor.top!
+  // 顶部空间不足 -> 翻转到光标下方（transform 同步切到 translate(-50%, 0)，锚点变顶边中点）
+  const below = cy < 52
+  // 水平 clamp：tooltip 居中于 cx，半宽超出容器时贴边。
+  // 首帧 v-show=false（display:none）offsetWidth 为 0 -> 跳过 clamp，后续帧补上。
+  const halfW = (tooltipRef.value?.offsetWidth ?? 0) / 2
+  const cw = containerRect.width
+  if (halfW > 0 && cw > 0) cx = Math.min(Math.max(cx, halfW), cw - halfW)
   tooltipX.value = cx
-  const preferredY = cy - 12
-  tooltipY.value = preferredY < 40 ? cy + 20 : preferredY
+  tooltipBelow.value = below
+  tooltipY.value = below ? cy + 12 : cy - 12
   tooltipVisible.value = true
 }
 
@@ -384,12 +393,13 @@ watch(
   () => { if (chart) chart.redraw() }
 )
 
-// 通道数变更 → 同步可见性数组 + 重应用（syncData 中已触发 rebuild，此处兜底覆盖数组长度）
+// 通道数变更 → 仅同步可见性数组长度（新增默认可见）。不在此 applyChannelVisible()：
+// 旧 chart.series 还是旧长度，setSeries 越界是空操作；真正重应用由 syncData() 检测
+// series 数不匹配 → rebuild() → applyChannelVisible() 完成。
 watch(
   () => settings.settings.waveform.parse.channels,
   () => {
     syncChannelVisibility()
-    applyChannelVisible()
   }
 )
 
@@ -486,7 +496,9 @@ const zoomLevel = computed(() => {
     <div ref="containerRef" class="chart-area">
       <div
         v-show="tooltipVisible"
+        ref="tooltipRef"
         class="cursor-tooltip"
+        :class="{ below: tooltipBelow }"
         :style="{ left: tooltipX + 'px', top: tooltipY + 'px' }"
       >
         <div class="tooltip-time">{{ tooltipTime }}</div>
@@ -543,6 +555,9 @@ const zoomLevel = computed(() => {
   white-space: nowrap;
   transform: translate(-50%, -100%);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.cursor-tooltip.below {
+  transform: translate(-50%, 0);
 }
 .tooltip-time {
   opacity: 0.7;

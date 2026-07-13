@@ -245,7 +245,6 @@ export default {
   },
   waveform: {
     points: '{n} pts',
-    channels: '{n} ch',
     dragHistory: 'Drag to review history',
     backSeconds: 'Review −{s}s',
     zoomLevel: 'Zoom ×{x}',
