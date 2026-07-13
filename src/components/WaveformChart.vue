@@ -27,6 +27,13 @@ let rafId: number | null = null
 let lastW = 0
 let lastH = 0
 
+// 光标 tooltip 状态
+const tooltipVisible = ref(false)
+const tooltipX = ref(0)
+const tooltipY = ref(0)
+const tooltipTime = ref('')
+const tooltipValues = ref<{ label: string; value: string; color: string }[]>([])
+
 /** 从 tokens.css 读主题色 —— uPlot 不吃 CSS 变量，需 JS 读 computed style */
 function cssVar(name: string): string {
   if (typeof document === 'undefined') return ''
@@ -38,6 +45,16 @@ function themeColors() {
     border: cssVar('--border') || '#2f3136',
     textDim: cssVar('--text-dim') || '#7a808b'
   }
+}
+
+/** 格式化单个采样值：整数直接显示，浮点保留适当精度 */
+function formatSampleValue(v: number, type: string): string {
+  if (Number.isInteger(v)) return String(v)
+  if (type === 'float32' || type === 'float64') {
+    if (Math.abs(v) < 0.001 && v !== 0) return v.toExponential(3)
+    return v.toFixed(Math.abs(v) < 1000 ? 4 : 2)
+  }
+  return String(Math.round(v))
 }
 
 function channels(): number {
@@ -72,6 +89,43 @@ function drawResumeBreak(u: uPlot) {
   ctx.restore()
 }
 
+/** 光标移动时更新 tooltip：读取各通道值并定位浮动提示 */
+function onSetCursor(u: uPlot) {
+  const idx = u.cursor.idx
+  if (idx == null || idx < 0 || panActive) {
+    tooltipVisible.value = false
+    return
+  }
+  const ch = channels()
+  const vals: { label: string; value: string; color: string }[] = []
+  for (let i = 0; i < ch; i++) {
+    const v = u.data[i + 1]?.[idx]
+    if (v != null) {
+      vals.push({
+        label: `CH${i + 1}`,
+        value: formatSampleValue(v as number, settings.settings.waveform.parse.type),
+        color: PALETTE[i % PALETTE.length]
+      })
+    }
+  }
+  if (vals.length === 0) {
+    tooltipVisible.value = false
+    return
+  }
+  tooltipValues.value = vals
+  tooltipTime.value = formatTimestamp(u.data[0][idx] as number, 'short')
+
+  // u.cursor.left/top 相对于 uPlot 绘图区，需加上 over 在 container 内的偏移
+  const overRect = u.over.getBoundingClientRect()
+  const containerRect = containerRef.value!.getBoundingClientRect()
+  const cx = overRect.left - containerRect.left + u.cursor.left!
+  const cy = overRect.top - containerRect.top + u.cursor.top!
+  tooltipX.value = cx
+  const preferredY = cy - 12
+  tooltipY.value = preferredY < 40 ? cy + 20 : preferredY
+  tooltipVisible.value = true
+}
+
 function buildOpts(ch: number, w: number, h: number): uPlot.Options {
   const c = themeColors()
   const series: uPlot.Series[] = [
@@ -103,11 +157,17 @@ function buildOpts(ch: number, w: number, h: number): uPlot.Options {
         size: 56
       }
     ],
-    // 关闭 uPlot 默认拖框放大（drag.setScale）；x/y:false 彻底不画选择框。
-    // 暂停时的回看平移由组件自实现（见 onPanDown），不复用 uPlot 的 drag。
-    cursor: { points: { show: false }, drag: { setScale: false, x: false, y: false } },
+    // 光标：X 轴锁定垂直竖线，不显示数据点标记，禁用 uPlot 自带拖拽缩放
+    cursor: {
+      show: true,
+      x: true,
+      y: false,
+      points: { show: false },
+      drag: { setScale: false, x: false, y: false }
+    },
     hooks: {
-      draw: [drawResumeBreak]
+      draw: [drawResumeBreak],
+      setCursor: [onSetCursor]
     }
   }
 }
@@ -146,6 +206,7 @@ let panStartOffset = 0
 function onPanDown(e: PointerEvent) {
   if (!chart || !waveform.paused) return
   e.preventDefault()
+  tooltipVisible.value = false
   panActive = true
   panStartX = e.clientX
   panStartOffset = waveform.viewOffset
@@ -367,7 +428,19 @@ const zoomLevel = computed(() => {
       </NButton>
       <NButton size="tiny" @click="waveform.clear()">{{ t('waveform.clear') }}</NButton>
     </div>
-    <div ref="containerRef" class="chart-area" />
+    <div ref="containerRef" class="chart-area">
+      <div
+        v-show="tooltipVisible"
+        class="cursor-tooltip"
+        :style="{ left: tooltipX + 'px', top: tooltipY + 'px' }"
+      >
+        <div class="tooltip-time">{{ tooltipTime }}</div>
+        <div v-for="v in tooltipValues" :key="v.label" class="tooltip-ch">
+          <span class="tooltip-dot" :style="{ background: v.color }" />
+          <span>{{ v.label }}: {{ v.value }}</span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -393,11 +466,44 @@ const zoomLevel = computed(() => {
   flex: 1;
   min-height: 0;
   background: var(--bg-panel);
+  position: relative;
 }
 .chart-area :deep(.uplot-wrap) {
   font-family: var(--mono-font);
 }
 .chart-area :deep(.u-legend) {
   font-size: 11px;
+}
+.cursor-tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.tooltip-time {
+  opacity: 0.7;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.tooltip-ch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tooltip-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 </style>
