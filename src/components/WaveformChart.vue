@@ -34,6 +34,34 @@ const tooltipY = ref(0)
 const tooltipTime = ref('')
 const tooltipValues = ref<{ label: string; value: string; color: string }[]>([])
 
+// 通道可见性：boolean[] 长度 = 当前通道数，true=可见
+const channelVisible = ref<boolean[]>([])
+
+/** 确保 channelVisible 长度与通道数一致（新增默认可见，多余丢弃） */
+function syncChannelVisibility() {
+  const ch = channels()
+  const arr = channelVisible.value
+  while (arr.length < ch) arr.push(true)
+  if (arr.length > ch) arr.length = ch
+}
+
+/** 切换单个通道可见性：直接操作 uPlot series 显隐，不重建图表 */
+function toggleChannel(i: number) {
+  const arr = channelVisible.value
+  if (i < 0 || i >= arr.length) return
+  arr[i] = !arr[i]
+  if (chart) chart.setSeries(i + 1, { show: arr[i] })
+}
+
+/** 将所有通道的可见性应用到当前 uPlot 实例（重建后调用） */
+function applyChannelVisible() {
+  if (!chart) return
+  const arr = channelVisible.value
+  for (let i = 0; i < arr.length; i++) {
+    chart.setSeries(i + 1, { show: arr[i] })
+  }
+}
+
 /** 从 tokens.css 读主题色 —— uPlot 不吃 CSS 变量，需 JS 读 computed style */
 function cssVar(name: string): string {
   if (typeof document === 'undefined') return ''
@@ -99,6 +127,7 @@ function onSetCursor(u: uPlot) {
   const ch = channels()
   const vals: { label: string; value: string; color: string }[] = []
   for (let i = 0; i < ch; i++) {
+    if (!channelVisible.value[i]) continue
     const v = u.data[i + 1]?.[idx]
     if (v != null) {
       vals.push({
@@ -186,12 +215,14 @@ function rebuild() {
   const el = containerRef.value
   if (!el) return
   destroyChart()
+  syncChannelVisibility()
   const w = el.clientWidth || lastW || 600
   const h = el.clientHeight || lastH || 300
   lastW = w
   lastH = h
   const opts = buildOpts(channels(), w, h)
   chart = new uPlot(opts, waveform.data as unknown as uPlot.AlignedData, el)
+  applyChannelVisible()
   bindPan()
   bindZoom()
 }
@@ -353,6 +384,15 @@ watch(
   () => { if (chart) chart.redraw() }
 )
 
+// 通道数变更 → 同步可见性数组 + 重应用（syncData 中已触发 rebuild，此处兜底覆盖数组长度）
+watch(
+  () => settings.settings.waveform.parse.channels,
+  () => {
+    syncChannelVisibility()
+    applyChannelVisible()
+  }
+)
+
 onMounted(() => {
   rebuild()
   const el = containerRef.value
@@ -406,7 +446,22 @@ const zoomLevel = computed(() => {
   <div class="wave-wrap">
     <div class="toolbar">
       <NTag size="small" :bordered="false">{{ t('waveform.points', { n: pointCount }) }}</NTag>
-      <NTag size="small" :bordered="false">{{ t('waveform.channels', { n: channels() }) }}</NTag>
+      <NButton
+        v-for="i in channels()"
+        :key="i"
+        size="tiny"
+        :secondary="!channelVisible[i - 1]"
+        :style="channelVisible[i - 1] ? {
+          borderColor: PALETTE[(i - 1) % PALETTE.length],
+          color: PALETTE[(i - 1) % PALETTE.length],
+        } : {}"
+        @click="toggleChannel(i - 1)"
+      >
+        <span class="ch-dot" :style="{
+          background: channelVisible[i - 1] ? PALETTE[(i - 1) % PALETTE.length] : '#888'
+        }" />
+        CH{{ i }}
+      </NButton>
       <NTag v-if="waveform.paused" size="small" :bordered="false" type="info">{{ t('waveform.dragHistory') }}</NTag>
       <NTag v-if="waveform.viewOffset > 0" size="small" :bordered="false" type="warning">
         {{ t('waveform.backSeconds', { s: backSeconds.toFixed(1) }) }}
@@ -504,6 +559,14 @@ const zoomLevel = computed(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  flex-shrink: 0;
+}
+.ch-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
   flex-shrink: 0;
 }
 </style>
