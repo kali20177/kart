@@ -255,6 +255,9 @@ export default {
     clear: 'Clear',
     pauseNotice: 'Data not shown during pause: {start} – {end} ({dur}s)',
     breakLabel: '⏸ Break',
+    export: 'Export',
+    exportCsvVisible: 'CSV (Visible)',
+    exportCsvFull: 'CSV (Full History)',
   },
   fileTransfer: {
     dialogTitle: 'File Transfer',

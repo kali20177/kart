@@ -261,6 +261,9 @@ export default {
     clear: '清空',
     pauseNotice: '暂停期间未显示数据: {start} – {end} ({dur}s)',
     breakLabel: '⏸ 断点',
+    export: '导出',
+    exportCsvVisible: 'CSV（可见窗口）',
+    exportCsvFull: 'CSV（完整历史）',
   },
   fileTransfer: {
     dialogTitle: '文件下发',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
-import { NButton, NTag, useMessage } from 'naive-ui'
+import { NButton, NTag, NDropdown, useMessage } from 'naive-ui'
+import type { DropdownOption } from 'naive-ui'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useI18n } from 'vue-i18n'
@@ -8,6 +9,8 @@ import { useWaveformStore } from '@/stores/waveform'
 import { useSettingsStore } from '@/stores/settings'
 import { useTheme } from '@/composables/useTheme'
 import { formatTimestamp } from '@/utils/message-format'
+import { exportWaveformAsCsv, type WaveformExportMeta } from '@/utils/export-waveform-csv'
+import { downloadTextFile } from '@/utils/download'
 
 const waveform = useWaveformStore()
 const settings = useSettingsStore()
@@ -450,6 +453,34 @@ const zoomLevel = computed(() => {
   const mp = settings.settings.waveform.maxPoints
   return mp / Math.max(1, waveform.viewSize)
 })
+
+// —— 导出下拉菜单 ——
+const exportOptions = computed<DropdownOption[]>(() => [
+  { label: t('waveform.exportCsvVisible'), key: 'csv-visible' },
+  { label: t('waveform.exportCsvFull'), key: 'csv-full' },
+])
+
+function generateExportFilename(ext: string): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  return `waveform-${stamp}.${ext}`
+}
+
+function handleExport(key: string) {
+  const scope = key === 'csv-visible' ? 'visible' : 'full'
+  const sourceData = scope === 'visible' ? waveform.data : waveform.history
+  const meta: WaveformExportMeta = {
+    sampleRate: settings.settings.waveform.sampleRate,
+    numericType: settings.settings.waveform.parse.type,
+    channels: settings.settings.waveform.parse.channels,
+    littleEndian: settings.settings.waveform.parse.littleEndian,
+    scope,
+    exportedAt: Date.now(),
+  }
+  const content = exportWaveformAsCsv(sourceData, channelVisible.value, meta)
+  downloadTextFile(generateExportFilename('csv'), content)
+}
 </script>
 
 <template>
@@ -492,6 +523,9 @@ const zoomLevel = computed(() => {
         {{ waveform.paused ? t('waveform.paused') : t('waveform.pause') }}
       </NButton>
       <NButton size="tiny" @click="waveform.clear()">{{ t('waveform.clear') }}</NButton>
+      <NDropdown trigger="click" :options="exportOptions" @select="handleExport">
+        <NButton size="tiny">{{ t('waveform.export') }}</NButton>
+      </NDropdown>
     </div>
     <div ref="containerRef" class="chart-area">
       <div
