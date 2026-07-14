@@ -208,6 +208,13 @@ function savePreferences() {
   })
 }
 
+// 偏好随改动即时持久化：下次打开即恢复上次选择，而非仅在完成导出时才保存
+// （否则改了格式却取消/关闭，选择会丢失，回落到上次成功导出的格式）
+watch(
+  [format, direction, dataMode, timeStyle, showFrameNum, showDelta, showByteCount, showElapsed, showError, includeDividers, includeNotes],
+  savePreferences
+)
+
 const showExport = ref(true)
 
 function handleClose() {
@@ -224,8 +231,6 @@ function doExport() {
     toast.warning(t('export.emptyWarn'))
     return
   }
-
-  savePreferences()
 
   if (isTxt.value) {
     const deltas = computeDeltas(list)
