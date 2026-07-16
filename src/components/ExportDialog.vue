@@ -47,7 +47,7 @@ type DirectionFilter = 'all' | 'rx' | 'tx'
 type TimeStyleVal = 'full' | 'short' | 'none'
 
 const DEFAULT_PREFS: ExportPreferences = {
-  format: 'txt',
+  format: 'csv',
   direction: 'all',
   dataMode: 'ascii',
   timeStyle: 'full',
