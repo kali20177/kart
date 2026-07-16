@@ -85,6 +85,12 @@ export default {
   },
   status: {
     notConnected: 'Disconnected',
+    sessionDuration: 'Session duration',
+    rxFramesTip: 'RX frames / frame rate',
+    txFramesTip: 'TX frames / frame rate',
+    rxBytesTip: 'RX bytes / byte rate',
+    txBytesTip: 'TX bytes / byte rate',
+    bufferTip: 'Buffer usage: {used} / {limit}',
   },
   msgList: {
     all: 'All',

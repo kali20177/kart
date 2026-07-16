@@ -85,6 +85,12 @@ export default {
   },
   status: {
     notConnected: '未连接',
+    sessionDuration: '会话时长',
+    rxFramesTip: 'RX 帧数 / 帧速率',
+    txFramesTip: 'TX 帧数 / 帧速率',
+    rxBytesTip: 'RX 字节数 / 字节速率',
+    txBytesTip: 'TX 字节数 / 字节速率',
+    bufferTip: '缓冲使用率：已用 {used} / 上限 {limit}',
   },
   msgList: {
     all: '全部',
