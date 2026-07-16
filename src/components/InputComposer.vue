@@ -352,6 +352,8 @@ onBeforeUnmount(() => {
   margin-bottom: 6px;
   line-height: 1.4;
   word-break: break-all;
+  max-height: 3.6em;
+  overflow-y: auto;
 }
 .preview-row.bad {
   color: var(--err);
