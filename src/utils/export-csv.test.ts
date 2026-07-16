@@ -133,4 +133,43 @@ describe('exportMessagesAsCsv', () => {
     const line = csv.split('\n')[1]
     expect(line.endsWith(',"a, ""b"""')).toBe(true)
   })
+
+  it('respects dataMode=hex — only includes data_hex column', () => {
+    const messages: Message[] = [msg({ id: 1 })]
+    const csv = exportMessagesAsCsv(messages, { encoding: 'utf-8', dataMode: 'hex' })
+    const header = csv.split('\n')[0].replace('﻿', '')
+    expect(header).toBe('id,timestamp_abs,elapsed_ms,delta_ms,direction,byte_count,data_hex,error,note')
+    // 9 columns total (no data_ascii)
+    expect(header.split(',').length).toBe(9)
+    // data_ascii should NOT appear
+    expect(header).not.toContain('data_ascii')
+    // hex data should be present in the data row
+    const row = csv.split('\n')[1]
+    expect(row).toContain('48 65 6C 6C 6F')
+  })
+
+  it('respects dataMode=ascii — only includes data_ascii column', () => {
+    const messages: Message[] = [msg({ id: 1 })]
+    const csv = exportMessagesAsCsv(messages, { encoding: 'utf-8', dataMode: 'ascii' })
+    const header = csv.split('\n')[0].replace('﻿', '')
+    expect(header).toBe('id,timestamp_abs,elapsed_ms,delta_ms,direction,byte_count,data_ascii,error,note')
+    // 9 columns total (no data_hex)
+    expect(header.split(',').length).toBe(9)
+    // data_hex should NOT appear
+    expect(header).not.toContain('data_hex')
+    // ascii data should be present in the data row
+    const row = csv.split('\n')[1]
+    expect(row).toContain('Hello')
+  })
+
+  it('renders divider with correct column count in hex mode', () => {
+    const messages: Message[] = [
+      { id: 1, direction: 'tx', bytes: new Uint8Array(0), timestamp: 1700000000000, kind: 'divider', note: 'mark' }
+    ]
+    const csv = exportMessagesAsCsv(messages, { encoding: 'utf-8', dataMode: 'hex' })
+    const lines = csv.split('\n')
+    // 9 columns in hex mode: id,ts,elapsed,delta,dir,byte_count,data_hex,error,note
+    expect(lines[0].replace('﻿', '').split(',').length).toBe(9)
+    expect(lines[1].split(',').length).toBe(9)
+  })
 })

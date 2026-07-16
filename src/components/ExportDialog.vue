@@ -167,7 +167,7 @@ const previewLines = computed(() => {
   }
 
   if (isCsv.value) {
-    const lines = exportMessagesAsCsv(list, { encoding: settingsStore.settings.encoding }).split('\n')
+    const lines = exportMessagesAsCsv(list, { encoding: settingsStore.settings.encoding, dataMode: dataMode.value }).split('\n')
     return lines.filter((l) => l.trim()).slice(0, 4) // header + 3 rows
   }
 
@@ -254,7 +254,7 @@ function doExport() {
         .join('\n') + '\n'
     downloadTextFile(filename.value, lines)
   } else if (isCsv.value) {
-    const csv = exportMessagesAsCsv(list, { encoding: settingsStore.settings.encoding })
+    const csv = exportMessagesAsCsv(list, { encoding: settingsStore.settings.encoding, dataMode: dataMode.value })
     downloadTextFile(filename.value, csv)
   } else if (isJson.value) {
     const meta: SessionMeta = {
