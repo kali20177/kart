@@ -38,7 +38,7 @@ describe('exportMessagesAsJson', () => {
     const messages: Message[] = [msg({ id: 1 })]
     const json = exportMessagesAsJson(messages, sessionMeta)
     const parsed = JSON.parse(json)
-    expect(parsed.messages[0].bytesHex).toBe('414243')
+    expect(parsed.messages[0].bytesHex).toBe('41 42 43')
     expect(parsed.messages[0].bytesBase64).toBe('QUJD')
     expect(parsed.messages[0].byteCount).toBe(3)
     expect(parsed.messages[0].bytesDecoded).toBe('ABC')
@@ -175,5 +175,34 @@ describe('exportMessagesAsJson', () => {
     const parsed = JSON.parse(json)
     expect(parsed.messages[0].note).toBeUndefined()
     expect(parsed.messages[0].kind).toBe('divider')
+  })
+
+  it('respects dataMode=hex — omits bytesDecoded', () => {
+    const meta: SessionMeta = { ...sessionMeta, dataMode: 'hex' }
+    const messages: Message[] = [msg({ id: 1 })]
+    const json = exportMessagesAsJson(messages, meta)
+    const parsed = JSON.parse(json)
+    expect(parsed.messages[0].bytesHex).toBe('41 42 43')
+    expect(parsed.messages[0].bytesHex).toBeDefined()
+    expect(parsed.messages[0].bytesDecoded).toBeUndefined()
+  })
+
+  it('respects dataMode=ascii — omits bytesHex and bytesBase64', () => {
+    const meta: SessionMeta = { ...sessionMeta, dataMode: 'ascii' }
+    const messages: Message[] = [msg({ id: 1 })]
+    const json = exportMessagesAsJson(messages, meta)
+    const parsed = JSON.parse(json)
+    expect(parsed.messages[0].bytesDecoded).toBe('ABC')
+    expect(parsed.messages[0].bytesHex).toBeUndefined()
+    expect(parsed.messages[0].bytesBase64).toBeUndefined()
+  })
+
+  it('default dataMode includes all data fields', () => {
+    const messages: Message[] = [msg({ id: 1 })]
+    const json = exportMessagesAsJson(messages, sessionMeta)
+    const parsed = JSON.parse(json)
+    expect(parsed.messages[0].bytesHex).toBeDefined()
+    expect(parsed.messages[0].bytesBase64).toBeDefined()
+    expect(parsed.messages[0].bytesDecoded).toBeDefined()
   })
 })

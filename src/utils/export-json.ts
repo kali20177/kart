@@ -1,12 +1,14 @@
 import type { Message, Encoding } from '@/types'
 import { computeDeltas, formatTimestampISO } from './message-format'
 import { decodeBytes, sanitizeForExport } from './encoding'
+import { bytesToHex } from './hex'
 
 export interface SessionMeta {
   port: string | null
   baudRate: number
   connectedAt: number | null
   encoding: Encoding
+  dataMode?: 'ascii' | 'hex'
   totalRxBytes: number
   totalTxBytes: number
   totalRxFrames: number
@@ -54,21 +56,14 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-/** 紧凑 hex 串（无分隔符），JSON 导出用 */
-function bytesToHexCompact(bytes: Uint8Array): string {
-  const parts: string[] = []
-  for (let i = 0; i < bytes.length; i++) {
-    parts.push(bytes[i].toString(16).padStart(2, '0').toUpperCase())
-  }
-  return parts.join('')
-}
-
 /**
  * 将消息数组导出为 JSON 字符串（2 空格缩进）。
  */
 export function exportMessagesAsJson(messages: Message[], meta: SessionMeta): string {
   const deltas = computeDeltas(messages)
   const exportedAt = formatTimestampISO(Date.now())
+  const hexMode = meta.dataMode === 'hex'
+  const asciiMode = meta.dataMode === 'ascii'
 
   const root: JsonExportRoot = {
     exportedAt,
@@ -94,19 +89,28 @@ export function exportMessagesAsJson(messages: Message[], meta: SessionMeta): st
         return msg
       }
       const d = deltas.get(m.id)
+      const hexStr = bytesToHex(m.bytes)
+      const decodedStr = sanitizeForExport(decodeBytes(m.bytes, meta.encoding))
       const msg: JsonExportMessage = {
         id: m.id,
         timestamp: formatTimestampISO(m.timestamp),
         timestampMs: m.timestamp,
         direction: m.direction,
-        bytesHex: bytesToHexCompact(m.bytes),
+        bytesHex: hexStr,
         bytesBase64: bytesToBase64(m.bytes),
-        bytesDecoded: sanitizeForExport(decodeBytes(m.bytes, meta.encoding)),
+        bytesDecoded: decodedStr,
         byteCount: m.bytes.length,
         elapsedMs: d?.elapsedMs ?? 0,
         deltaMs: d?.deltaMs ?? 0,
         error: m.error ?? null,
         kind: m.kind ?? 'frame'
+      }
+      if (hexMode) {
+        delete msg.bytesDecoded
+      }
+      if (asciiMode) {
+        delete msg.bytesHex
+        delete msg.bytesBase64
       }
       if (m.transferId) msg.transferId = m.transferId
       if (m.note) msg.note = m.note

@@ -98,7 +98,7 @@ const isTxt = computed(() => format.value === 'txt')
 const isCsv = computed(() => format.value === 'csv')
 const isJson = computed(() => format.value === 'json')
 const isBinary = computed(() => format.value === 'binary')
-const showTextOptions = computed(() => isTxt.value || isCsv.value)
+const showTextOptions = computed(() => isTxt.value || isCsv.value || isJson.value)
 
 /** 按方向和范围过滤后的消息 */
 const filteredMessages = computed<Message[]>(() => {
@@ -177,6 +177,7 @@ const previewLines = computed(() => {
       baudRate: serialStore.options.baudRate,
       connectedAt: serialStore.sessionStartedAt,
       encoding: settingsStore.settings.encoding,
+      dataMode: dataMode.value,
       totalRxBytes: serialStore.rxBytes,
       totalTxBytes: serialStore.txBytes,
       totalRxFrames: messagesStore.rxFrames,
@@ -262,6 +263,7 @@ function doExport() {
       baudRate: serialStore.options.baudRate,
       connectedAt: serialStore.sessionStartedAt,
       encoding: settingsStore.settings.encoding,
+      dataMode: dataMode.value,
       totalRxBytes: serialStore.rxBytes,
       totalTxBytes: serialStore.txBytes,
       totalRxFrames: messagesStore.rxFrames,
