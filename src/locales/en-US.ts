@@ -147,7 +147,6 @@ export default {
     lineEnding: 'EOL',
     none: 'None',
     loop: 'Loop',
-    startLoop: 'Start Loop',
     stop: 'Stop',
     send: 'Send',
     hexPlaceholder: 'Enter HEX, multi-line OK; e.g. AA 55 01 0x02; Ctrl+Enter to send, Alt+↑/↓ for history',

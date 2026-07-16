@@ -147,7 +147,6 @@ export default {
     lineEnding: '行尾',
     none: '无',
     loop: '循环',
-    startLoop: '开始循环',
     stop: '停止',
     send: '发送',
     hexPlaceholder: '输入 HEX，可多行（换行仅作分隔）；如 AA 55 01 0x02 ；Ctrl+Enter 发送，Alt+↑/↓ 翻历史',

@@ -285,20 +285,19 @@ onBeforeUnmount(() => {
           @keydown="onKeydown"
         />
       </div>
-      <span v-if="repeatOn" class="loop-btn-wrap" :class="{ 'is-looping': repeating }">
+      <NButton :title="t('fileTransfer.attachFile')" @click="onOpenFileTransfer" :disabled="repeating" style="margin-right: 4px">📎</NButton>
+      <span class="send-btn-wrap" :class="{ 'is-looping': repeatOn && repeating }">
         <NButton
-          :type="repeating ? 'error' : 'warning'"
-          @click="toggleRepeat"
+          :type="repeatOn && repeating ? 'error' : 'primary'"
+          @click="repeatOn ? toggleRepeat() : onSend()"
         >
-          <template v-if="repeating">
+          <template v-if="repeatOn && repeating">
             <span class="spinner" />
             {{ t('composer.stop') }}
           </template>
-          <template v-else>{{ t('composer.startLoop') }}</template>
+          <template v-else>{{ t('composer.send') }}</template>
         </NButton>
       </span>
-      <NButton :title="t('fileTransfer.attachFile')" @click="onOpenFileTransfer" :disabled="repeating" style="margin-right: 4px">📎</NButton>
-      <NButton type="primary" :disabled="repeating" @click="onSend">{{ t('composer.send') }}</NButton>
     </div>
   </div>
 </template>
@@ -413,15 +412,15 @@ onBeforeUnmount(() => {
   animation: loop-spin 0.8s linear infinite;
 }
 /* 用 wrapper + ::after 做光晕，避免被 Naive UI 自带的 box-shadow 覆盖 */
-.loop-btn-wrap {
+.send-btn-wrap {
   position: relative;
   display: inline-flex;
   border-radius: var(--radius);
 }
-.loop-btn-wrap.is-looping {
+.send-btn-wrap.is-looping {
   animation: loop-scale 1.2s ease-in-out infinite;
 }
-.loop-btn-wrap.is-looping::after {
+.send-btn-wrap.is-looping::after {
   content: '';
   position: absolute;
   inset: 0;
