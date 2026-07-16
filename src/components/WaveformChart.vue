@@ -20,8 +20,11 @@ const { t } = useI18n()
 const containerRef = ref<HTMLDivElement | null>(null)
 const toast = useMessage()
 
-// 通道配色（与主题无关，固定调色板，保证通道可辨识）
-const PALETTE = ['#4098fc', '#50c878', '#f0a850', '#ec5b5b', '#a855f7', '#06b6d4', '#ec4899', '#84cc16']
+// 通道配色：按通道数均分色相环，保证任意通道数下颜色不重复
+function channelColor(index: number, total: number): string {
+  const hue = total > 1 ? (index / total) * 360 : 0
+  return `hsl(${hue.toFixed(1)}, 65%, 55%)`
+}
 
 // uPlot 用 export = 导出，默认导入即兼得值与命名空间类型（uPlot.Options / uPlot.Series …）
 let chart: uPlot | null = null
@@ -138,7 +141,7 @@ function onSetCursor(u: uPlot) {
       vals.push({
         label: `CH${i + 1}`,
         value: formatSampleValue(v as number, settings.settings.waveform.parse.type),
-        color: PALETTE[i % PALETTE.length]
+        color: channelColor(i, ch)
       })
     }
   }
@@ -173,7 +176,7 @@ function buildOpts(ch: number, w: number, h: number): uPlot.Options {
     {}, // X（时间）系列 —— uPlot 约定 index 0
     ...Array.from({ length: ch }, (_, i) => ({
       label: `CH${i + 1}`,
-      stroke: PALETTE[i % PALETTE.length],
+      stroke: channelColor(i, ch),
       width: 1.5,
       points: { show: false },
       spanGaps: true
@@ -493,13 +496,13 @@ function handleExport(key: string) {
         size="tiny"
         :secondary="!channelVisible[i - 1]"
         :style="channelVisible[i - 1] ? {
-          borderColor: PALETTE[(i - 1) % PALETTE.length],
-          color: PALETTE[(i - 1) % PALETTE.length],
+          borderColor: channelColor(i - 1, channels()),
+          color: channelColor(i - 1, channels()),
         } : {}"
         @click="toggleChannel(i - 1)"
       >
         <span class="ch-dot" :style="{
-          background: channelVisible[i - 1] ? PALETTE[(i - 1) % PALETTE.length] : '#888'
+          background: channelVisible[i - 1] ? channelColor(i - 1, channels()) : '#888'
         }" />
         CH{{ i }}
       </NButton>
