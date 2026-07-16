@@ -194,6 +194,27 @@ export interface FileTransferConfig {
   injectSkipAckEveryN: number  // 0=off；每 N 包忽略 ACK
 }
 
+/** 录制输出格式 */
+export type RecordFormat = 'text' | 'csv'
+
+/** 录制器状态机 */
+export type RecordStatus = 'idle' | 'recording' | 'stopping' | 'error'
+
+/** 录制配置 */
+export interface RecordConfig {
+  format: RecordFormat
+}
+
+/** 录制运行时状态（StatusBar 读取，shallowRef 范式） */
+export interface RecordState {
+  status: RecordStatus
+  fileName: string
+  fileSize: number
+  startedAt: number
+  byteCount: number
+  error?: string
+}
+
 /** 预设标识 */
 export type TransferPresetId =
   | 'raw'          // 原始整包下发

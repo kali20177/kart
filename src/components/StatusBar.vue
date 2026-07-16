@@ -4,12 +4,14 @@ import { useSerialStore } from '@/stores/serial'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
 import { useTransferStore } from '@/stores/transfer'
+import { useRecorderStore } from '@/stores/recorder'
 import { useI18n } from 'vue-i18n'
 
 const serial = useSerialStore()
 const messages = useMessagesStore()
 const settings = useSettingsStore()
 const transferStore = useTransferStore()
+const recorder = useRecorderStore()
 const { t } = useI18n()
 
 function fmtBytes(n: number): string {
@@ -124,6 +126,18 @@ const bufferPct = computed(() => {
 
 const bufferWarning = computed(() => bufferPct.value >= 80)
 
+const recordDuration = computed(() => {
+  const s = recorder.state
+  if (s.status === 'idle' || !s.startedAt) return ''
+  const elapsed = Math.floor((Date.now() - s.startedAt) / 1000)
+  const h = Math.floor(elapsed / 3600)
+  const m = Math.floor((elapsed % 3600) / 60)
+  const sec = elapsed % 60
+  if (h > 0) return `${h}h ${m}m ${sec}s`
+  if (m > 0) return `${m}m ${sec}s`
+  return `${sec}s`
+})
+
 const signalList = computed(() => [
   { key: 'DCD', on: serial.signals.dcd },
   { key: 'CTS', on: serial.signals.cts },
@@ -195,6 +209,21 @@ const signalList = computed(() => [
         📎 {{ transferStore.activeTransfer.filename }}
         {{ Math.round((transferStore.activeTransfer.sent / transferStore.activeTransfer.total) * 100) }}%
         <span class="transfer-rate">{{ fmtBytes(transferStore.activeTransfer.bytesPerSec) }}/s</span>
+      </span>
+      <div class="divider" />
+    </template>
+
+    <!-- 录制指示 -->
+    <template v-if="recorder.state.status !== 'idle'">
+      <span class="record-indicator" :class="{ error: recorder.state.status === 'error' }">
+        <span class="record-dot" :class="{
+          recording: recorder.state.status === 'recording',
+          error: recorder.state.status === 'error'
+        }" />
+        <span class="record-file">{{ recorder.state.fileName }}</span>
+        <span class="record-size">{{ fmtBytes(recorder.state.fileSize) }}</span>
+        <span class="record-duration">{{ recordDuration }}</span>
+        <span v-if="recorder.state.error" class="record-error">{{ recorder.state.error }}</span>
       </span>
       <div class="divider" />
     </template>
@@ -342,5 +371,57 @@ const signalList = computed(() => [
 .transfer-rate {
   color: var(--text-dim);
   font-size: 11px;
+}
+
+/* ── 录制指示器 ── */
+.record-indicator {
+  color: var(--text);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.record-indicator.error {
+  color: var(--err, #e06060);
+}
+.record-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex: none;
+}
+.record-dot.recording {
+  background: #e04040;
+  animation: record-pulse 1.2s ease-in-out infinite;
+}
+.record-dot.error {
+  background: var(--err, #e06060);
+}
+@keyframes record-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px #e04040; }
+  50% { opacity: 0.3; box-shadow: 0 0 2px #e04040; }
+}
+.record-file {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.record-size {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.record-duration {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.record-error {
+  color: var(--err, #e06060);
+  font-size: 11px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

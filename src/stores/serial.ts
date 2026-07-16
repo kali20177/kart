@@ -47,10 +47,19 @@ export const useSerialStore = defineStore('serial', () => {
   // 同一份字节流被两个独立消费者处理。订阅早于 connect() 也不会漏数据。
   const externalDataListeners = new Set<(bytes: Uint8Array) => void>()
 
+  // TX 方向监听器（如 recorder store），在 driver.write() 成功后触发
+  const txDataListeners = new Set<(bytes: Uint8Array) => void>()
+
   /** 订阅原始 RX 字节流（在帧切分之前）。返回取消订阅函数。 */
   function onData(cb: (bytes: Uint8Array) => void): () => void {
     externalDataListeners.add(cb)
     return () => externalDataListeners.delete(cb)
+  }
+
+  /** 订阅原始 TX 字节流（driver.write 成功后）。返回取消订阅函数。 */
+  function onTxData(cb: (bytes: Uint8Array) => void): () => void {
+    txDataListeners.add(cb)
+    return () => txDataListeners.delete(cb)
   }
 
   /** 串口参数概要，如 "115200 8N1" */
@@ -162,6 +171,9 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       await driver.write(bytes)
       txBytes.value += bytes.length
+      if (txDataListeners.size > 0) {
+        for (const cb of txDataListeners) cb(bytes)
+      }
       messages.addTx(bytes)
       return { ok: true }
     } catch (e) {
@@ -180,6 +192,9 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       await driver.write(bytes)
       txBytes.value += bytes.length
+      if (txDataListeners.size > 0) {
+        for (const cb of txDataListeners) cb(bytes)
+      }
       if (record) messages.addTx(bytes)
       return { ok: true }
     } catch (e) {
@@ -195,6 +210,9 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       await driver.write(bytes)
       txBytes.value += bytes.length
+      if (txDataListeners.size > 0) {
+        for (const cb of txDataListeners) cb(bytes)
+      }
       messages.addTx(bytes)
       return { ok: true }
     } catch (e) {
@@ -235,6 +253,7 @@ export const useSerialStore = defineStore('serial', () => {
     send,
     sendRaw,
     resend,
+    onTxData,
     onData,
     reset
   }

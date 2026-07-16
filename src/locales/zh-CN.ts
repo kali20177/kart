@@ -36,6 +36,18 @@ export default {
   log: {
     empty: '暂无日志可导出',
   },
+  record: {
+    start: '录制',
+    stop: '停止',
+    startRecording: '开始录制',
+    stopRecording: '停止录制',
+    formatBinary: '二进制 (.bin)',
+    formatText: '文本 (.txt)',
+    notSupported: '当前环境不支持文件录制（请使用 Electron 或 Chrome/Edge 浏览器）',
+    errorWrite: '写入文件失败',
+    statusRecording: '录制中',
+    statusError: '录制错误',
+  },
   export: {
     title: '导出日志',
     format: '格式',

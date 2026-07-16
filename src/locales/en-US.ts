@@ -36,6 +36,18 @@ export default {
   log: {
     empty: 'No logs to export',
   },
+  record: {
+    start: 'Record',
+    stop: 'Stop',
+    startRecording: 'Start Recording',
+    stopRecording: 'Stop Recording',
+    formatBinary: 'Binary (.bin)',
+    formatText: 'Text (.txt)',
+    notSupported: 'File recording not supported (use Electron or Chrome/Edge)',
+    errorWrite: 'Failed to write file',
+    statusRecording: 'Recording',
+    statusError: 'Recording Error',
+  },
   export: {
     title: 'Export Log',
     format: 'Format',

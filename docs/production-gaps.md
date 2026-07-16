@@ -40,7 +40,7 @@
 16. **快速命令不支持变量/宏替换** — `QuickCommand.payload` 静态。缺计数器、时间戳、CRC 占位；无每命令独立循环发送。
 17. ✅ **波形缺测量与导出** — 已完成：`WaveformChart` 支持游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看，支持 CSV 导出波形数据。
 18. **自动重连是空开关** — `autoReconnect` 设置存在，无重连逻辑，无掉线提示。〔依赖驱动〕
-19. **缺少实时日志落盘** — 当前所有数据仅保留在内存 `messages` shallowRef 中，受 `bufferLimit`（默认 5000）约束。长时压测或现场抓日志场景下，几千帧几秒就满：
+19. ✅ **缺少实时日志落盘** — 已完成。原始字节流在帧切分之前通过 `serial.onData`/`onTxData` 双通道捕获，经 500ms/64KB 缓冲批量写入文件。平台抽象 `IFileWriter`（`src/composables/useFileWriter.ts`）：浏览器走 File System Access API（`showSaveFilePicker` + `FileSystemWritableFileStream`），Electron 走 `dialog.showSaveDialog` + `fs.createWriteStream` IPC。录制器 store（`src/stores/recorder.ts`）管理状态机（idle→recording→stopping→idle/error），支持断线自动停止、写入异常进入 error 状态。录制按钮+格式切换在 `ConnectionBar`，录制指示（脉动红点+文件名+文件大小+已录制时长）在 `StatusBar`，菜单项在 `MenuBar`。输出格式可选 `.txt`（带时间戳 HEX 行，含方向标记 RX/TX）或 `.csv`（timestamp,direction,hex,ascii 四列）。浏览器不支持 File System Access API 时按钮自动置灰。
     - **老化/稳定性测试**：设备连续运行 24h+，需要完整记录所有串口输出用于事后异常回溯。内存缓冲远远不够，必须流式写入磁盘。
     - **现场抓日志**：客户现场复现问题，可能需要抓取数小时数据带回实验室分析。
     - **二进制原始数据**：波形解析、协议分析等场景需要保留原始字节流（不经帧切分），以便后续用不同帧切分配置或不同采样率重新解析同一份数据。

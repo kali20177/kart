@@ -1,9 +1,29 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-// 阶段 1 占位桥：暴露运行平台与运行时版本（供「关于」展示 Chromium/Node/V8）。
-// 串口、存储等能力在阶段 2 接入。
+let winId: number | null = null
+
+async function getWinId(): Promise<number> {
+  if (winId === null) {
+    winId = await ipcRenderer.invoke('recorder:get-window-id') as number
+  }
+  return winId
+}
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   versions: process.versions,
-  toggleDevTools: () => ipcRenderer.send('toggle-devtools')
+  toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
+
+  recorder: {
+    openSaveDialog: (suggestedName: string) =>
+      ipcRenderer.invoke('recorder:open-save-dialog', suggestedName),
+    writeChunk: async (chunk: Uint8Array) => {
+      const id = await getWinId()
+      ipcRenderer.send('recorder:write-chunk', id, chunk)
+    },
+    closeFile: async () => {
+      const id = await getWinId()
+      ipcRenderer.send('recorder:close-file', id)
+    }
+  }
 })

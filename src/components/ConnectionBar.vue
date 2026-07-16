@@ -3,10 +3,11 @@ import { computed, h, nextTick, ref, type VNode, type VNodeChild } from 'vue'
 import { NSelect, NButton, NTooltip, NModal, NInput, useMessage } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { useSerialStore } from '@/stores/serial'
+import { useRecorderStore } from '@/stores/recorder'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
-import type { MockScenarioId } from '@/types'
+import type { MockScenarioId, RecordFormat } from '@/types'
 
 const { t } = useI18n()
 
@@ -16,7 +17,10 @@ const emit = defineEmits<{
 }>()
 
 const serial = useSerialStore()
+const recorder = useRecorderStore()
 const message = useMessage()
+
+const recordFormat = ref<RecordFormat>('text')
 
 const portOptions = computed(() => serial.ports.map((p) => ({ label: p, value: p })))
 
@@ -173,6 +177,14 @@ async function toggle() {
   if (serial.connected) await serial.disconnect()
   else await serial.connect()
 }
+
+async function startRecording() {
+  try {
+    await recorder.start({ format: recordFormat.value })
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : String(e))
+  }
+}
 </script>
 
 <template>
@@ -248,6 +260,44 @@ async function toggle() {
       style="width: 150px"
       @update:value="(v: MockScenarioId) => serial.setScenario(v)"
     />
+
+    <div class="divider" />
+
+    <!-- 录制控制 -->
+    <template v-if="recorder.supported">
+      <NButton
+        v-if="!recorder.isRecording"
+        size="small"
+        quaternary
+        :disabled="recorder.state.status === 'stopping'"
+        @click="startRecording"
+      >
+        ⏺ {{ t('record.start') }}
+      </NButton>
+      <NButton
+        v-else
+        size="small"
+        type="error"
+        quaternary
+        @click="recorder.stop()"
+      >
+        ⏹ {{ t('record.stop') }}
+      </NButton>
+      <NButtonGroup size="small">
+        <NButton
+          :type="recordFormat === 'text' ? 'primary' : 'default'"
+          size="small"
+          quaternary
+          @click="recordFormat = 'text'"
+        >txt</NButton>
+        <NButton
+          :type="recordFormat === 'csv' ? 'primary' : 'default'"
+          size="small"
+          quaternary
+          @click="recordFormat = 'csv'"
+        >csv</NButton>
+      </NButtonGroup>
+    </template>
 
     <div class="spacer" />
 

@@ -20,5 +20,23 @@ interface Window {
     platform: string
     versions?: Record<string, string | undefined>
     toggleDevTools?: () => void
+    recorder?: {
+      openSaveDialog(suggestedName: string): Promise<{ filePath: string; fileName: string } | null>
+      writeChunk(chunk: Uint8Array): Promise<void>
+      closeFile(): Promise<void>
+    }
   }
+  showSaveFilePicker?(options?: {
+    suggestedName?: string
+    types?: Array<{
+      description?: string
+      accept: Record<string, string[]>
+    }>
+  }): Promise<{
+    createWritable(): Promise<{
+      write(chunk: Uint8Array): Promise<void>
+      close(): Promise<void>
+    }>
+    name: string
+  }>
 }

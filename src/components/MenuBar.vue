@@ -6,6 +6,7 @@ import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
 import { useSerialStore } from '@/stores/serial'
 import { useCommandsStore } from '@/stores/commands'
+import { useRecorderStore } from '@/stores/recorder'
 import { storage } from '@/composables/useStorage'
 import ExportDialog from './ExportDialog.vue'
 import { useI18n } from 'vue-i18n'
@@ -15,6 +16,7 @@ const messages = useMessagesStore()
 const settingsStore = useSettingsStore()
 const serialStore = useSerialStore()
 const commandsStore = useCommandsStore()
+const recorder = useRecorderStore()
 const message = useMessage()
 const dialog = useDialog()
 
@@ -78,6 +80,11 @@ const fileMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.autoSave'), key: 'auto-save', icon: check(settingsStore.autoSave) },
   { type: 'divider', key: 'd1' },
   { label: t('menu.exportLog'), key: 'export-log' },
+  {
+    label: recorder.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording'),
+    key: 'toggle-recording',
+    disabled: recorder.state.status === 'stopping'
+  },
   { type: 'divider', key: 'd2' },
   { label: t('menu.resetDefaults'), key: 'reset-defaults' }
 ])
@@ -102,6 +109,15 @@ function handleSelect(key: string) {
         return
       }
       showExportDialog.value = true
+      break
+    case 'toggle-recording':
+      if (recorder.state.status === 'idle') {
+        recorder.start({ format: 'text' }).catch((e) => {
+          message.error(e instanceof Error ? e.message : String(e))
+        })
+      } else {
+        recorder.stop()
+      }
       break
     case 'reset-defaults':
       dialog.warning({
