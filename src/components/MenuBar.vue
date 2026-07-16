@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { computed, h, ref } from 'vue'
-import { NDropdown, NButton, NModal, useMessage } from 'naive-ui'
+import { NDropdown, NButton, NModal, useMessage, useDialog } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
+import { useSerialStore } from '@/stores/serial'
+import { useCommandsStore } from '@/stores/commands'
+import { storage } from '@/composables/useStorage'
 import ExportDialog from './ExportDialog.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 const messages = useMessagesStore()
 const settingsStore = useSettingsStore()
+const serialStore = useSerialStore()
+const commandsStore = useCommandsStore()
 const message = useMessage()
+const dialog = useDialog()
 
 const showAbout = ref(false)
 const showLicense = ref(false)
@@ -71,7 +77,9 @@ function check(selected: boolean) {
 const fileMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.autoSave'), key: 'auto-save', icon: check(settingsStore.autoSave) },
   { type: 'divider', key: 'd1' },
-  { label: t('menu.exportLog'), key: 'export-log' }
+  { label: t('menu.exportLog'), key: 'export-log' },
+  { type: 'divider', key: 'd2' },
+  { label: t('menu.resetDefaults'), key: 'reset-defaults' }
 ])
 
 const helpMenu = computed<DropdownOption[]>(() => [
@@ -94,6 +102,31 @@ function handleSelect(key: string) {
         return
       }
       showExportDialog.value = true
+      break
+    case 'reset-defaults':
+      dialog.warning({
+        title: t('menu.resetDefaults'),
+        content: t('menu.resetDefaultsConfirm'),
+        positiveText: t('menu.resetDefaults'),
+        negativeText: t('common.cancel'),
+        onPositiveClick: () => {
+          // 1. 设置 -> 默认（reset 改内存；autoSave=true 时 deep watch 自动落盘）
+          settingsStore.reset()
+          // 2. autoSave 开关本身也恢复默认 true（若原为 false，其 watch 会补落盘 settings）
+          settingsStore.autoSave = true
+          // 3. 串口参数 + 自定义波特率 -> 默认
+          serialStore.reset()
+          // 4. 快捷命令 -> 内置预设（watch 自动落盘）
+          commandsStore.resetToPresets()
+          // 5. 导出偏好 -> 清除（下次打开对话框用 DEFAULT_PREFS fallback）
+          storage.remove('export-preferences')
+          // 6. 面板布局 -> 清除持久值，并通知组件就地改回默认
+          storage.remove('app:rightWidth')
+          storage.remove('composer:inputHeight')
+          window.dispatchEvent(new CustomEvent('app:reset-layout'))
+          message.success(t('menu.resetDefaultsDone'))
+        }
+      })
       break
     case 'about':
       showAbout.value = true

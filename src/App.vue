@@ -56,7 +56,8 @@ const commandsCollapsed = ref(false)
 // 手柄在侧边栏左边缘：向左拖增大、向右拖减小。
 const COL_MIN = 200
 const COL_MAX = 480
-const rightWidth = ref(storage.get('app:rightWidth', 280))
+const DEFAULT_RIGHT_WIDTH = 280
+const rightWidth = ref(storage.get('app:rightWidth', DEFAULT_RIGHT_WIDTH))
 const dragging = ref(false)
 const rightStyle = computed(() =>
   commandsCollapsed.value ? {} : { width: rightWidth.value + 'px' }
@@ -91,8 +92,15 @@ function onColGripUp() {
   storage.set('app:rightWidth', rightWidth.value)
 }
 
+/** 「恢复默认设置」时就地重置侧边栏宽度 */
+function onResetLayout() {
+  rightWidth.value = DEFAULT_RIGHT_WIDTH
+  storage.set('app:rightWidth', DEFAULT_RIGHT_WIDTH)
+}
+
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onColGripMove)
+  window.removeEventListener('app:reset-layout', onResetLayout)
 })
 
 watch(
@@ -130,6 +138,7 @@ function onInsertAscii(e: AsciiEntry) {
 
 onMounted(() => {
   serial.refreshPorts()
+  window.addEventListener('app:reset-layout', onResetLayout)
 })
 </script>
 

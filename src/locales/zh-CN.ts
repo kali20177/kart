@@ -16,6 +16,12 @@ export default {
     shortcuts: '快捷键',
     devtools: '开发者工具',
     copy: '复制',
+    resetDefaults: '恢复默认设置',
+    resetDefaultsConfirm: '将把设置、串口参数、导出偏好、面板布局与快捷命令恢复为默认值。当前会话消息与发送历史保留。',
+    resetDefaultsDone: '已恢复默认设置',
+  },
+  common: {
+    cancel: '取消',
   },
   about: {
     version: '版本',

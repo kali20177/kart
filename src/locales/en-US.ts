@@ -16,6 +16,12 @@ export default {
     shortcuts: 'Keyboard Shortcuts',
     devtools: 'Developer Tools',
     copy: 'Copy',
+    resetDefaults: 'Restore Defaults',
+    resetDefaultsConfirm: 'Restores settings, serial options, export preferences, panel layout and quick commands to defaults. Current session messages and send history are kept.',
+    resetDefaultsDone: 'Defaults restored',
+  },
+  common: {
+    cancel: 'Cancel',
   },
   about: {
     version: 'Version',

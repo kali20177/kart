@@ -55,3 +55,38 @@ describe('serial store · 自定义波特率', () => {
     expect(s.customBaudRates).toEqual([])
   })
 })
+
+describe('serial store · reset', () => {
+  const PORT_KEY = 'serial-demo:portOptions'
+
+  it('恢复端口参数与自定义波特率默认值并落盘', () => {
+    const s = useSerialStore()
+    // 污染：改端口参数 + 加自定义波特率
+    s.options.baudRate = 9600
+    s.options.parity = 'even'
+    s.addCustomBaudRate(500000)
+    expect(s.customBaudRates.length).toBe(1)
+
+    s.reset()
+
+    // 内存：端口参数回默认
+    expect(s.options).toEqual({
+      baudRate: 115200,
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none',
+      flowControl: 'none'
+    })
+    // 内存：自定义波特率清空
+    expect(s.customBaudRates).toEqual([])
+    // 落盘
+    expect(JSON.parse(localStorage.getItem(PORT_KEY)!)).toEqual({
+      baudRate: 115200,
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none',
+      flowControl: 'none'
+    })
+    expect(localStorage.getItem(KEY)).toBe('[]')
+  })
+})

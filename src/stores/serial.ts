@@ -204,6 +204,14 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  /** 恢复串口相关默认配置（端口参数 + 自定义波特率），不影响连接/会话状态 */
+  function reset() {
+    Object.assign(options, DEFAULT_OPTS)
+    customBaudRates.value = []
+    storage.set('portOptions', { ...DEFAULT_OPTS })
+    storage.set('customBaudRates', [])
+  }
+
   return {
     ports,
     selectedPort,
@@ -227,6 +235,7 @@ export const useSerialStore = defineStore('serial', () => {
     send,
     sendRaw,
     resend,
-    onData
+    onData,
+    reset
   }
 })

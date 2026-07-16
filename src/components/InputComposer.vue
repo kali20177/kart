@@ -221,10 +221,20 @@ onMounted(async () => {
   await nextTick()
   const ta = getTextarea()
   if (ta) ta.style.height = `${inputHeight.value}px`
+  window.addEventListener('app:reset-layout', onResetLayout)
 })
+
+/** 「恢复默认设置」时就地重置输入框高度 */
+function onResetLayout() {
+  inputHeight.value = MIN_H * 2
+  storage.set(INPUT_HEIGHT_KEY, MIN_H * 2)
+  const ta = getTextarea()
+  if (ta) ta.style.height = `${MIN_H * 2}px`
+}
 
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onGripMove)
+  window.removeEventListener('app:reset-layout', onResetLayout)
 })
 </script>
 
