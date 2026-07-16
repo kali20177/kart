@@ -20,9 +20,9 @@ export interface JsonExportMessage {
   timestamp: string
   timestampMs: number
   direction: string
-  bytesHex: string
-  bytesBase64: string
-  bytesDecoded: string
+  bytesHex?: string
+  bytesBase64?: string
+  bytesDecoded?: string
   byteCount: number
   elapsedMs: number
   deltaMs: number
