@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
+import SendHistoryPopover from './SendHistoryPopover.vue'
 import { storage } from '@/composables/useStorage'
 import { parseHexInput, bytesToHex } from '@/utils/hex'
 import { encodeWithEscapes } from '@/utils/encoding'
@@ -264,8 +265,11 @@ onBeforeUnmount(() => {
         </span>
       </template>
 
-      <span v-if="sendPreview" class="hint" :class="{ bad: !sendPreview.ok }">{{ sendPreview.msg }}</span>
+      <div class="spacer" />
+      <SendHistoryPopover @to-composer="(t: string) => text = t" />
     </div>
+
+    <div v-if="sendPreview" class="preview-row" :class="{ bad: !sendPreview.ok }">{{ sendPreview.msg }}</div>
 
     <div class="input-row">
       <div class="input-wrap">
@@ -315,7 +319,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   flex-wrap: wrap;
 }
 .lbl {
@@ -338,13 +342,18 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 0 currentColor;
   animation: loop-pulse 1.2s ease-out infinite;
 }
-.hint {
+.spacer {
+  flex: 1;
+}
+.preview-row {
   font-size: 12px;
   color: var(--ok);
-  margin-left: auto;
   font-family: var(--mono-font);
+  margin-bottom: 6px;
+  line-height: 1.4;
+  word-break: break-all;
 }
-.hint.bad {
+.preview-row.bad {
   color: var(--err);
 }
 .input-row {
