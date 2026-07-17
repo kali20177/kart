@@ -149,4 +149,44 @@ describe('recorder store', () => {
     await recorder.stop()
     expect(recorder.state.status).toBe('idle')
   })
+
+  it('buffer overflow sets error and subsequent ingest is no-op', async () => {
+    vi.useFakeTimers()
+    const { recorder, rxCallbacks } = await setupStores()
+    await recorder.start()
+
+    // 单次注入足够大的原始数据：格式化后 ~18MB 超过 16MB 硬上限。
+    // 小 chunk 逐步累积会被 64KB 大小阈值 flush 清空，无法触发硬上限。
+    const hugeChunk = new Uint8Array(6 * 1024 * 1024)
+    rxCallbacks.forEach(cb => cb(hugeChunk))
+    // flushBuffer 是异步的，推进微任务
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(recorder.state.status).toBe('error')
+    expect(recorder.state.error).toContain('录制已停止')
+
+    // 之后 ingest 因 status !== 'recording' 直接返回
+    const statusAfter = recorder.state.status
+    rxCallbacks.forEach(cb => cb(new Uint8Array(1024)))
+    expect(recorder.state.status).toBe(statusAfter) // 仍是 error
+    vi.useRealTimers()
+  })
+
+  it('handlePageHide cleans up subscriptions and attempts flush', async () => {
+    const { recorder, rxCallbacks, txCallbacks } = await setupStores()
+    await recorder.start()
+
+    // 注入一些数据到缓冲区
+    const chunk = new Uint8Array(1024)
+    rxCallbacks.forEach(cb => cb(chunk))
+    txCallbacks.forEach(cb => cb(chunk))
+
+    // 派发 pagehide 事件
+    window.dispatchEvent(new Event('pagehide'))
+
+    // pagehide 后订阅已清理——再注入数据不应进缓冲区
+    const writeCountBefore = vi.mocked(mockWriter.write).mock.calls.length
+    rxCallbacks.forEach(cb => cb(chunk))
+    expect(vi.mocked(mockWriter.write).mock.calls.length).toBe(writeCountBefore)
+  })
 })

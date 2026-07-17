@@ -159,7 +159,14 @@ export function useRecordDirectory() {
           const ok = await rec.writeChunk(chunk)
           if (!ok) throw new Error('主进程写入流失败')
         },
-        close: (): Promise<void> => rec.closeFile().then(() => {}),
+        close: async (): Promise<void> => {
+          const ok = await rec.closeFile()
+          if (!ok) {
+            // 流在最后一次写入和关闭之间出错（不影响已落盘数据），
+            // 仅 trace 级别记录，不抛异常——调用方（stop）已经是收尾阶段。
+            console.warn('[recorder] closeFile 报告流已出错，已落盘数据不受影响')
+          }
+        },
         getFileName: () => fileName
       }
     }

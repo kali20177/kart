@@ -49,6 +49,8 @@ export const useRecorderStore = defineStore('recorder', () => {
   let pendingFlush: Promise<void> = Promise.resolve()
   // 是否正在停止。置位后 flushBuffer 不再走 error 分支改写状态。
   let stopping = false
+  // Electron 流级错误的异步回调注销函数
+  let unsubWriteError: (() => void) | null = null
 
   function patchState(patch: Partial<RecordState>) {
     state.value = { ...state.value, ...patch }
@@ -102,6 +104,19 @@ export const useRecorderStore = defineStore('recorder', () => {
     unsubRx = serial.onData((bytes) => ingest(bytes, 'rx', format))
     unsubTx = serial.onTxData((bytes) => ingest(bytes, 'tx', format))
 
+    // 监听 Electron 流级异步错误（两次 write 之间的 ENOSPC 等），
+    // 立即将状态翻为 error 而非等下次 write-chunk 才检测到。
+    if (window.electron?.recorder?.onWriteError) {
+      window.electron.recorder.onWriteError((msg) => {
+        if (!stopping && state.value.status === 'recording') {
+          patchState({ status: 'error', error: `写盘错误: ${msg}` })
+        }
+      })
+      unsubWriteError = () => {
+        window.electron?.recorder?.onWriteError(() => {})
+      }
+    }
+
     flushTimer = setInterval(flushBuffer, FLUSH_INTERVAL_MS)
   }
 
@@ -115,6 +130,8 @@ export const useRecorderStore = defineStore('recorder', () => {
     unsubRx = null
     unsubTx?.()
     unsubTx = null
+    unsubWriteError?.()
+    unsubWriteError = null
 
     if (flushTimer) {
       clearInterval(flushTimer)
@@ -176,7 +193,7 @@ export const useRecorderStore = defineStore('recorder', () => {
       if (dropped) bufferSize -= dropped.length
       patchState({
         status: 'error',
-        error: '写入跟不上数据速率，已丢弃最旧的未落盘数据'
+        error: '写入跟不上数据速率，录制已停止，请降低波特率或检查磁盘'
       })
       return
     }
@@ -223,16 +240,18 @@ export const useRecorderStore = defineStore('recorder', () => {
   // pagehide 在 bfcache 与正常卸载都会触发；Electron 同样适用。
   function handlePageHide() {
     // 同步清理订阅与定时器，避免泄露；
-    // 此时只能尽力 close 流——未 await 的异步写可能在页面销毁前未完成。
+    // 尽力 flush + close——async 写入可能在页面销毁前未完成，但聊胜于无。
     unsubRx?.()
     unsubTx?.()
     unsubTx = null
     unsubRx = null
+    unsubWriteError?.()
+    unsubWriteError = null
     if (flushTimer) {
       clearInterval(flushTimer)
       flushTimer = null
     }
-    void writer?.close()
+    void flushBuffer().then(() => writer?.close())
     writer = null
   }
 
