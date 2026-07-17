@@ -40,8 +40,9 @@ interface Window {
     recorder?: {
       showDirectoryPicker(): Promise<string | null>
       createFile(dirPath: string, fileName: string): Promise<{ fileName: string } | null>
-      writeChunk(chunk: Uint8Array): Promise<void>
-      closeFile(): Promise<void>
+      writeChunk(chunk: Uint8Array): Promise<boolean>
+      closeFile(): Promise<boolean>
+      onWriteError(handler: (msg: string) => void): void
     }
   }
   showSaveFilePicker?(options?: {

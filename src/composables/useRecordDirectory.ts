@@ -152,9 +152,14 @@ export function useRecordDirectory() {
       if (!dirPath) return null
       const result = await window.electron.recorder.createFile(dirPath, fileName)
       if (!result) return null
+      const rec = window.electron!.recorder!
       return {
-        write: (chunk: Uint8Array) => window.electron!.recorder!.writeChunk(chunk),
-        close: () => window.electron!.recorder!.closeFile(),
+        // writeChunk 返回 false 表示流已出错 → 抛异常让 flushBuffer 走 error 分支
+        write: async (chunk: Uint8Array): Promise<void> => {
+          const ok = await rec.writeChunk(chunk)
+          if (!ok) throw new Error('主进程写入流失败')
+        },
+        close: (): Promise<void> => rec.closeFile().then(() => {}),
         getFileName: () => fileName
       }
     }

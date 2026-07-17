@@ -8,6 +8,9 @@ import type { IFileWriter } from '@/composables/useFileWriter'
 
 const FLUSH_INTERVAL_MS = 500
 const FLUSH_SIZE_BYTES = 64 * 1024
+// 缓冲区上限（字节）。写盘慢于到达速率时防止内存无界增长——
+// 超过则丢弃最旧批次并通过状态向用户示警。
+const BUFFER_HARD_LIMIT_BYTES = 16 * 1024 * 1024
 
 export const useRecorderStore = defineStore('recorder', () => {
   const serial = useSerialStore()
@@ -41,6 +44,11 @@ export const useRecorderStore = defineStore('recorder', () => {
   let flushTimer: ReturnType<typeof setInterval> | null = null
   let unsubRx: (() => void) | null = null
   let unsubTx: (() => void) | null = null
+  // 正在执行的 flush Promise——stop/wait 须 await 它，否则 stop 关闭流后
+  // 在途 flush 对已关闭流写入会抛错并把状态翻成 error。
+  let pendingFlush: Promise<void> = Promise.resolve()
+  // 是否正在停止。置位后 flushBuffer 不再走 error 分支改写状态。
+  let stopping = false
 
   function patchState(patch: Partial<RecordState>) {
     state.value = { ...state.value, ...patch }
@@ -72,6 +80,8 @@ export const useRecorderStore = defineStore('recorder', () => {
     writer = w
     buffer = []
     bufferSize = 0
+    stopping = false
+    pendingFlush = Promise.resolve()
 
     // CSV 格式写入表头
     if (format === 'csv') {
@@ -85,7 +95,8 @@ export const useRecorderStore = defineStore('recorder', () => {
       fileName: w.getFileName(),
       fileSize: 0,
       startedAt: Date.now(),
-      byteCount: 0
+      byteCount: 0,
+      error: undefined
     })
 
     unsubRx = serial.onData((bytes) => ingest(bytes, 'rx', format))
@@ -97,6 +108,7 @@ export const useRecorderStore = defineStore('recorder', () => {
   async function stop() {
     if (state.value.status !== 'recording' && state.value.status !== 'error') return
 
+    stopping = true
     patchState({ status: 'stopping' })
 
     unsubRx?.()
@@ -109,10 +121,13 @@ export const useRecorderStore = defineStore('recorder', () => {
       flushTimer = null
     }
 
+    // 等待在途 flush 完成，避免它对已关闭流写入抛错并翻状态为 error。
+    await pendingFlush
     await flushBuffer()
     await writer?.close()
     writer = null
 
+    stopping = false
     patchState({ status: 'idle' })
   }
 
@@ -154,6 +169,18 @@ export const useRecorderStore = defineStore('recorder', () => {
 
     patchState({ byteCount: state.value.byteCount + bytes.length })
 
+    // 背压：写盘慢于到达速率时，丢弃最旧批次并将状态标为 error，
+    // 避免缓冲区无界增长吃光内存。
+    if (bufferSize > BUFFER_HARD_LIMIT_BYTES) {
+      const dropped = buffer.shift()
+      if (dropped) bufferSize -= dropped.length
+      patchState({
+        status: 'error',
+        error: '写入跟不上数据速率，已丢弃最旧的未落盘数据'
+      })
+      return
+    }
+
     if (bufferSize >= FLUSH_SIZE_BYTES) {
       flushBuffer()
     }
@@ -167,23 +194,51 @@ export const useRecorderStore = defineStore('recorder', () => {
     buffer = []
     bufferSize = 0
 
-    try {
-      for (const chunk of chunks) {
-        await writer.write(chunk)
+    pendingFlush = (async () => {
+      try {
+        for (const chunk of chunks) {
+          await writer!.write(chunk)
+        }
+        patchState({ fileSize: state.value.fileSize + total })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        // 停止流程中发生的错误不翻成 error，避免冲掉正在收敛的 idle 态
+        if (!stopping) {
+          patchState({ status: 'error', error: `写入失败: ${msg}` })
+        }
       }
-      patchState({ fileSize: state.value.fileSize + total })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      patchState({ status: 'error', error: `写入失败: ${msg}` })
-    }
+    })()
+
+    return pendingFlush
   }
 
   // 断线自动停止
   watch(() => serial.connected, (connected) => {
-    if (!connected && state.value.status === 'recording') {
+    if (!connected && (state.value.status === 'recording' || state.value.status === 'error')) {
       stop()
     }
   })
+
+  // 页面/窗口关闭时尽力落盘剩余数据，否则缓冲区内存数据随销毁丢失。
+  // pagehide 在 bfcache 与正常卸载都会触发；Electron 同样适用。
+  function handlePageHide() {
+    // 同步清理订阅与定时器，避免泄露；
+    // 此时只能尽力 close 流——未 await 的异步写可能在页面销毁前未完成。
+    unsubRx?.()
+    unsubTx?.()
+    unsubTx = null
+    unsubRx = null
+    if (flushTimer) {
+      clearInterval(flushTimer)
+      flushTimer = null
+    }
+    void writer?.close()
+    writer = null
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', handlePageHide, { capture: true })
+  }
 
   return {
     state,

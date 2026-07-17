@@ -83,7 +83,7 @@ const fileMenu = computed<DropdownOption[]>(() => [
   {
     label: recorder.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording'),
     key: 'toggle-recording',
-    disabled: recorder.state.status === 'stopping'
+    disabled: !recorder.supported || recorder.state.status === 'stopping'
   },
   { type: 'divider', key: 'd2' },
   { label: t('menu.resetDefaults'), key: 'reset-defaults' }

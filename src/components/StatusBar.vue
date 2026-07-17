@@ -14,6 +14,29 @@ const transferStore = useTransferStore()
 const recorder = useRecorderStore()
 const { t } = useI18n()
 
+// nowTick 在静态期保持当前秒数，驱动 recordDuration 在静默期也前进
+const nowTick = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
+watch(
+  () => recorder.state.status,
+  (status) => {
+    const active = status !== 'idle' && status !== 'stopping'
+    if (active && !tickTimer) {
+      tickTimer = setInterval(() => {
+        nowTick.value = Date.now()
+      }, 1000)
+    } else if (!active && tickTimer) {
+      clearInterval(tickTimer)
+      tickTimer = null
+    }
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => {
+  if (tickTimer) clearInterval(tickTimer)
+  tickTimer = null
+})
+
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
@@ -129,6 +152,8 @@ const bufferWarning = computed(() => bufferPct.value >= 80)
 const recordDuration = computed(() => {
   const s = recorder.state
   if (s.status === 'idle' || !s.startedAt) return ''
+  // 触碰 nowTick 以在静默期也重算
+  void nowTick.value
   const elapsed = Math.floor((Date.now() - s.startedAt) / 1000)
   const h = Math.floor(elapsed / 3600)
   const m = Math.floor((elapsed % 3600) / 60)
