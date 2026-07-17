@@ -8,11 +8,28 @@ declare module '*.vue' {
 
 declare module 'vue-virtual-scroller'
 
-// 构建期由 vite define 注入（见 vite.config.ts）
 declare const __APP_VERSION__: string
 declare const __GIT_COMMIT__: string
 declare const __BUILD_DATE__: string
 declare const __DEP_VERSIONS__: Record<string, string>
+
+// File System Access API 类型声明（TS lib 尚未覆盖新版 API）
+interface FileSystemWritableFileStream {
+  write(data: Uint8Array | ArrayBuffer): Promise<void>
+  close(): Promise<void>
+}
+
+interface FileSystemFileHandle {
+  createWritable(): Promise<FileSystemWritableFileStream>
+}
+
+interface FileSystemDirectoryHandle {
+  name: string
+  kind: 'directory'
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>
+  queryPermission(descriptor: { mode: FileSystemPermissionMode }): Promise<FileSystemPermissionStatus>
+  requestPermission(descriptor: { mode: FileSystemPermissionMode }): Promise<FileSystemPermissionStatus>
+}
 
 // preload 通过 contextBridge 暴露（仅 Electron 下存在）
 interface Window {
@@ -21,7 +38,8 @@ interface Window {
     versions?: Record<string, string | undefined>
     toggleDevTools?: () => void
     recorder?: {
-      openSaveDialog(suggestedName: string): Promise<{ filePath: string; fileName: string } | null>
+      showDirectoryPicker(): Promise<string | null>
+      createFile(dirPath: string, fileName: string): Promise<{ fileName: string } | null>
       writeChunk(chunk: Uint8Array): Promise<void>
       closeFile(): Promise<void>
     }
@@ -32,11 +50,6 @@ interface Window {
       description?: string
       accept: Record<string, string[]>
     }>
-  }): Promise<{
-    createWritable(): Promise<{
-      write(chunk: Uint8Array): Promise<void>
-      close(): Promise<void>
-    }>
-    name: string
-  }>
+  }): Promise<FileSystemFileHandle & { name: string }>
+  showDirectoryPicker?(): Promise<FileSystemDirectoryHandle>
 }

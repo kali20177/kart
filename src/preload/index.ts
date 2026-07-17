@@ -15,8 +15,10 @@ contextBridge.exposeInMainWorld('electron', {
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
 
   recorder: {
-    openSaveDialog: (suggestedName: string) =>
-      ipcRenderer.invoke('recorder:open-save-dialog', suggestedName),
+    showDirectoryPicker: () =>
+      ipcRenderer.invoke('recorder:show-directory-picker'),
+    createFile: (dirPath: string, fileName: string) =>
+      ipcRenderer.invoke('recorder:create-file', dirPath, fileName),
     writeChunk: async (chunk: Uint8Array) => {
       const id = await getWinId()
       ipcRenderer.send('recorder:write-chunk', id, chunk)

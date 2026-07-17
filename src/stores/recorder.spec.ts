@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import { ref, computed } from 'vue'
 import type { IFileWriter } from '@/composables/useFileWriter'
 
 const mockWriter: IFileWriter = {
@@ -8,33 +9,31 @@ const mockWriter: IFileWriter = {
   getFileName: vi.fn().mockReturnValue('test-log.txt')
 }
 
-let shouldCancel = false
-let shouldFailWrite = false
+const mockDirName = ref<string | null>('test-dir')
+const mockIsConfigured = computed(() => mockDirName.value !== null)
 
-vi.mock('@/composables/useFileWriter', () => ({
-  createFileWriter: () => ({
-    open: async (_name: string, _format: string) => {
-      if (shouldCancel) return null
-      if (shouldFailWrite) {
-        return {
-          write: vi.fn().mockRejectedValue(new Error('ENOSPC')),
-          close: vi.fn().mockResolvedValue(undefined),
-          getFileName: () => 'test.txt'
-        }
-      }
-      return mockWriter
-    }
+let mockCreateFile = vi.fn().mockResolvedValue(mockWriter)
+let mockPick = vi.fn().mockResolvedValue(undefined)
+
+vi.mock('@/composables/useRecordDirectory', () => ({
+  useRecordDirectory: () => ({
+    dirName: mockDirName,
+    isConfigured: mockIsConfigured,
+    pick: mockPick,
+    clear: vi.fn(),
+    createFile: mockCreateFile
   })
 }))
 
 async function setupStores() {
   const { useSerialStore } = await import('./serial')
   const { useRecorderStore } = await import('./recorder')
+  const { useSettingsStore } = await import('./settings')
 
   const serial = useSerialStore()
+  const settings = useSettingsStore()
   const recorder = useRecorderStore()
 
-  // Capture callbacks registered via onData/onTxData
   const rxCallbacks: Array<(bytes: Uint8Array) => void> = []
   const txCallbacks: Array<(bytes: Uint8Array) => void> = []
 
@@ -53,15 +52,15 @@ async function setupStores() {
     }
   })
 
-  return { serial, recorder, rxCallbacks, txCallbacks }
+  return { serial, settings, recorder, rxCallbacks, txCallbacks }
 }
 
 describe('recorder store', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    shouldCancel = false
-    shouldFailWrite = false
+    mockCreateFile = vi.fn().mockResolvedValue(mockWriter)
+    mockDirName.value = 'test-dir'
   })
 
   afterEach(() => {
@@ -74,30 +73,31 @@ describe('recorder store', () => {
     expect(recorder.isRecording).toBe(false)
   })
 
-  it('start() opens file writer and enters recording state', async () => {
-    const { recorder } = await setupStores()
-    await recorder.start({ format: 'text' })
+  it('start() creates file and enters recording state', async () => {
+    const { recorder, settings } = await setupStores()
+    settings.settings.recordFormat = 'text'
+    await recorder.start()
     expect(recorder.state.status).toBe('recording')
-    expect(recorder.state.fileName).toBe('test-log.txt')
+    expect(mockCreateFile).toHaveBeenCalledOnce()
   })
 
-  it('start() does nothing if user cancels save dialog', async () => {
-    shouldCancel = true
+  it('start() throws if no directory configured', async () => {
+    mockDirName.value = null
     const { recorder } = await setupStores()
-    await recorder.start({ format: 'text' })
+    await expect(recorder.start()).rejects.toThrow()
     expect(recorder.state.status).toBe('idle')
   })
 
   it('start() is no-op if already recording', async () => {
     const { recorder } = await setupStores()
-    await recorder.start({ format: 'text' })
-    await recorder.start({ format: 'text' })
-    expect(recorder.state.status).toBe('recording')
+    await recorder.start()
+    await recorder.start()
+    expect(mockCreateFile).toHaveBeenCalledTimes(1)
   })
 
   it('stop() closes writer and returns to idle', async () => {
     const { recorder } = await setupStores()
-    await recorder.start({ format: 'text' })
+    await recorder.start()
     await recorder.stop()
     expect(mockWriter.close).toHaveBeenCalled()
     expect(recorder.state.status).toBe('idle')
@@ -105,41 +105,45 @@ describe('recorder store', () => {
 
   it('buffers bytes and flushes at size threshold', async () => {
     const { recorder, rxCallbacks } = await setupStores()
-    await recorder.start({ format: 'text' })
+    await recorder.start()
 
-    // Feed a chunk larger than 64KB through the registered RX callback
     const bigChunk = new Uint8Array(65 * 1024)
     rxCallbacks.forEach(cb => cb(bigChunk))
 
-    // Should have triggered a write
     expect(mockWriter.write).toHaveBeenCalled()
   })
 
   it('write error sets error status', async () => {
-    shouldFailWrite = true
-    const { recorder, rxCallbacks } = await setupStores()
-    await recorder.start({ format: 'text' })
+    const errorWriter: IFileWriter = {
+      write: vi.fn().mockRejectedValue(new Error('ENOSPC')),
+      close: vi.fn().mockResolvedValue(undefined),
+      getFileName: vi.fn().mockReturnValue('test.bin')
+    }
+    mockCreateFile = vi.fn().mockResolvedValue(errorWriter)
 
-    // Feed a chunk that triggers the size-threshold flush
+    const { recorder, rxCallbacks } = await setupStores()
+    await recorder.start()
+
     const bigChunk = new Uint8Array(65 * 1024)
     rxCallbacks.forEach(cb => cb(bigChunk))
 
-    // Flush is async (fire-and-forget from ingest), wait for microtask queue
     await new Promise(r => setTimeout(r, 50))
-
-    // The flush should have failed and set error status
     expect(recorder.state.status).toBe('error')
   })
 
   it('stop() from error state works', async () => {
-    shouldFailWrite = true
+    const errorWriter: IFileWriter = {
+      write: vi.fn().mockRejectedValue(new Error('ENOSPC')),
+      close: vi.fn().mockResolvedValue(undefined),
+      getFileName: vi.fn().mockReturnValue('test.bin')
+    }
+    mockCreateFile = vi.fn().mockResolvedValue(errorWriter)
+
     const { recorder, rxCallbacks } = await setupStores()
-    await recorder.start({ format: 'text' })
+    await recorder.start()
 
     const bigChunk = new Uint8Array(65 * 1024)
     rxCallbacks.forEach(cb => cb(bigChunk))
-
-    // Wait for async flush to complete and set error status
     await new Promise(r => setTimeout(r, 50))
 
     await recorder.stop()

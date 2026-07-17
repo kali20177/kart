@@ -2,13 +2,17 @@ import { defineStore } from 'pinia'
 import { shallowRef, triggerRef, watch, computed } from 'vue'
 import type { RecordConfig, RecordFormat, RecordState } from '@/types'
 import { useSerialStore } from './serial'
-import { createFileWriter, type IFileWriter } from '@/composables/useFileWriter'
+import { useSettingsStore } from './settings'
+import { useRecordDirectory } from '@/composables/useRecordDirectory'
+import type { IFileWriter } from '@/composables/useFileWriter'
 
 const FLUSH_INTERVAL_MS = 500
 const FLUSH_SIZE_BYTES = 64 * 1024
 
 export const useRecorderStore = defineStore('recorder', () => {
   const serial = useSerialStore()
+  const settings = useSettingsStore()
+  const recordDir = useRecordDirectory()
 
   const state = shallowRef<RecordState>({
     status: 'idle',
@@ -20,10 +24,15 @@ export const useRecorderStore = defineStore('recorder', () => {
 
   const isRecording = computed(() => state.value.status === 'recording')
 
+  /** 是否可以录制（有格式配置且有保存目录） */
+  const canRecord = computed(() => recordDir.isConfigured.value)
+
+  /** 平台是否支持录制功能 */
   const supported = computed(() => {
-    // 在 setup 阶段调用，避免在非浏览器环境下报错
     if (typeof window === 'undefined') return false
-    return createFileWriter() !== null
+    if (window.electron?.recorder) return true
+    if ('showDirectoryPicker' in window) return true
+    return false
   })
 
   let writer: IFileWriter | null = null
@@ -32,7 +41,6 @@ export const useRecorderStore = defineStore('recorder', () => {
   let flushTimer: ReturnType<typeof setInterval> | null = null
   let unsubRx: (() => void) | null = null
   let unsubTx: (() => void) | null = null
-  let currentFormat: RecordFormat = 'text'
 
   function patchState(patch: Partial<RecordState>) {
     state.value = { ...state.value, ...patch }
@@ -47,25 +55,26 @@ export const useRecorderStore = defineStore('recorder', () => {
     return `serial-log-${stamp}.${ext}`
   }
 
-  async function start(config: RecordConfig) {
+  async function start(_config?: RecordConfig) {
     if (state.value.status !== 'idle') return
 
-    const factory = createFileWriter()
-    if (!factory) {
-      throw new Error('平台不支持文件写入')
+    if (!recordDir.isConfigured.value) {
+      throw new Error('请先在设置中配置录制目录')
     }
 
-    const suggestedName = generateFileName(config.format)
-    const w = await factory.open(suggestedName, config.format)
-    if (!w) return
+    const format = _config?.format ?? settings.settings.recordFormat
+    const fileName = generateFileName(format)
+    const w = await recordDir.createFile(fileName)
+    if (!w) {
+      throw new Error('无法在录制目录中创建文件')
+    }
 
     writer = w
     buffer = []
     bufferSize = 0
-    currentFormat = config.format
 
     // CSV 格式写入表头
-    if (currentFormat === 'csv') {
+    if (format === 'csv') {
       const header = new TextEncoder().encode('timestamp,direction,hex,ascii\n')
       buffer.push(header)
       bufferSize += header.length
@@ -79,8 +88,8 @@ export const useRecorderStore = defineStore('recorder', () => {
       byteCount: 0
     })
 
-    unsubRx = serial.onData((bytes) => ingest(bytes, 'rx'))
-    unsubTx = serial.onTxData((bytes) => ingest(bytes, 'tx'))
+    unsubRx = serial.onData((bytes) => ingest(bytes, 'rx', format))
+    unsubTx = serial.onTxData((bytes) => ingest(bytes, 'tx', format))
 
     flushTimer = setInterval(flushBuffer, FLUSH_INTERVAL_MS)
   }
@@ -122,11 +131,11 @@ export const useRecorderStore = defineStore('recorder', () => {
     return field
   }
 
-  function ingest(bytes: Uint8Array, direction: 'rx' | 'tx') {
+  function ingest(bytes: Uint8Array, direction: 'rx' | 'tx', format: RecordFormat) {
     if (state.value.status !== 'recording') return
 
     let copy: Uint8Array
-    if (currentFormat === 'text') {
+    if (format === 'text') {
       const ts = new Date().toISOString()
       const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
       const dir = direction === 'rx' ? 'RX' : 'TX'
@@ -179,6 +188,7 @@ export const useRecorderStore = defineStore('recorder', () => {
   return {
     state,
     isRecording,
+    canRecord,
     supported,
     start,
     stop

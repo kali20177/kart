@@ -28,7 +28,8 @@ const DEFAULTS: AppSettings = {
     maxPoints: 5000
   },
   autoReconnect: false,
-  showPauseNotification: true
+  showPauseNotification: true,
+  recordFormat: 'text' as const
 }
 
 export const useSettingsStore = defineStore('settings', () => {

@@ -112,7 +112,7 @@ function handleSelect(key: string) {
       break
     case 'toggle-recording':
       if (recorder.state.status === 'idle') {
-        recorder.start({ format: 'text' }).catch((e) => {
+        recorder.start().catch((e) => {
           message.error(e instanceof Error ? e.message : String(e))
         })
       } else {

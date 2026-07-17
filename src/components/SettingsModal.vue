@@ -15,12 +15,14 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useSerialStore } from '@/stores/serial'
+import { useRecordDirectory } from '@/composables/useRecordDirectory'
 import { parseHexInput } from '@/utils/hex'
 import { listThemes } from '@/themes'
 
 const show = defineModel<boolean>('show', { default: false })
 const settingsStore = useSettingsStore()
 const serial = useSerialStore()
+const recordDir = useRecordDirectory()
 const message = useMessage()
 const { t } = useI18n()
 const s = settingsStore.settings
@@ -81,6 +83,10 @@ function doInject() {
   serial.inject(bytes)
 }
 
+function pickDir() {
+  recordDir.pick()
+}
+
 // 侧边栏导航项
 interface NavItem {
   key: string
@@ -118,6 +124,11 @@ const navItems = computed<NavItem[]>(() => [
     key: 'mock',
     label: t('settings.mock'),
     icon: 'M4 12l2-7h4l2 7M3 12h10v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1zM8 6v3'
+  },
+  {
+    key: 'record',
+    label: t('settings.record'),
+    icon: 'M8 2v10M4 8l4 4 4-4M2 14h12'
   }
 ])
 </script>
@@ -327,6 +338,28 @@ const navItems = computed<NavItem[]>(() => [
             </NFormItem>
           </NForm>
         </div>
+
+        <!-- ========== 录制 ========== -->
+        <div v-if="activeTab === 'record'" class="record-section">
+          <div class="section-title">{{ t('settings.record') }}</div>
+          <NForm label-placement="top" size="small">
+            <NFormItem :label="t('record.format')">
+              <NSelect
+                v-model:value="s.recordFormat"
+                :options="[
+                  { label: 'txt (.txt)', value: 'text' },
+                  { label: 'CSV (.csv)', value: 'csv' }
+                ]"
+              />
+            </NFormItem>
+            <NFormItem :label="t('record.saveDir')">
+              <div class="record-dir-row">
+                <span class="record-dir-name">{{ recordDir.dirName.value ?? ('(' + t('record.notSet') + ')') }}</span>
+                <NButton size="small" @click="pickDir">{{ t('record.selectDir') }}</NButton>
+              </div>
+            </NFormItem>
+          </NForm>
+        </div>
         </div>
       </div>
     </div>
@@ -422,7 +455,8 @@ const navItems = computed<NavItem[]>(() => [
 
 /* ===== 波特率列表 ===== */
 .baud-section,
-.mock-section {
+.mock-section,
+.record-section {
   padding: 4px 0;
 }
 
@@ -457,6 +491,22 @@ const navItems = computed<NavItem[]>(() => [
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
+}
+
+.record-dir-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.record-dir-name {
+  flex: 1;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== NForm 内间距微调 ===== */

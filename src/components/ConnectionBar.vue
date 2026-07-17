@@ -7,7 +7,7 @@ import { useRecorderStore } from '@/stores/recorder'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
-import type { MockScenarioId, RecordFormat } from '@/types'
+import type { MockScenarioId } from '@/types'
 
 const { t } = useI18n()
 
@@ -19,8 +19,6 @@ const emit = defineEmits<{
 const serial = useSerialStore()
 const recorder = useRecorderStore()
 const message = useMessage()
-
-const recordFormat = ref<RecordFormat>('text')
 
 const portOptions = computed(() => serial.ports.map((p) => ({ label: p, value: p })))
 
@@ -180,7 +178,7 @@ async function toggle() {
 
 async function startRecording() {
   try {
-    await recorder.start({ format: recordFormat.value })
+    await recorder.start()
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
   }
@@ -270,25 +268,21 @@ async function startRecording() {
           <NButton
             size="small"
             quaternary
-            :disabled="recorder.state.status === 'stopping'"
+            :disabled="recorder.state.status === 'stopping' || (!recorder.isRecording && !recorder.canRecord)"
             :type="recorder.isRecording ? 'error' : 'default'"
             @click="recorder.isRecording ? recorder.stop() : startRecording()"
           >
             <span class="rec-icon" :class="{ recording: recorder.isRecording }" />
           </NButton>
         </template>
-        {{ recorder.isRecording ? t('record.stop') : t('record.start') }}
+        {{
+          recorder.isRecording
+            ? t('record.stop')
+            : !recorder.canRecord
+              ? t('record.needConfig')
+              : t('record.start')
+        }}
       </NTooltip>
-      <NSelect
-        :value="recordFormat"
-        :options="[
-          { label: 'txt', value: 'text' },
-          { label: 'csv', value: 'csv' }
-        ]"
-        size="small"
-        style="width: 62px"
-        @update:value="(v: RecordFormat) => recordFormat = v"
-      />
     </template>
 
     <div class="spacer" />

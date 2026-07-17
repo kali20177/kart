@@ -2,38 +2,35 @@ import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 
-// 主/预加载产物以 CommonJS 输出（.cjs），__dirname 始终可用。
-// vite-plugin-electron 在 dev 下注入 VITE_DEV_SERVER_URL，指向 Vite dev server。
 const devServerUrl = process.env.VITE_DEV_SERVER_URL
 
 // 每个窗口一个活动的写入流（录制器用）
 const writeStreams = new Map<number, fs.WriteStream>()
 
 function registerRecorderIpc(): void {
-  // 打开保存对话框
-  ipcMain.handle('recorder:open-save-dialog', async (event, suggestedName: string) => {
+  // 目录选择器（替换原来的文件保存对话框）
+  ipcMain.handle('recorder:show-directory-picker', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
 
-    const ext = suggestedName.endsWith('.csv') ? 'csv' : 'txt'
-    const name = suggestedName.endsWith('.csv') ? 'CSV Log' : 'Text Log'
-    const result = await dialog.showSaveDialog(win, {
-      defaultPath: path.join(app.getPath('documents'), suggestedName),
-      filters: [{
-        name,
-        extensions: [ext]
-      }]
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory']
     })
 
-    if (result.canceled || !result.filePath) return null
+    if (result.canceled || !result.filePaths.length) return null
+    return result.filePaths[0]
+  })
 
-    const stream = fs.createWriteStream(result.filePath, { flags: 'a' })
+  // 在指定目录中创建文件并打开写入流
+  ipcMain.handle('recorder:create-file', async (event, dirPath: string, fileName: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return null
+
+    const fullPath = path.join(dirPath, fileName)
+    const stream = fs.createWriteStream(fullPath, { flags: 'a' })
     writeStreams.set(win.id, stream)
 
-    return {
-      filePath: result.filePath,
-      fileName: path.basename(result.filePath)
-    }
+    return { fileName }
   })
 
   // 将块写入已打开的文件
@@ -84,7 +81,6 @@ function createWindow(): void {
     win.loadURL(devServerUrl)
     win.webContents.openDevTools()
   } else {
-    // 生产：渲染产物在 dist/，主进程产物在 dist-electron/main/。
     win.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
 }
@@ -92,11 +88,8 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerRecorderIpc()
 
-  // 移除 Electron 默认菜单（File/Edit/View/Window/Help），
-  // 避免与渲染进程的自定义 MenuBar 组件在 Windows/Linux 上冲突。
   Menu.setApplicationMenu(null)
 
-  // 切换开发者工具（由渲染进程通过 IPC 触发）
   ipcMain.on('toggle-devtools', () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (win) win.webContents.toggleDevTools()
