@@ -265,38 +265,30 @@ async function startRecording() {
 
     <!-- 录制控制 -->
     <template v-if="recorder.supported">
-      <NButton
-        v-if="!recorder.isRecording"
+      <NTooltip>
+        <template #trigger>
+          <NButton
+            size="small"
+            quaternary
+            :disabled="recorder.state.status === 'stopping'"
+            :type="recorder.isRecording ? 'error' : 'default'"
+            @click="recorder.isRecording ? recorder.stop() : startRecording()"
+          >
+            <span class="rec-icon" :class="{ recording: recorder.isRecording }" />
+          </NButton>
+        </template>
+        {{ recorder.isRecording ? t('record.stop') : t('record.start') }}
+      </NTooltip>
+      <NSelect
+        :value="recordFormat"
+        :options="[
+          { label: 'txt', value: 'text' },
+          { label: 'csv', value: 'csv' }
+        ]"
         size="small"
-        quaternary
-        :disabled="recorder.state.status === 'stopping'"
-        @click="startRecording"
-      >
-        ⏺ {{ t('record.start') }}
-      </NButton>
-      <NButton
-        v-else
-        size="small"
-        type="error"
-        quaternary
-        @click="recorder.stop()"
-      >
-        ⏹ {{ t('record.stop') }}
-      </NButton>
-      <NButtonGroup size="small">
-        <NButton
-          :type="recordFormat === 'text' ? 'primary' : 'default'"
-          size="small"
-          quaternary
-          @click="recordFormat = 'text'"
-        >txt</NButton>
-        <NButton
-          :type="recordFormat === 'csv' ? 'primary' : 'default'"
-          size="small"
-          quaternary
-          @click="recordFormat = 'csv'"
-        >csv</NButton>
-      </NButtonGroup>
+        style="width: 62px"
+        @update:value="(v: RecordFormat) => recordFormat = v"
+      />
     </template>
 
     <div class="spacer" />
@@ -344,6 +336,23 @@ async function startRecording() {
 .mock-label {
   font-size: 12px;
   color: var(--text-dim);
+}
+.rec-icon {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.15s, border-radius 0.15s;
+}
+.rec-icon.recording {
+  background: #e04040;
+  border-radius: 2px;
+  animation: rec-icon-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rec-icon-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 .spacer {
   flex: 1;
