@@ -51,5 +51,5 @@ interface Window {
       accept: Record<string, string[]>
     }>
   }): Promise<FileSystemFileHandle & { name: string }>
-  showDirectoryPicker?(): Promise<FileSystemDirectoryHandle>
+  showDirectoryPicker?(options?: { id?: string }): Promise<FileSystemDirectoryHandle>
 }
