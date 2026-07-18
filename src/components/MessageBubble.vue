@@ -211,6 +211,7 @@ function onRowContext(e: MouseEvent) {
         <span class="len">{{ message.bytes.length }} B</span>
         <span class="mode-badge">{{ viewMode === 'hex' ? 'HEX' : 'ASCII' }}</span>
         <span v-if="message.error" class="err-badge">⚠ {{ message.error }}</span>
+        <span v-if="message.checksumFailed" class="crc-badge">✗ CRC</span>
         <span class="spacer" />
         <span v-if="!selectable" class="actions">
           <button :title="t('bubble.copyFrame')" @click="copyCurrent">{{ t('bubble.copy') }}</button>
@@ -357,6 +358,13 @@ function onRowContext(e: MouseEvent) {
 }
 .err-badge {
   color: var(--err);
+}
+.crc-badge {
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 15%, transparent);
+  border-radius: 3px;
+  padding: 0 3px;
+  font-size: 11px;
 }
 .spacer {
   flex: 1;

@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
-import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate } from '@/types'
+import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm } from '@/types'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
+import { computeChecksum } from '@/utils/checksum'
 import { isPresetBaud, isValidBaud, loadCustomBaudRates } from '@/utils/baud'
 import type { DataMode, LineEnding } from '@/types'
 import { useMessagesStore } from './messages'
@@ -156,7 +157,8 @@ export const useSerialStore = defineStore('serial', () => {
     payload: string,
     mode: DataMode,
     ending: LineEnding,
-    encoding: 'utf-8' | 'ascii' | 'gbk'
+    encoding: 'utf-8' | 'ascii' | 'gbk',
+    checksum: ChecksumAlgorithm = 'none'
   ): Promise<{ ok: boolean; error?: string }> {
     if (!connected.value) return { ok: false, error: '未连接' }
 
@@ -168,6 +170,12 @@ export const useSerialStore = defineStore('serial', () => {
     } else {
       body = encodeText(payload, encoding)
     }
+
+    // 校验和计算（行尾之前）
+    if (checksum !== 'none') {
+      body = concatBytes(body, computeChecksum(body, checksum))
+    }
+
     const bytes = concatBytes(body, lineEndingBytes(ending))
 
     try {

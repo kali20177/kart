@@ -29,7 +29,9 @@ const DEFAULTS: AppSettings = {
   },
   autoReconnect: false,
   showPauseNotification: true,
-  recordFormat: 'text' as const
+  recordFormat: 'text' as const,
+  sendChecksum: 'none',
+  rxVerifyChecksum: false
 }
 
 export const useSettingsStore = defineStore('settings', () => {

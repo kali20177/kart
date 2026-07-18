@@ -3,6 +3,7 @@ import { ref, shallowRef, triggerRef, computed, watch } from 'vue'
 import type { FileTransferConfig, FileTransferState, TransferPresetId, TransferStatus } from '@/types'
 import { useSerialStore } from './serial'
 import { useMessagesStore } from './messages'
+import { crc16modbus } from '@/utils/checksum'
 
 /** 预设配置（也供 FileTransferDialog 复用） */
 export const PRESETS: Record<TransferPresetId, Partial<FileTransferConfig>> = {
@@ -179,18 +180,7 @@ export const useTransferStore = defineStore('transfer', () => {
   // ── CRC16-Modbus 工具 ──
 
   function crc16(data: Uint8Array): number {
-    let crc = 0xffff
-    for (let i = 0; i < data.length; i++) {
-      crc ^= data[i]
-      for (let j = 0; j < 8; j++) {
-        if (crc & 1) {
-          crc = (crc >> 1) ^ 0xa001
-        } else {
-          crc >>= 1
-        }
-      }
-    }
-    return crc
+    return crc16modbus(data)
   }
 
   // ── 帧封装 ──

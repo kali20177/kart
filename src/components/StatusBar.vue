@@ -204,6 +204,11 @@ const signalList = computed(() => [
         <span v-if="serial.connected && txFramesRate > 0" class="rate">{{ fmtRate(txFramesRate) }}</span>
       </span>
 
+      <span v-if="messages.rxErrorFrames > 0" class="stat-group error" :title="t('status.rxErrorsTip')">
+        <span class="dir-label err">ERR</span>
+        <span class="val crc-err">{{ messages.rxErrorFrames }}</span>
+      </span>
+
       <span class="stat-group" :class="{ stale: !serial.connected }" :title="t('status.rxBytesTip')">
         <span class="dir-label rx">RX</span>
         <span class="val">{{ fmtBytes(serial.rxBytes) }}</span>
@@ -351,6 +356,13 @@ const signalList = computed(() => [
 .dir-label.tx {
   color: var(--tx-text, #4ec97a);
   background: color-mix(in srgb, var(--tx-text, #4ec97a) 15%, transparent);
+}
+.dir-label.err {
+  color: var(--err, #e06060);
+  background: color-mix(in srgb, var(--err, #e06060) 18%, transparent);
+}
+.crc-err {
+  color: var(--err, #e06060);
 }
 .val {
   color: var(--text);

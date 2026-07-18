@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import {
   NButton,
   NModal,
@@ -14,6 +14,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useCommandsStore } from '@/stores/commands'
 import { useSerialStore } from '@/stores/serial'
+import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
 import type { DataMode, LineEnding, QuickCommand } from '@/types'
 
@@ -25,6 +26,7 @@ const emit = defineEmits<{
 
 const store = useCommandsStore()
 const serial = useSerialStore()
+const settings = useSettingsStore()
 const message = useMessage()
 const { t } = useI18n()
 
@@ -39,6 +41,14 @@ const endingOptions = [
   { label: '\\n', value: 'lf' },
   { label: '\\r\\n', value: 'crlf' }
 ]
+const checksumOptions = computed(() => [
+  { label: t('checksum.inheritGlobal'), value: 'inherit' },
+  { label: t('checksum.algo.none'), value: 'none' },
+  { label: t('checksum.algo.sum8'), value: 'sum8' },
+  { label: t('checksum.algo.xor8'), value: 'xor8' },
+  { label: t('checksum.algo.crc16-modbus'), value: 'crc16-modbus' },
+  { label: t('checksum.algo.crc32'), value: 'crc32' }
+])
 
 // 编辑弹窗
 const showEdit = ref(false)
@@ -46,7 +56,7 @@ const editing = ref<QuickCommand>(blank())
 const isNew = ref(true)
 
 function blank(): QuickCommand {
-  return { id: '', name: '', payload: '', mode: 'ascii', appendNewline: 'crlf', color: '#2080f0' }
+  return { id: '', name: '', payload: '', mode: 'ascii', appendNewline: 'crlf', color: '#2080f0', checksum: 'inherit' }
 }
 
 function openNew() {
@@ -76,7 +86,8 @@ function saveEdit() {
 
 async function sendCmd(c: QuickCommand) {
   const ending: LineEnding = c.appendNewline === 'inherit' ? 'crlf' : c.appendNewline
-  const r = await serial.send(c.payload, c.mode, ending, 'utf-8')
+  const cs = !c.checksum || c.checksum === 'inherit' ? settings.settings.sendChecksum : c.checksum
+  const r = await serial.send(c.payload, c.mode, ending, 'utf-8', cs)
   if (!r.ok) message.error(r.error ?? t('commands.sendFailed'))
   else sendHistory.add(c.payload)
 }
@@ -189,6 +200,9 @@ function onFile(e: Event) {
         </NFormItem>
         <NFormItem :label="t('commands.lineEnding')">
           <NSelect v-model:value="editing.appendNewline" :options="endingOptions" />
+        </NFormItem>
+        <NFormItem :label="t('commands.checksum')">
+          <NSelect v-model:value="editing.checksum" :options="checksumOptions" />
         </NFormItem>
         <NFormItem :label="t('commands.color')">
           <NColorPicker v-model:value="editing.color" :show-alpha="false" />

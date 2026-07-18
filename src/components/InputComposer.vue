@@ -60,7 +60,7 @@ async function sendOnce(): Promise<boolean> {
     message.warning(t('composer.needConnect'))
     return false
   }
-  const r = await serial.send(text.value, mode.value, lineEnding.value, settings.settings.encoding)
+  const r = await serial.send(text.value, mode.value, lineEnding.value, settings.settings.encoding, settings.settings.sendChecksum)
   if (!r.ok) {
     message.error(r.error ?? t('composer.sendFailed'))
     return false

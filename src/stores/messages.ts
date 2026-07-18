@@ -3,6 +3,7 @@ import { ref, shallowRef, triggerRef, watch } from 'vue'
 import type { Direction, Message } from '@/types'
 import { FrameSplitter } from '@/composables/useFrameSplitter'
 import { useSettingsStore } from './settings'
+import { verifyChecksum, checksumByteLength } from '@/utils/checksum'
 
 export const useMessagesStore = defineStore('messages', () => {
   const settingsStore = useSettingsStore()
@@ -13,6 +14,7 @@ export const useMessagesStore = defineStore('messages', () => {
   const pauseStartTime = ref(0)
   const rxFrames = ref(0)
   const txFrames = ref(0)
+  const rxErrorFrames = ref(0)
 
   let nextId = 1
   const splitter = new FrameSplitter(settingsStore.settings.frame)
@@ -57,24 +59,55 @@ export const useMessagesStore = defineStore('messages', () => {
   function ingestRx(bytes: Uint8Array) {
     if (paused.value) return
     const frames = splitter.push(bytes, Date.now())
+    const cfg = settingsStore.settings
     for (const f of frames) {
-      pending.push(makeMessage('rx', f))
+      let error: string | undefined
+      let checksumFailed = false
+      if (cfg.rxVerifyChecksum && cfg.sendChecksum !== 'none') {
+        const len = checksumByteLength(cfg.sendChecksum)
+        if (f.length > len) {
+          const r = verifyChecksum(f, cfg.sendChecksum)
+          if (!r.ok) {
+            checksumFailed = true
+            error = '校验失败'
+            rxErrorFrames.value++
+          }
+        }
+      }
+      const msg = makeMessage('rx', f, error)
+      if (checksumFailed) msg.checksumFailed = true
+      pending.push(msg)
       rxFrames.value++
     }
     if (frames.length > 0) scheduleFlush()
 
     // gap-timeout：安排尾帧在静默 gapMs 后刷新
-    const cfg = settingsStore.settings.frame
-    if (cfg.strategy === 'gap-timeout') {
+    const frameCfg = settingsStore.settings.frame
+    if (frameCfg.strategy === 'gap-timeout') {
       if (gapTimer) clearTimeout(gapTimer)
       gapTimer = setTimeout(() => {
         const tail = splitter.flush()
         for (const f of tail) {
-          pending.push(makeMessage('rx', f))
+          let error: string | undefined
+          let checksumFailed = false
+          if (cfg.rxVerifyChecksum && cfg.sendChecksum !== 'none') {
+            const len = checksumByteLength(cfg.sendChecksum)
+            if (f.length > len) {
+              const r = verifyChecksum(f, cfg.sendChecksum)
+              if (!r.ok) {
+                checksumFailed = true
+                error = '校验失败'
+                rxErrorFrames.value++
+              }
+            }
+          }
+          const msg = makeMessage('rx', f, error)
+          if (checksumFailed) msg.checksumFailed = true
+          pending.push(msg)
           rxFrames.value++
         }
         if (tail.length > 0) scheduleFlush()
-      }, cfg.gapMs)
+      }, frameCfg.gapMs)
     }
   }
 
@@ -140,6 +173,7 @@ export const useMessagesStore = defineStore('messages', () => {
     pending = []
     rxFrames.value = 0
     txFrames.value = 0
+    rxErrorFrames.value = 0
     triggerRef(messages)
   }
 
@@ -156,5 +190,5 @@ export const useMessagesStore = defineStore('messages', () => {
     if (paused.value) pauseStartTime.value = Date.now()
   }
 
-  return { messages, paused, pauseStartTime, rxFrames, txFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
+  return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
 })

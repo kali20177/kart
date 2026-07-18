@@ -106,6 +106,7 @@ export default {
     txFramesTip: 'TX frames / frame rate',
     rxBytesTip: 'RX bytes / byte rate',
     txBytesTip: 'TX bytes / byte rate',
+    rxErrorsTip: 'Checksum errors',
     bufferTip: 'Buffer usage: {used} / {limit}',
   },
   msgList: {
@@ -233,6 +234,7 @@ export default {
     injectNeedConnect: 'Please connect a port first',
     injectHexError: 'HEX parse failed',
     record: 'Recording',
+    checksum: 'Checksum',
   },
   commands: {
     title: 'Quick Commands',
@@ -258,6 +260,7 @@ export default {
     toComposer: 'Send to Composer',
     duplicate: 'Duplicate',
     delete: 'Delete',
+    checksum: 'Checksum',
     importOk: 'Import successful',
     importFail: 'Import failed',
   },
@@ -286,6 +289,19 @@ export default {
     export: 'Export',
     exportCsvVisible: 'CSV (Visible)',
     exportCsvFull: 'CSV (Full History)',
+  },
+  checksum: {
+    title: 'Checksum',
+    txDefault: 'Send Checksum (Default)',
+    rxVerify: 'Verify Received',
+    inheritGlobal: 'Use Global Default',
+    algo: {
+      none: 'None',
+      sum8: 'SUM8 (Byte Sum)',
+      xor8: 'XOR8 (Byte XOR)',
+      'crc16-modbus': 'CRC16-Modbus',
+      crc32: 'CRC32',
+    },
   },
   fileTransfer: {
     dialogTitle: 'File Transfer',

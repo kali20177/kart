@@ -106,6 +106,7 @@ export default {
     txFramesTip: 'TX 帧数 / 帧速率',
     rxBytesTip: 'RX 字节数 / 字节速率',
     txBytesTip: 'TX 字节数 / 字节速率',
+    rxErrorsTip: '校验失败帧数',
     bufferTip: '缓冲使用率：已用 {used} / 上限 {limit}',
   },
   msgList: {
@@ -239,6 +240,7 @@ export default {
     injectNeedConnect: '请先连接端口',
     injectHexError: 'HEX 解析失败',
     record: '录制',
+    checksum: '校验',
   },
   commands: {
     title: '快速命令',
@@ -264,6 +266,7 @@ export default {
     toComposer: '调到发送框',
     duplicate: '复制',
     delete: '删除',
+    checksum: '校验和',
     importOk: '导入成功',
     importFail: '导入失败',
   },
@@ -292,6 +295,19 @@ export default {
     export: '导出',
     exportCsvVisible: 'CSV（可见窗口）',
     exportCsvFull: 'CSV（完整历史）',
+  },
+  checksum: {
+    title: '校验和',
+    txDefault: '发送校验和（全局默认）',
+    rxVerify: '接收校验',
+    inheritGlobal: '继承全局',
+    algo: {
+      none: '无',
+      sum8: 'SUM8（累加和）',
+      xor8: 'XOR8（异或）',
+      'crc16-modbus': 'CRC16-Modbus',
+      crc32: 'CRC32',
+    },
   },
   fileTransfer: {
     dialogTitle: '文件下发',

@@ -43,6 +43,13 @@ const viewOptions = computed(() => [
   { label: 'ASCII', value: 'ascii' },
   { label: 'HEX', value: 'hex' }
 ])
+const checksumAlgoOptions = computed(() => [
+  { label: t('checksum.algo.none'), value: 'none' },
+  { label: t('checksum.algo.sum8'), value: 'sum8' },
+  { label: t('checksum.algo.xor8'), value: 'xor8' },
+  { label: t('checksum.algo.crc16-modbus'), value: 'crc16-modbus' },
+  { label: t('checksum.algo.crc32'), value: 'crc32' }
+])
 const themeOptions = computed(() =>
   listThemes().map(t => ({ label: t.name, value: t.id }))
 )
@@ -129,6 +136,11 @@ const navItems = computed<NavItem[]>(() => [
     key: 'record',
     label: t('settings.record'),
     icon: 'M8 2v10M4 8l4 4 4-4M2 14h12'
+  },
+  {
+    key: 'checksum',
+    label: t('settings.checksum'),
+    icon: 'M3 7l3-4 3 4v7H3zM6 10h6M11.8 10l1.8 4.2-1.8-4.2z'
   }
 ])
 </script>
@@ -357,6 +369,22 @@ const navItems = computed<NavItem[]>(() => [
                 <span class="record-dir-name">{{ recordDir.dirName.value ?? ('(' + t('record.notSet') + ')') }}</span>
                 <NButton size="small" @click="pickDir">{{ t('record.selectDir') }}</NButton>
               </div>
+            </NFormItem>
+          </NForm>
+        </div>
+
+        <!-- ========== 校验和 ========== -->
+        <div v-if="activeTab === 'checksum'" class="checksum-section">
+          <div class="section-title">{{ t('checksum.title') }}</div>
+          <NForm label-placement="top" size="small">
+            <NFormItem :label="t('checksum.txDefault')">
+              <NSelect
+                v-model:value="s.sendChecksum"
+                :options="checksumAlgoOptions"
+              />
+            </NFormItem>
+            <NFormItem :label="t('checksum.rxVerify')">
+              <NSwitch v-model:value="s.rxVerifyChecksum" />
             </NFormItem>
           </NForm>
         </div>

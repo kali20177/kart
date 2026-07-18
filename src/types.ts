@@ -22,6 +22,8 @@ export interface Message {
   timestamp: number
   /** 可选错误标记（如发送失败、解码替换） */
   error?: string
+  /** 校验失败标记（与 error 独立，可共存） */
+  checksumFailed?: boolean
   /** 消息种类：'frame'=普通帧，'file'=文件下发气泡，'divider'=分隔线（缺省 'frame' 向后兼容） */
   kind?: 'frame' | 'file' | 'divider'
   /** 文件下发时指向 transfer store 中的状态 */
@@ -68,6 +70,9 @@ export interface SerialDriver {
   readonly isOpen: boolean
 }
 
+/** 校验和算法标识 */
+export type ChecksumAlgorithm = 'none' | 'sum8' | 'xor8' | 'crc16-modbus' | 'crc32'
+
 /** 自定义快速命令 */
 export interface QuickCommand {
   id: string
@@ -77,6 +82,8 @@ export interface QuickCommand {
   /** 'inherit' 表示沿用发送框当前的行尾设置 */
   appendNewline: 'inherit' | LineEnding
   color?: string
+  /** 校验和算法，'inherit' 使用全局设置 */
+  checksum?: 'inherit' | ChecksumAlgorithm
 }
 
 /** 帧切分策略 */
@@ -161,6 +168,9 @@ export interface AppSettings {
   showPauseNotification: boolean
   // 录制
   recordFormat: RecordFormat
+  // 校验和
+  sendChecksum: ChecksumAlgorithm
+  rxVerifyChecksum: boolean
 }
 
 /** 模拟场景标识（阶段 1 专属） */
