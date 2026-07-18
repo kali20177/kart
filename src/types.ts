@@ -169,8 +169,10 @@ export interface AppSettings {
   // 录制
   recordFormat: RecordFormat
   // 校验和
+  /** 发送侧追加的校验和算法（全局默认，快速命令可 inherit 此值或覆盖） */
   sendChecksum: ChecksumAlgorithm
-  rxVerifyChecksum: boolean
+  /** 接收侧使用的校验和算法；'none' 即关闭接收校验，无需独立开关 */
+  rxChecksumAlgorithm: ChecksumAlgorithm
 }
 
 /** 模拟场景标识（阶段 1 专属） */

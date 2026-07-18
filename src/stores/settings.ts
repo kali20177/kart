@@ -31,12 +31,13 @@ const DEFAULTS: AppSettings = {
   showPauseNotification: true,
   recordFormat: 'text' as const,
   sendChecksum: 'none',
-  rxVerifyChecksum: false
+  rxChecksumAlgorithm: 'none'
 }
 
 export const useSettingsStore = defineStore('settings', () => {
   // 从存储读取持久化数据
-  const persisted = storage.get<Partial<AppSettings & { theme?: string; themeMode?: string }>>('settings', {})
+  // 注：rxVerifyChecksum 为已废弃旧字段（迁移后删除），仅读取时保留以做迁移
+  const persisted = storage.get<Partial<AppSettings & { theme?: string; themeMode?: string; rxVerifyChecksum?: boolean }>>('settings', {})
 
   // 迁移：旧版 theme → themeId
   if ('theme' in persisted) {
@@ -54,6 +55,17 @@ export const useSettingsStore = defineStore('settings', () => {
   // 三次迁移：上一轮 themeId='glass-industrial'（无 dark/light 后缀）→ 暗色
   if (persisted.themeId && !getTheme(persisted.themeId)) {
     persisted.themeId = 'glass-industrial-dark'
+    storage.set('settings', persisted)
+  }
+  // 四次迁移：rxVerifyChecksum 开关已废弃，改用 rxChecksumAlgorithm='none' 表示关闭。
+  // 旧版以 sendChecksum 兼作 RX 校验算法，故开启校验的用户沿用其 sendChecksum 作为 RX 算法。
+  if ('rxVerifyChecksum' in persisted) {
+    if (persisted.rxVerifyChecksum && !('rxChecksumAlgorithm' in persisted)) {
+      persisted.rxChecksumAlgorithm = (persisted.sendChecksum && persisted.sendChecksum !== 'none')
+        ? persisted.sendChecksum
+        : 'none'
+    }
+    delete persisted.rxVerifyChecksum
     storage.set('settings', persisted)
   }
 

@@ -165,6 +165,7 @@ export default {
     copyFrame: 'Copy (with timestamp & direction)',
     copyHex: 'Copy as HEX',
     coped: 'Copied',
+    checksumFailed: 'Checksum failed',
   },
   composer: {
     lineEnding: 'EOL',
@@ -293,7 +294,7 @@ export default {
   checksum: {
     title: 'Checksum',
     txDefault: 'Send Checksum (Default)',
-    rxVerify: 'Verify Received',
+    rxAlgorithm: 'Receive Checksum Algorithm',
     inheritGlobal: 'Use Global Default',
     algo: {
       none: 'None',

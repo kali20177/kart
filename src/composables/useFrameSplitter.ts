@@ -24,6 +24,11 @@ export class FrameSplitter {
     this.delimiter = this.parseDelimiter(config)
   }
 
+  /** 当前分隔符字节（供接收侧在校验前剥离帧尾分隔符）。可能为空（如非法 hex 配置回退为 0x0A）。 */
+  getDelimiter(): Uint8Array {
+    return this.delimiter
+  }
+
   private parseDelimiter(config: FrameConfig): Uint8Array {
     const r = parseHexInput(config.delimiterHex || '0A')
     return r.ok && r.bytes.length > 0 ? r.bytes : new Uint8Array([0x0a])

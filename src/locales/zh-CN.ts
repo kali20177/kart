@@ -165,6 +165,7 @@ export default {
     copyFrame: '复制（带时间戳与方向）',
     copyHex: '复制为 HEX',
     coped: '已复制',
+    checksumFailed: '校验失败',
   },
   composer: {
     lineEnding: '行尾',
@@ -299,7 +300,7 @@ export default {
   checksum: {
     title: '校验和',
     txDefault: '发送校验和（全局默认）',
-    rxVerify: '接收校验',
+    rxAlgorithm: '接收校验算法',
     inheritGlobal: '继承全局',
     algo: {
       none: '无',

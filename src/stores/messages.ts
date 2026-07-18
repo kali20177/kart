@@ -59,56 +59,58 @@ export const useMessagesStore = defineStore('messages', () => {
   function ingestRx(bytes: Uint8Array) {
     if (paused.value) return
     const frames = splitter.push(bytes, Date.now())
-    const cfg = settingsStore.settings
+    const s = settingsStore.settings
     for (const f of frames) {
-      let error: string | undefined
-      let checksumFailed = false
-      if (cfg.rxVerifyChecksum && cfg.sendChecksum !== 'none') {
-        const len = checksumByteLength(cfg.sendChecksum)
-        if (f.length > len) {
-          const r = verifyChecksum(f, cfg.sendChecksum)
-          if (!r.ok) {
-            checksumFailed = true
-            error = '校验失败'
-            rxErrorFrames.value++
-          }
-        }
-      }
-      const msg = makeMessage('rx', f, error)
-      if (checksumFailed) msg.checksumFailed = true
-      pending.push(msg)
+      pending.push(makeRxMessage(s, f))
       rxFrames.value++
     }
     if (frames.length > 0) scheduleFlush()
 
     // gap-timeout：安排尾帧在静默 gapMs 后刷新
-    const frameCfg = settingsStore.settings.frame
+    const frameCfg = s.frame
     if (frameCfg.strategy === 'gap-timeout') {
       if (gapTimer) clearTimeout(gapTimer)
       gapTimer = setTimeout(() => {
+        // 读最新设置：用户可能在 ingest 与 flush 之间改了配置
+        const cur = settingsStore.settings
         const tail = splitter.flush()
         for (const f of tail) {
-          let error: string | undefined
-          let checksumFailed = false
-          if (cfg.rxVerifyChecksum && cfg.sendChecksum !== 'none') {
-            const len = checksumByteLength(cfg.sendChecksum)
-            if (f.length > len) {
-              const r = verifyChecksum(f, cfg.sendChecksum)
-              if (!r.ok) {
-                checksumFailed = true
-                error = '校验失败'
-                rxErrorFrames.value++
-              }
-            }
-          }
-          const msg = makeMessage('rx', f, error)
-          if (checksumFailed) msg.checksumFailed = true
-          pending.push(msg)
+          pending.push(makeRxMessage(cur, f))
           rxFrames.value++
         }
         if (tail.length > 0) scheduleFlush()
       }, frameCfg.gapMs)
     }
+  }
+
+  /**
+   * 对单个 RX 帧做可选校验，返回带 checksumFailed 标记的消息。
+   * 校验失败仅打标记（由气泡渲染本地化徽章），不写死中文到 error 字段。
+   * 校验前剔除帧尾的分隔符字节（保留在 frame 校验后补回显示用 bytes 不变——
+   * 即：校验只看「真正载荷 + 校验和」），避免 \\r\\n 被当作载荷导致必败。
+   */
+  function makeRxMessage(s: typeof settingsStore.settings, f: Uint8Array): Message {
+    const msg = makeMessage('rx', f)
+    if (s.rxChecksumAlgorithm === 'none') return msg
+    const len = checksumByteLength(s.rxChecksumAlgorithm)
+    // 剥离帧尾可能存在的分隔符（分隔符切分器会原样保留在帧里）
+    let frame = f
+    const delim = splitter.getDelimiter()
+    if (delim.length > 0 && frame.length > delim.length) {
+      let tailMatch = true
+      for (let i = 0; i < delim.length; i++) {
+        if (frame[frame.length - delim.length + i] !== delim[i]) { tailMatch = false; break }
+      }
+      if (tailMatch) frame = frame.subarray(0, frame.length - delim.length)
+    }
+    if (frame.length > len) {
+      const r = verifyChecksum(frame, s.rxChecksumAlgorithm)
+      if (!r.ok) {
+        msg.checksumFailed = true
+        rxErrorFrames.value++
+      }
+    }
+    return msg
   }
 
   /** 添加一条发送消息（TX 不切分，用户发什么就是一帧） */

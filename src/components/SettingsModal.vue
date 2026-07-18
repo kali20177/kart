@@ -383,8 +383,11 @@ const navItems = computed<NavItem[]>(() => [
                 :options="checksumAlgoOptions"
               />
             </NFormItem>
-            <NFormItem :label="t('checksum.rxVerify')">
-              <NSwitch v-model:value="s.rxVerifyChecksum" />
+            <NFormItem :label="t('checksum.rxAlgorithm')">
+              <NSelect
+                v-model:value="s.rxChecksumAlgorithm"
+                :options="checksumAlgoOptions"
+              />
             </NFormItem>
           </NForm>
         </div>
