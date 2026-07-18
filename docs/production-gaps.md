@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-07-16。已完成项标注 ✅。
+> 最近更新：2026-07-18。已完成项标注 ✅。
 
 ## 一、生产环境缺失功能
 
@@ -10,9 +10,10 @@
 
 1. ✅ **帧间时间差 Δt** — 已完成：`MessageBubble` meta 行在绝对时间后追加 `Δ`（距上一帧间隔）和 `+elapsed`（距会话首帧累计）。计算基于全量时间线（`computeDeltas` on shallowRef），不受方向/搜索过滤影响。格式复用 `formatDelta`/`formatElapsed`，与导出保持一致。
 2. ✅ **搜索只能过滤、不能高亮，且搜不了 HEX** — 已完成：文本/HEX 双模式搜索（HEX 复用 `parseHexInput`，宽容分隔）、命中高亮（原生配对：text+ascii / hex+hex；交叉配对仅过滤+导航+flash，避免字节/字符偏移错位）、上一项/下一项导航（`当前/总数` + 自动滚动 + 活动色 + flash）、当日时间范围筛选（`HH:MM:SS[.mmm]`，非法红框）。**不做正则**（嵌入式调试用处不大）。匹配逻辑抽到 `src/utils/search.ts` + `hex.ts#findByteRanges`，响应式编排抽到 `src/composables/useMessageSearch.ts`，均有单测。已知限制：交叉配对无内联高亮、时间筛选不支持跨午夜区间。
-3. **发送无 CRC/校验和，接收无校验** — `serial.send` 只拼行尾，无法为载荷自动计算校验和。嵌入式二进制协议几乎都带完整性校验，缺失此项意味着：
-   - **发送侧**：需手动用外部工具预计算 CRC/校验和再粘贴 HEX，每次载荷变化都要重新算。典型场景：Modbus RTU 帧尾 CRC16-Modbus、串口舵机/云台协议 SUM8、自定义传感器协议 XOR8、基站/DTU 协议 CRC32。快速命令和循环发送功能都受此限制——载荷静态，无法动态生成合法帧。
-   - **接收侧**：`Message.error` 目前仅标记发送失败，未标记校验不匹配。接收侧理应能对匹配到的帧做可选校验（按配置的校验算法验证末 1-4 字节），校验失败的帧在气泡上标记 error badge 并计入错误帧统计。阶段 2 接入真实串口后，还应检测 parity error / frame error / buffer overrun 等物理层异常。
+3. ✅ **发送自动计算校验和 + 接收可选校验** — 已完成：
+   - **发送侧**：`serial.send` 在拼行尾前自动追加指定校验和（CRC16-Modbus/SUM8/XOR8/CRC32），覆盖 Modbus RTU、舵机/云台、传感器、基站/DTU 常见嵌入式协议。快速命令可独立配置校验和（inherit 全局或覆盖），循环发送/文件发送均受益（文件引擎 CRC16 已复用 `checksum.ts`）。
+   - **接收侧**：新增 `rxChecksumAlgorithm` 独立设置（不再耦合 sendChecksum），支持收发不对称协议。校验前自动剥离帧尾分隔符，避免 `\r\n` 被当作载荷导致必败。校验失败帧气泡标记 `✗ {t('bubble.checksumFailed')}`，StatusBar 增加 ERR 帧错误计数。
+   - **架构**：四种算法集中维护在 `src/utils/checksum.ts`，所有调用方都引用同一实现，消除原 `transfer.ts` 内联 CRC16 重复。
 4. ✅ **文件发送（二进制整包下发）** - 已完成 UI 交互与引擎（基于 Mock 驱动）。详细设计见 [docs/file-transfer-design.md](./file-transfer-design.md)。落地内容：
    - **引擎层**（`src/stores/transfer.ts`）：async pump 调度循环 + 状态机（queued/sending/paused/completed/aborted/error）、分包切片、三种协议封装（raw / len-prefix / seq-crc，CRC16-Modbus 内联）、限速（包间延时 + 字节速率令牌桶，取更严者）、ACK 流控（any/byte/echo-crc 三策略 + 超时/NACK 重试）、循环下发（`repeat`）、断点续传（`startOffset` + seq 对齐）、错误注入（破坏 CRC / 跳过 ACK）、断线自动中止。
    - **UX 层**：`FileTransferDialog`（预设：原始整包/STM32-ISP/ESP32/压测/自定义 + 文件拖拽与移除）、`FileTransferBubble`（消息流内单条文件气泡：进度条/速率/ETA/暂停继续中止重试详情，按 `Message.kind==='file'` 委托渲染）、`InputComposer` 📎 按钮 + 拖拽入口、`StatusBar` 活跃下发紧凑条。
