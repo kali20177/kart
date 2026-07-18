@@ -113,12 +113,14 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   function setScenario(id: MockScenarioId) {
+    if (!import.meta.env.DEV) return
     scenario.value = id
     driver.setScenario(id)
   }
 
   /** 手动注入模拟数据（设置面板用） */
   function inject(bytes: Uint8Array) {
+    if (!import.meta.env.DEV) return
     driver.inject(bytes)
   }
 

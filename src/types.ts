@@ -53,6 +53,21 @@ export interface SerialSignals {
   ri: boolean
 }
 
+/**
+ * 串口驱动接口 —— Mock 与未来的 Web Serial 实现共享这一契约。
+ * 阶段 2 只需写一个实现该接口的 WebSerialDriver，serial store 不动。
+ */
+export interface SerialDriver {
+  listPorts(): Promise<string[]>
+  open(path: string, options: PortOptions): Promise<void>
+  close(): Promise<void>
+  write(bytes: Uint8Array): Promise<void>
+  getSignals(): SerialSignals
+  /** 订阅接收数据，返回取消订阅函数 */
+  onData(cb: (bytes: Uint8Array) => void): () => void
+  readonly isOpen: boolean
+}
+
 /** 自定义快速命令 */
 export interface QuickCommand {
   id: string

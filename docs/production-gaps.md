@@ -23,43 +23,38 @@
 6. ✅ **暂停时数据直接丢弃** — 暂停时数据仍不缓冲保留（波形追加缓冲无意义：恢复瞬间刷新长段 + 超缓冲区截断后数据不全），恢复时通过 warning toast 提示用户缺失数据的时间段（`HH:MM:SS.mmm – HH:MM:SS.mmm (Xs)`），消息列表与波形图均有各自独立提示。
 7. ✅ **布局与发送历史不持久化** — 已完成：右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM 拖拽高度）、发送历史（`useSendHistory`）三项均通过 `useStorage` 持久化到 localStorage。发送历史限制最近 50 条，避免 localStorage 撑爆。
 8. ✅ **自定义波特率** — 已完成（filterable+tag 输入、自定义档位+标注、预设标注、校验、持久化）。
-9. **缺少原始终端视图** — 当前所有 RX 数据都经 `FrameSplitter` 切成离散帧气泡，这对控制台风格的连续文本流是错误抽象：
-   - **嵌入式 Linux 控制台**：内核 boot 日志、systemd 服务输出、应用 printf 都是连续 ASCII 流，没有帧边界。gap-timeout 策略会在帧间静默期人为延迟尾帧显示；delimiter 策略按 \r\n 切分后每条日志变成一个独立气泡，失去了流式终端的连贯视觉。
-   - **Bootloader 交互**：U-Boot / GRUB 等 bootloader 输出 ANSI 转义序列（清屏、光标定位、颜色、进度条），当前气泡视图无法解析 ANSI，且气泡排版完全破坏终端渲染布局。
-   - **交互式 shell**：设备登录后进入 shell（BusyBox ash 等），命令行是逐字符交互的，不是「帧」。
-   建议新增第三种主视图 `Terminal`（与「消息」「波形」并列，同属 `mainView` tab），实现轻量 ANSI 解析：字节到达即渲染、无帧切分、支持 ANSI SGR 颜色、自动滚底+暂停回看。与消息视图共享 encoding 设置，但数据路径独立于 FrameSplitter。
 
 ### 专业工具进阶预期（中优先级）
 
-10. ✅ **统计面板太薄** — 已完成：`StatusBar` 新增帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长（HH:MM:SS）、缓冲使用率（百分比+>80% 告警色）。速率每 1s 采样计算。断开后统计灰度冻结保留，重新连接恢复活跃。
-11. ✅ **标记/注释/分隔** — 已完成：支持两种操作——① 右键帧气泡「添加标注」可在该帧上附带 📌 注释文本，导出时该行携带 Note 字段；② 右键帧气泡「在此前插入分隔线」可在消息流任意位置插入视觉分隔线（可选标签），导出时列为单独分隔行。上下文菜单含「多选」入口。四种导出格式（TXT/CSV/JSON/Binary）均已适配，导出对话框新增「包含分隔线」「包含标注」选项（默认不勾选）。
-12. ✅ **会话录制与回放** — 无此需求，不实现。
-13. ✅ **导出格式单一** — 已完成：支持 TXT/CSV/JSON/Binary 四种导出格式，含筛选导出、hex+ascii 双列等选项。
-14. **结构化协议解析器** — 帧切分解决了切帧，无"帧内字段（header/len/cmd/payload/crc）可配置渲染"。无 Modbus 等通用协议解码。
-15. **单连接，不支持多端口并发** — `serial` store 单例 driver。同时盯多设备做不到。〔依赖驱动〕
-16. **快速命令不支持变量/宏替换** — `QuickCommand.payload` 静态。缺计数器、时间戳、CRC 占位；无每命令独立循环发送。
-17. ✅ **波形缺测量与导出** — 已完成：`WaveformChart` 支持游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看，支持 CSV 导出波形数据。
-18. **自动重连是空开关** — `autoReconnect` 设置存在，无重连逻辑，无掉线提示。〔依赖驱动〕
-19. ✅ **缺少实时日志落盘** — 已完成。原始字节流在帧切分之前通过 `serial.onData`/`onTxData` 双通道捕获，经 500ms/64KB 缓冲批量写入文件。平台抽象 `IFileWriter`（`src/composables/useFileWriter.ts`）：浏览器走 File System Access API（`showSaveFilePicker` + `FileSystemWritableFileStream`），Electron 走 `dialog.showSaveDialog` + `fs.createWriteStream` IPC。录制器 store（`src/stores/recorder.ts`）管理状态机（idle→recording→stopping→idle/error），支持断线自动停止、写入异常进入 error 状态。录制按钮+格式切换在 `ConnectionBar`，录制指示（脉动红点+文件名+文件大小+已录制时长）在 `StatusBar`，菜单项在 `MenuBar`。输出格式可选 `.txt`（带时间戳 HEX 行，含方向标记 RX/TX）或 `.csv`（timestamp,direction,hex,ascii 四列）。浏览器不支持 File System Access API 时按钮自动置灰。
-    - **老化/稳定性测试**：设备连续运行 24h+，需要完整记录所有串口输出用于事后异常回溯。内存缓冲远远不够，必须流式写入磁盘。
-    - **现场抓日志**：客户现场复现问题，可能需要抓取数小时数据带回实验室分析。
-    - **二进制原始数据**：波形解析、协议分析等场景需要保留原始字节流（不经帧切分），以便后续用不同帧切分配置或不同采样率重新解析同一份数据。
-    建议在 `ConnectionBar` 或菜单增加「录制」按钮，点击后通过 File System Access API（浏览器）或 Electron `dialog.showSaveDialog` 选择输出文件路径，原始字节流实时追加写入。StatusBar 显示录制状态（红点+文件大小+已录制时长）。导出格式可选 .bin（原始字节）或 .txt（带时间戳）。录制的文件后续可通过「导入」功能回放分析。
+9. ✅ **统计面板太薄** — 已完成：`StatusBar` 新增帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长（HH:MM:SS）、缓冲使用率（百分比+>80% 告警色）。速率每 1s 采样计算。断开后统计灰度冻结保留，重新连接恢复活跃。
+10. ✅ **标记/注释/分隔** — 已完成：支持两种操作——① 右键帧气泡「添加标注」可在该帧上附带 📌 注释文本，导出时该行携带 Note 字段；② 右键帧气泡「在此前插入分隔线」可在消息流任意位置插入视觉分隔线（可选标签），导出时列为单独分隔行。上下文菜单含「多选」入口。四种导出格式（TXT/CSV/JSON/Binary）均已适配，导出对话框新增「包含分隔线」「包含标注」选项（默认不勾选）。
+11. ✅ **会话录制与回放** — 无此需求，不实现。
+12. ✅ **导出格式单一** — 已完成：支持 TXT/CSV/JSON/Binary 四种导出格式，含筛选导出、hex+ascii 双列等选项。
+13. **结构化协议解析器** — 帧切分解决了切帧，无"帧内字段（header/len/cmd/payload/crc）可配置渲染"。无 Modbus 等通用协议解码。
+14. **单连接，不支持多端口并发** — `serial` store 单例 driver。同时盯多设备做不到。〔依赖驱动〕
+15. **快速命令不支持变量/宏替换** — `QuickCommand.payload` 静态。缺计数器、时间戳、CRC 占位；无每命令独立循环发送。
+16. ✅ **波形缺测量与导出** — 已完成：`WaveformChart` 支持游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看，支持 CSV 导出波形数据。
+17. **自动重连是空开关** — `autoReconnect` 设置存在，无重连逻辑，无掉线提示。〔依赖驱动〕
+18. ✅ **缺少实时日志落盘** — 已完成。原始字节流在帧切分之前通过 `serial.onData`/`onTxData` 双通道捕获，经 500ms/64KB 缓冲批量写入文件。平台抽象 `IFileWriter`（`src/composables/useFileWriter.ts`）：浏览器走 File System Access API（`showSaveFilePicker` + `FileSystemWritableFileStream`），Electron 走 `dialog.showSaveDialog` + `fs.createWriteStream` IPC。录制器 store（`src/stores/recorder.ts`）管理状态机（idle→recording→stopping→idle/error），支持断线自动停止、写入异常进入 error 状态。录制按钮+格式切换在 `ConnectionBar`，录制指示（脉动红点+文件名+文件大小+已录制时长）在 `StatusBar`，菜单项在 `MenuBar`。输出格式可选 `.txt`（带时间戳 HEX 行，含方向标记 RX/TX）或 `.csv`（timestamp,direction,hex,ascii 四列）。浏览器不支持 File System Access API 时按钮自动置灰。
+   - **老化/稳定性测试**：设备连续运行 24h+，需要完整记录所有串口输出用于事后异常回溯。内存缓冲远远不够，必须流式写入磁盘。
+   - **现场抓日志**：客户现场复现问题，可能需要抓取数小时数据带回实验室分析。
+   - **二进制原始数据**：波形解析、协议分析等场景需要保留原始字节流（不经帧切分），以便后续用不同帧切分配置或不同采样率重新解析同一份数据。
+   建议在 `ConnectionBar` 或菜单增加「录制」按钮，点击后通过 File System Access API（浏览器）或 Electron `dialog.showSaveDialog` 选择输出文件路径，原始字节流实时追加写入。StatusBar 显示录制状态（红点+文件大小+已录制时长）。导出格式可选 .bin（原始字节）或 .txt（带时间戳）。录制的文件后续可通过「导入」功能回放分析。
 
 ### 打磨项（低优先级）
 
-20. **清空无确认/无撤销** — `messages.clear` 直接清空，误点丢失。
-21. **缓冲满无感知** — 超 `bufferLimit` 静默裁剪，无"已丢弃 N 帧"提示。
-22. ✅ **全局快捷键缺失** — 已有快捷键（`Ctrl/Cmd+Enter` 发送、`Alt/Ctrl+↑↓` 翻历史）已在帮助菜单新增「快捷键」面板展示，不额外添加显式 UI 已有操作的快捷键。
-23. **关键字告警** — 收到特定模式无声音/通知。
-24. **端口元信息缺失** — `listPorts` 只字符串数组，无 VID/PID/厂商/占用提示。〔依赖驱动〕
-25. **复制能力弱** — 单帧复制带时间戳/方向 ✅；多选批量复制 / 导出 txt / 删除 ✅（全选即"复制全部可见"）；仍缺 CSV 行。
-26. **`useStorage` 同步无容量保护** — 全同步 localStorage，阶段 2 换 electron-store（async）接口签名要改。
+19. **清空无确认/无撤销** — `messages.clear` 直接清空，误点丢失。
+20. **缓冲满无感知** — 超 `bufferLimit` 静默裁剪，无"已丢弃 N 帧"提示。
+21. ✅ **全局快捷键缺失** — 已有快捷键（`Ctrl/Cmd+Enter` 发送、`Alt/Ctrl+↑↓` 翻历史）已在帮助菜单新增「快捷键」面板展示，不额外添加显式 UI 已有操作的快捷键。
+22. **关键字告警** — 收到特定模式无声音/通知。
+23. **端口元信息缺失** — `listPorts` 只字符串数组，无 VID/PID/厂商/占用提示。〔依赖驱动〕
+24. **复制能力弱** — 单帧复制带时间戳/方向 ✅；多选批量复制 / 导出 txt / 删除 ✅（全选即"复制全部可见"）；仍缺 CSV 行。
+25. **`useStorage` 同步无容量保护** — 全同步 localStorage，阶段 2 换 electron-store（async）接口签名要改。
 
 ### 边界说明
 
-- 第 5、15、18、24 项依赖 Web Serial 驱动实现相应能力，前端 UI 可先做但落地需驱动支持（属"阶段 2 路线图"）。
-- 其余各项（1–4、6–14、16–17、19–23、25–26）纯前端可独立完成。
+- 第 5、14、17、23 项依赖 Web Serial 驱动实现相应能力，前端 UI 可先做但落地需驱动支持（属"阶段 2 路线图"）。
+- 其余各项（1–4、6–13、15–16、18–22、24–25）纯前端可独立完成。
 
 ---
 

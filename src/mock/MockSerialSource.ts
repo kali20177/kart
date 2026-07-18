@@ -1,4 +1,4 @@
-import type { MockScenarioId, PortOptions, SerialSignals } from '@/types'
+import type { MockScenarioId, PortOptions, SerialSignals, SerialDriver } from '@/types'
 import {
   atResponse,
   binaryFrame,
@@ -7,21 +7,6 @@ import {
   throughputChunk,
   waveformChunk
 } from './scenarios'
-
-/**
- * 串口驱动接口 —— Mock 与未来的 Web Serial 实现共享这一契约。
- * 阶段 2 只需写一个实现该接口的 WebSerialDriver，serial store 不动。
- */
-export interface SerialDriver {
-  listPorts(): Promise<string[]>
-  open(path: string, options: PortOptions): Promise<void>
-  close(): Promise<void>
-  write(bytes: Uint8Array): Promise<void>
-  getSignals(): SerialSignals
-  /** 订阅接收数据，返回取消订阅函数 */
-  onData(cb: (bytes: Uint8Array) => void): () => void
-  readonly isOpen: boolean
-}
 
 /** 模拟串口源：用定时器代替真实硬件，提供多种调试场景 */
 export class MockSerialSource implements SerialDriver {
