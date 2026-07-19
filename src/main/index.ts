@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -98,6 +98,70 @@ function registerRecorderIpc(): void {
   })
 }
 
+/**
+ * Web Serial API 在 Electron 渲染进程可用，但需主进程配合两件事，否则
+ * navigator.serial.requestPort()/getPorts() 会被拒（点「选择端口」无反应）：
+ *   1. setPermissionCheckHandler 放行 'serial' 权限检查（getPorts 复用已授权端口、
+ *      requestPort 选择后访问均触发）；
+ *   2. 响应 'select-serial-port' 事件--Electron 不自带浏览器那样的原生串口
+ *      选择器，必须自行实现并经 callback(portId) 回传；传空串表示取消。
+ * portList 来自 Electron 的跨平台串口枚举（win/linux/macos），故此实现三平台通用。
+ * 注：Linux 用户需在 dialout 组、macOS 需设备未被系统占用，属 OS 层前提，非代码可解。
+ */
+function configureWebSerial(): void {
+  const ses = session.defaultSession
+
+  // 放行 'serial' 权限检查（getPorts 复用已授权端口、requestPort 选择后访问均触发）。
+  // 串口的「请求」由下方 select-serial-port 事件接管，不经过 setPermissionRequestHandler。
+  ses.setPermissionCheckHandler((_wc, permission) => permission === 'serial')
+
+  ses.on('select-serial-port', (event, portList, webContents, callback) => {
+    event.preventDefault()
+    const win = BrowserWindow.fromWebContents(webContents)
+
+    if (portList.length === 0) {
+      void (win
+        ? dialog.showMessageBox(win, {
+            type: 'warning',
+            title: '未发现串口',
+            message: '未检测到可用的串口设备',
+            detail: '请确认设备已连接、驱动已安装且未被其他程序占用。',
+            buttons: ['确定']
+          })
+        : dialog.showMessageBox({
+            type: 'warning',
+            title: '未发现串口',
+            message: '未检测到可用的串口设备',
+            buttons: ['确定']
+          })
+      )
+      callback('')
+      return
+    }
+
+    // 端口列表作为按钮，末尾追加「取消」。label 优先用 portName（可读）。
+    const labels = portList.map((p) => p.portName || p.portId)
+    const buttons = [...labels, '取消']
+    const cancelId = buttons.length - 1
+    const options: Electron.MessageBoxOptions = {
+      type: 'question',
+      title: '选择串口设备',
+      message: '选择要连接的串口设备',
+      buttons,
+      defaultId: 0,
+      cancelId,
+      noLink: true
+    }
+    void (win
+      ? dialog.showMessageBox(win, options)
+      : dialog.showMessageBox(options)
+    ).then((result) => {
+      if (result.response === cancelId) callback('')
+      else callback(portList[result.response].portId)
+    })
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1100,
@@ -108,6 +172,17 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false
     }
+  })
+
+  // 转发渲染进程 console 到终端（调试用）
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    const tag = level === 3 ? 'ERR' : level === 1 ? 'WARN' : 'LOG'
+    console.log(`[renderer:${tag}] ${message} (${sourceId}:${line})`)
+  })
+
+  // 页面加载失败时打印错误
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error(`[renderer] FAILED to load ${url}: ${code} ${desc}`)
   })
 
   // 窗口关闭时清理录制写入流（end 触发缓冲区最后一次刷新）
@@ -129,6 +204,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerRecorderIpc()
+  configureWebSerial()
 
   Menu.setApplicationMenu(null)
 

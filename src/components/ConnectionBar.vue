@@ -8,6 +8,9 @@ import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
 import type { MockScenarioId } from '@/types'
+import type { DriverType } from '@/serial'
+
+const isDev = import.meta.env.DEV
 
 const { t } = useI18n()
 
@@ -170,10 +173,28 @@ const parityOptions = [
   { label: 'Odd', value: 'odd' }
 ]
 const scenarioOptions = SCENARIOS.map((s) => ({ label: s.label, value: s.id }))
+const driverModeOptions = [
+  { label: 'Mock', value: 'mock' as DriverType },
+  { label: 'Web Serial', value: 'webserial' as DriverType }
+]
 
 async function toggle() {
   if (serial.connected) await serial.disconnect()
-  else await serial.connect()
+  else {
+    try {
+      await serial.connect()
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : t('conn.connectFailed'))
+    }
+  }
+}
+
+async function onRequestPort() {
+  try {
+    await serial.requestPort()
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : t('conn.connectFailed'))
+  }
 }
 
 async function startRecording() {
@@ -195,6 +216,12 @@ async function startRecording() {
       style="width: 130px"
       :disabled="serial.connected"
     />
+    <NTooltip v-if="serial.driverType === 'webserial'">
+      <template #trigger>
+        <NButton size="small" :disabled="serial.connected" @click="onRequestPort">+</NButton>
+      </template>
+      {{ t('conn.requestPort') }}
+    </NTooltip>
     <NTooltip>
       <template #trigger>
         <NButton size="small" :disabled="serial.connected" @click="serial.refreshPorts()">⟳</NButton>
@@ -248,18 +275,30 @@ async function startRecording() {
       {{ serial.connected ? t('conn.disconnect') : t('conn.connect') }}
     </NButton>
 
-    <div class="divider" />
+    <template v-if="isDev && serial.driverType === 'mock'">
+      <div class="divider" />
+      <span class="mock-label">{{ t('conn.mockScene') }}</span>
+      <NSelect
+        :value="serial.scenario"
+        :options="scenarioOptions"
+        size="small"
+        style="width: 150px"
+        @update:value="(v: MockScenarioId) => serial.setScenario(v)"
+      />
+    </template>
 
-    <span class="mock-label">{{ t('conn.mockScene') }}</span>
-    <NSelect
-      :value="serial.scenario"
-      :options="scenarioOptions"
-      size="small"
-      style="width: 150px"
-      @update:value="(v: MockScenarioId) => serial.setScenario(v)"
-    />
-
-    <div class="divider" />
+    <!-- 驱动模式切换（DEV 专属） -->
+    <template v-if="isDev">
+      <div class="divider" />
+      <NSelect
+        :value="serial.driverType"
+        :options="driverModeOptions"
+        size="small"
+        style="width: 110px"
+        :disabled="serial.connected"
+        @update:value="(v: DriverType) => serial.switchDriver(v)"
+      />
+    </template>
 
     <!-- 录制控制 -->
     <template v-if="recorder.supported">

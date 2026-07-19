@@ -98,6 +98,8 @@ export default {
     baudMustBeInt: 'Baud rate must be a positive integer',
     baudRange: 'Baud rate range',
     editNoteTooltip: 'Edit note',
+    requestPort: 'Select serial device',
+    connectFailed: 'Connection failed',
   },
   status: {
     notConnected: 'Disconnected',

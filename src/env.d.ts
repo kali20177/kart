@@ -31,6 +31,49 @@ interface FileSystemDirectoryHandle {
   requestPermission(descriptor: { mode: FileSystemPermissionMode }): Promise<FileSystemPermissionStatus>
 }
 
+// Web Serial API（Chromium 89+ / Electron 31+ 内置，非标准 TS lib 包含）
+interface SerialPortInfo {
+  usbVendorId?: number
+  usbProductId?: number
+}
+
+interface SerialOptions {
+  baudRate: number
+  dataBits?: 7 | 8
+  stopBits?: 1 | 2
+  parity?: 'none' | 'even' | 'odd'
+  bufferSize?: number
+  flowControl?: 'none' | 'hardware'
+}
+
+interface SerialOutputSignals {
+  dataCarrierDetect?: boolean
+  clearToSend?: boolean
+  ringIndicator?: boolean
+  dataSetReady?: boolean
+}
+
+interface SerialPort {
+  getInfo(): SerialPortInfo
+  open(options: SerialOptions): Promise<void>
+  close(): Promise<void>
+  readonly readable: ReadableStream<Uint8Array> | null
+  readonly writable: WritableStream<Uint8Array> | null
+  getSignals(): Promise<SerialOutputSignals>
+  setSignals(signals: SerialOutputSignals): Promise<void>
+  addEventListener(type: 'disconnect', listener: () => void): void
+  removeEventListener(type: 'disconnect', listener: () => void): void
+}
+
+interface SerialPortRequestOptions {
+  filters?: Array<{ usbVendorId?: number; usbProductId?: number }>
+}
+
+interface Serial extends EventTarget {
+  getPorts(): Promise<SerialPort[]>
+  requestPort(options?: SerialPortRequestOptions): Promise<SerialPort>
+}
+
 // preload 通过 contextBridge 暴露（仅 Electron 下存在）
 interface Window {
   electron?: {
@@ -53,4 +96,9 @@ interface Window {
     }>
   }): Promise<FileSystemFileHandle & { name: string }>
   showDirectoryPicker?(options?: { id?: string }): Promise<FileSystemDirectoryHandle>
+}
+
+// 扩展 Navigator 以包含 Web Serial API（Chromium 89+）
+interface Navigator {
+  readonly serial: Serial
 }

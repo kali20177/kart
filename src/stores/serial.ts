@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
-import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm } from '@/types'
+import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, SerialDriver } from '@/types'
 import { MockSerialSource } from '@/mock/MockSerialSource'
+import { WebSerialDriver } from '@/serial/WebSerialDriver'
+import { createSerialDriver, getDriverType, setDriverType, type DriverType } from '@/serial'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
 import { computeChecksum } from '@/utils/checksum'
@@ -19,7 +21,8 @@ const DEFAULT_OPTS: PortOptions = {
 }
 
 export const useSerialStore = defineStore('serial', () => {
-  const driver = new MockSerialSource()
+  let driver: SerialDriver = createSerialDriver()
+  const driverType = ref<DriverType>(getDriverType())
   const messages = useMessagesStore()
 
   const ports = ref<string[]>([])
@@ -76,9 +79,22 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  /** 触发浏览器串口选择器（Web Serial 专属），选中后刷新端口列表 */
+  async function requestPort(): Promise<string | null> {
+    if (!driver.requestPort) return null
+    const path = await driver.requestPort()
+    if (path) {
+      await refreshPorts()
+      selectedPort.value = path
+    }
+    return path
+  }
+
   async function connect() {
     if (connected.value || !selectedPort.value) return
-    driver.setScenario(scenario.value)
+    if (driver instanceof MockSerialSource) {
+      driver.setScenario(scenario.value)
+    }
     await driver.open(selectedPort.value, { ...options })
     storage.set('portOptions', { ...options })
     rxBytes.value = 0
@@ -95,6 +111,11 @@ export const useSerialStore = defineStore('serial', () => {
     })
     connected.value = true
     signalTimer = setInterval(() => {
+      if (!driver.isOpen) {
+        // 驱动检测到物理断连，触发 full cleanup
+        disconnect()
+        return
+      }
       signals.value = driver.getSignals()
     }, 500)
   }
@@ -115,6 +136,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   function setScenario(id: MockScenarioId) {
     if (!import.meta.env.DEV) return
+    if (!(driver instanceof MockSerialSource)) return
     scenario.value = id
     driver.setScenario(id)
   }
@@ -122,7 +144,28 @@ export const useSerialStore = defineStore('serial', () => {
   /** 手动注入模拟数据（设置面板用） */
   function inject(bytes: Uint8Array) {
     if (!import.meta.env.DEV) return
+    if (!(driver instanceof MockSerialSource)) return
     driver.inject(bytes)
+  }
+
+  /** 切换驱动类型（仅 DEV 模式生效） */
+  async function switchDriver(type: DriverType) {
+    if (type === driverType.value) return
+    if (connected.value) await disconnect()
+    const prevDriver = driver
+    setDriverType(type)
+    driverType.value = getDriverType()
+    driver = createSerialDriver()
+    // 销毁旧驱动
+    if (prevDriver instanceof WebSerialDriver) {
+      prevDriver.destroy()
+    }
+    // re-seed scenario for mock
+    if (driver instanceof MockSerialSource) {
+      driver.setScenario(scenario.value)
+    }
+    selectedPort.value = null
+    await refreshPorts()
   }
 
   /** 新增自定义波特率（非法值/预设档位/已存在项会被忽略） */
@@ -252,11 +295,14 @@ export const useSerialStore = defineStore('serial', () => {
     sessionStartedAt,
     customBaudRates,
     summary,
+    driverType,
     refreshPorts,
+    requestPort,
     connect,
     disconnect,
     setScenario,
     inject,
+    switchDriver,
     addCustomBaudRate,
     removeCustomBaudRate,
     updateCustomBaudNote,

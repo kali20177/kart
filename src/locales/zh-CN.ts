@@ -98,6 +98,8 @@ export default {
     baudMustBeInt: '波特率必须为正整数',
     baudRange: '波特率范围',
     editNoteTooltip: '编辑标注',
+    requestPort: '选择串口设备',
+    connectFailed: '连接失败',
   },
   status: {
     notConnected: '未连接',

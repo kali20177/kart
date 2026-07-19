@@ -61,6 +61,8 @@ export interface SerialSignals {
  */
 export interface SerialDriver {
   listPorts(): Promise<string[]>
+  /** 触发浏览器串口选择器（Web Serial 专属），返回新端口标识；用户取消返回 null */
+  requestPort?(): Promise<string | null>
   open(path: string, options: PortOptions): Promise<void>
   close(): Promise<void>
   write(bytes: Uint8Array): Promise<void>
