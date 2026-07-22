@@ -12,70 +12,122 @@ npm run typecheck      # 仅执行 vue-tsc 类型检查（不输出文件）
 npm test               # 运行所有 Vitest 测试（单次）
 npm run test:watch     # 以 watch 模式运行测试
 npm run electron:dev   # 在 Electron 中以开发模式运行（含 HMR + 主/预加载自动重启）
-npm run electron:build # 类型检查 + 构建 + electron-builder 打包为 Windows 安装包（输出 release/）
+npm run electron:build # 类型检查 + 构建 + electron-builder 打包（输出 release/）
 npm run electron:preview # 构建后用 electron 直接运行（不打包）
 ```
 
 ## 项目概览
 
-**阶段 1** 串口调试助手 — 浏览器 SPA，使用模拟串口数据。同一份代码已可打包为 Electron 桌面应用（仍跑模拟数据，仅构建/打包脚手架）。**阶段 2** 将接入 Web Serial API 等真实能力。
+串口调试助手 —— 面向嵌入式开发调试的现代化串口工具。Vue 3 SPA，三种串口驱动可切换，同一份代码同时支持浏览器（Web Serial API）和 Electron 桌面应用（serialport npm 库），打包输出 Windows/macOS/Linux 三平台安装包。
 
 - **框架**：Vue 3（`<script setup>` Composition API）
 - **构建**：Vite 5、TypeScript strict、`@/` 路径别名 → `src/`
 - **桌面打包**：Electron 31 + vite-plugin-electron + electron-builder（详见下文「Electron 集成」）
 - **状态管理**：Pinia
 - **UI 组件库**：Naive UI（zhCN 中文语言包）
+- **国际化**：vue-i18n（`@intlify/unplugin-vue-i18n` 预编译，满足 CSP 无 unsafe-eval）
+- **波形图**：uPlot（轻量 Canvas 时序图，用于实时信号/数据流可视化）
+- **虚拟滚动**：vue-virtual-scroller（大量消息列表高性能渲染）
 - **测试**：Vitest + jsdom + `@vue/test-utils`
 - **注册源**：国内 npm 镜像（`registry.npmmirror.com`），配置在 `.npmrc`
 - **无 linter/formatter** —— `vue-tsc` 类型检查是唯一的代码质量门禁
 
 ## 架构
 
+### 关键抽象 — SerialDriver 接口
+
+`src/types.ts` 定义了 `SerialDriver` 接口。所有 Pinia stores 依赖此接口而非具体实现，切换驱动时 store 无需改动。
+
+**三种驱动实现，通过工厂 `src/serial/index.ts` 运行时自动选择：**
+
+| 驱动 | 文件 | 环境 | 说明 |
+| --- | --- | --- | --- |
+| `mock` | `src/mock/MockSerialSource.ts` | 浏览器 DEV | 模拟串口数据，可切换场景（AT 应答/二进制帧/压测等） |
+| `webserial` | `src/serial/WebSerialDriver.ts` | 浏览器 | Web Serial API（Chromium 89+），需 HTTPS + 用户授权 |
+| `serialport` | `src/serial/SerialPortDriver.ts` | Electron | 通过 IPC 委托主进程 serialport npm 库，返回真实 COM 口名 |
+
+**驱动选择优先级：** Electron 环境 → serialport；DEV 模式 → 读取 localStorage 偏好（默认 mock）；浏览器有 Web Serial → webserial；兜底 → mock。DEV 模式下可通过 UI 下拉切换驱动。
+
 ### 数据流
+
 所有串口字节数据以 `Uint8Array` 格式存储一次。ASCII/HEX 视图按需计算（切换视图无需重建数据）。高频数据通过 `requestAnimationFrame` 批处理摄入到 messages store，避免压垮 Vue 响应式系统。
 
-### 关键抽象 — SerialDriver 接口
-`src/mock/MockSerialSource.ts` 定义了 `SerialDriver` 接口，模拟源和未来的 `WebSerialDriver` 都将实现该接口。Pinia stores 依赖此接口而非具体实现——阶段 2 替换模拟源为真实串口时，store 无需任何改动。
-
 ### 层次结构
+
 ```
-src/types.ts              — 共享类型（Message、PortOptions、QuickCommand、AppSettings）
-src/utils/                — 纯工具函数（hex、encoding、ascii-table）—— 无框架依赖
-src/mock/                 — MockSerialSource + 场景生成器（阶段 2 被替换）
-src/composables/          — Vue composables（useFrameSplitter、useSendHistory、useStorage）
-src/stores/               — Pinia stores（serial、messages、commands、settings）
-src/components/           — 8 个 Vue 组件（ConnectionBar、MessageList、MessageBubble、
-                            InputComposer、QuickCommandsPanel、AsciiTable、SettingsDrawer、StatusBar）
-src/App.vue               — 根布局 + 主题切换
-src/main.ts               — createApp + Pinia + 挂载
-src/styles/tokens.css     — CSS 自定义属性（亮/暗主题、字体、间距）
+src/types.ts              — 共享类型（Message、PortOptions、SerialDriver、QuickCommand、AppSettings 等）
+src/utils/                — 纯工具函数（hex、encoding、checksum、byte-parser、search、export-*、message-format、ascii-table、baud、download）—— 无框架依赖
+src/mock/                 — MockSerialSource + 场景生成器
+src/serial/               — 串口驱动工厂 + WebSerialDriver + SerialPortDriver（Electron IPC）
+src/main/                 — Electron 主进程（SerialPortManager — 封装 serialport 库）
+src/preload/              — Electron 预加载（contextBridge 暴露 serial/recorder/platform API）
+src/composables/          — Vue composables（useFrameSplitter、useSendHistory、useStorage、useMessageSearch、useTheme、useFileWriter、useRecordDirectory）
+src/stores/               — Pinia stores（serial、messages、commands、settings、recorder、transfer、waveform）
+src/themes/               — 主题注册表 + 内置主题（glass-industrial-dark/light、oled-hud）
+src/locales/              — 国际化文案（zh-CN、en-US）
+src/components/           — 14 个 Vue 组件（ConnectionBar、MenuBar、MessageList、MessageBubble、
+                            InputComposer、SendHistoryPopover、QuickCommandsPanel、SettingsModal、
+                            StatusBar、AsciiTable、ExportDialog、FileTransferDialog、FileTransferBubble、
+                            WaveformChart）
+src/styles/               — CSS 自定义属性（亮/暗主题令牌 + 基础重置）
+src/App.vue               — 根布局 + 主题切换 + 双栏/三栏布局
+src/main.ts               — createApp + Pinia + i18n + 挂载
 ```
 
 ### 组件 ↔ Store 依赖关系
+
 ```
-App.vue → 所有 stores
-ConnectionBar   → serial store
-MessageList     → messages store, settings store
-  └─ MessageBubble → hex/utils, encoding/utils
-InputComposer   → serial store, settings store, useSendHistory
-QuickCommandsPanel → commands store, serial store
+App.vue → 所有 stores + useTheme
+MenuBar         → settings store（亮/暗切换、i18n 语言切换）
+ConnectionBar   → serial store、recorder store
+MessageList     → messages store、settings store、useMessageSearch
+  └─ MessageBubble → hex/utils、encoding/utils、checksum/utils、search/utils
+  └─ FileTransferBubble → transfer store
+InputComposer   → serial store、settings store、useSendHistory
+  └─ SendHistoryPopover → useSendHistory
+QuickCommandsPanel → commands store、serial store
+SettingsModal   → settings store、serial store
+StatusBar       → serial store、messages store、transfer store
+WaveformChart   → waveform store、messages store、settings store
+ExportDialog    → messages store、settings store
+FileTransferDialog → transfer store、settings store
 AsciiTable      → ascii-table/utils
-SettingsDrawer  → settings store, serial store
-StatusBar       → serial store
 ```
 
 ### 帧分割
+
 `useFrameSplitter.ts` 是一个纯逻辑类（无定时器，可独立测试），通过三种策略将原始字节流拆分为离散帧：间隔超时、分隔符、固定长度。
 
 ### 存储抽象
-`useStorage.ts` 封装 localStorage，暴露 `{ get, set, remove }` 接口。阶段 2 切换到 `electron-store` 时，调用方无需修改。
+
+`useStorage.ts` 封装 localStorage，暴露 `{ get, set, remove }` 接口。后续切换到 `electron-store` 时，调用方无需修改。
+
+## 功能总览
+
+- **收发气泡**：RX 左/TX 左右分色，时间戳精确到毫秒、字节数、帧间 Δt、校验失败标记，悬停可复制/复制为 HEX/重发/添加标注，暂停时数据不缓冲并显示缺失区间。
+- **ASCII ↔ HEX 切换**：原始字节只存一份，切视图即时重排。HEX 视图 16 字节/行 + ASCII 透视列。
+- **搜索**：文本/HEX 双模式、命中高亮（原生配对）、上一项/下一项导航、当日时间范围筛选。不支持正则。
+- **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32）。
+- **接收校验**：独立 RX 校验算法（不耦合发送侧），支持收发不对称协议，分隔符前自动校验。
+- **快速命令**：增删改、拖拽排序、JSON 导入导出、点击直发、调到发送框；每条命令可独立配置校验和（inherit 全局或覆盖）。
+- **文件发送**：分包切片、三种协议封装（raw/len-prefix/seq-crc）、限速、ACK 流控、循环下发、断点续传、错误注入。`FileTransferDialog` 预设（原始整包/STM32-ISP/ESP32/压测/自定义）+ 拖拽。
+- **波形图**：实时 Canvas 时序图（uPlot），多通道色相均分，支持暂停/恢复、时间范围选择、CSV 导出。
+- **录制**：原始字节流目录式录制成文件（格式/位置可配），支持开始/停止，pagehide 自动落盘。
+- **ASCII 对照表**：右侧抽屉，点击行插入到发送框。
+- **设置**：编码（UTF-8/ASCII/GBK）、帧策略、缓冲上限、默认视图、主题（亮/暗）、字号、发送/接收校验算法、录制格式与目录。
+- **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数。
+- **导出**：消息列表 CSV/JSON 导出、波形 CSV 导出、快速命令 JSON 导入导出。
+- **状态栏**：连接态、端口参数概要、RX/TX/帧/ERR 统计、信号线状态（DCD/CTS/DSR/RI）、活跃文件下发紧凑条。
+- **主题**：多主题注册表 + 3 套内置主题（glass-industrial-dark、glass-industrial-light、oled-hud），明暗二元，无"跟随系统"。
 
 ## Electron 集成
 
 桌面打包基于 **vite-plugin-electron**（单 vite 配置，由环境变量 `ELECTRON=true` 开关）。普通 `npm run dev` / `npm run build` 不设该变量，插件完全惰性，浏览器构建产物与无 Electron 时一致。
 
-- `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`。
-- `src/preload/index.ts` — 预加载：当前仅占位（暴露 `platform`），阶段 2 在此通过 contextBridge 接入串口/存储。
+- `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`；初始化 `SerialPortManager` 并注册 IPC handlers（`serial:list`、`serial:open`、`serial:close`、`serial:write`、`serial:getSignals`）。
+- `src/main/SerialPortManager.ts` — 封装 serialport npm 库：枚举串口（返回真实 COM 口名如 `COM5`、`/dev/tty.usbserial-1420`）、打开/关闭/写入/信号状态。读取事件驱动（`SerialPort 'data'` 事件），通过 `webContents.send` 推送到渲染进程。相比手写 C++ addon：无需本机工具链、prebuilt native bindings、跨平台。
+- `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/onData/onError）、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
+- `src/serial/SerialPortDriver.ts` — 渲染端驱动：实现 `SerialDriver` 接口，通过 `window.electron.serial` 与主进程 IPC 通信。信号轮询 500ms。
 - `vite.config.ts` — `base` 在 Electron 目标下设为 `'./'`（file:// 加载需相对路径），浏览器下为 `'/'`。
 - `tsconfig.node.json` — 主/预加载的 Node 上下文类型检查（无 DOM lib），`electron:build` 中以 `tsc -p tsconfig.node.json --noEmit` 作为门禁。
 - `electron-builder.json` — 打包配置，输出到 `release/`（三平台：Windows NSIS、macOS DMG/ZIP、Linux AppImage/deb）。
@@ -137,14 +189,13 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 - **`electron:build` 打包目标**：当前配置为 `AppImage`（通用单文件）和 `deb`（Debian/Ubuntu），可在 Linux 下直接构建。若在 WSL 中构建 Windows NSIS 安装包，需额外安装 `wine`（electron-builder 依赖它处理 `.exe`）。
 - **镜像下载**：与前文 macOS 节描述相同，Linux 同样受 npm 11+ 不传递 `.npmrc` 环境变量的问题影响，修复方法一致。注意平台后缀不同（`linux-x64.zip` vs `darwin-arm64.zip`）。
 
-## 阶段 2 路线图
-1. ~~添加 Electron + electron-builder~~（已完成：vite-plugin-electron + electron-builder 脚手架）
-2. ~~添加 `src/main/`（主进程）和 `src/preload/`（contextBridge）~~（已完成占位）
-3. ~~实现真实串口 `SerialDriver`~~（已完成：浏览器走 Web Serial API 的 `WebSerialDriver`；Electron 走 npm 库 `serialport` 经主进程 `SerialPortManager` + 渲染端 `SerialPortDriver`(IPC)，返回真实 COM 口名如 `COM5`）
-4. ~~将 serial store 中的 `MockSerialSource` 替换为真实驱动~~（已完成：驱动工厂 `src/serial/index.ts` 运行时按环境自动选择）
-5. 将 `useStorage` 从 localStorage 迁移到 electron-store
-6. 将 Blob 下载替换为 Electron `dialog` + `fs`
+## 待完成事项
+
+1. 将 `useStorage` 从 localStorage 迁移到 electron-store（Electron 环境持久化）
+2. 将 Blob 下载替换为 Electron `dialog` + `fs`
+3. DTR/RTS/Break 控制（`SerialDriver` 目前只有 `getSignals` 只读，无 `setSignals`）
+4. 文件发送引擎内联工具（crc/chunk-framer/rate-limit）拆分为独立 `utils/*.ts` + 单测
 
 ## 生产环境缺失功能与已知问题
 
-生产化待补功能（按优先级分层）与已知技术问题（如 `vite.config` 的 `test.environment` 未生效）汇总在 [docs/production-gaps.md](docs/production-gaps.md)，供后续任务规划参考。
+生产化待补功能（按优先级分层）与已知技术问题汇总在 [docs/production-gaps.md](docs/production-gaps.md)，供后续任务规划参考。
