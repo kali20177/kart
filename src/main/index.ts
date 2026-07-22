@@ -262,7 +262,6 @@ function createWindow(): void {
 
   if (devServerUrl) {
     win.loadURL(devServerUrl)
-    win.webContents.openDevTools()
   } else {
     win.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
