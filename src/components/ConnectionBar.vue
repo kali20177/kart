@@ -209,14 +209,20 @@ async function startRecording() {
 
 <template>
   <div class="bar">
-    <NSelect
-      v-model:value="serial.selectedPort"
-      :options="portOptions"
-      size="small"
-      :placeholder="t('conn.selectPort')"
-      style="width: 130px"
-      :disabled="serial.connected"
-    />
+    <NTooltip :disabled="!serial.selectedPort">
+      <template #trigger>
+        <NSelect
+          v-model:value="serial.selectedPort"
+          :options="portOptions"
+          :consistent-menu-width="false"
+          size="small"
+          :placeholder="t('conn.selectPort')"
+          style="width: 210px"
+          :disabled="serial.connected"
+        />
+      </template>
+      {{ serial.selectedPort }}
+    </NTooltip>
     <NTooltip v-if="serial.driverType === 'webserial'">
       <template #trigger>
         <NButton size="small" :disabled="serial.connected" @click="onRequestPort">+</NButton>
