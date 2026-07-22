@@ -3,6 +3,7 @@ import { ref, reactive, computed } from 'vue'
 import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, SerialDriver } from '@/types'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { WebSerialDriver } from '@/serial/WebSerialDriver'
+import { SerialPortDriver } from '@/serial/SerialPortDriver'
 import { createSerialDriver, getDriverType, setDriverType, type DriverType } from '@/serial'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
@@ -156,8 +157,8 @@ export const useSerialStore = defineStore('serial', () => {
     setDriverType(type)
     driverType.value = getDriverType()
     driver = createSerialDriver()
-    // 销毁旧驱动
-    if (prevDriver instanceof WebSerialDriver) {
+    // 销毁旧驱动（serialport/webserial 都持有需要清理的本地资源）
+    if (prevDriver instanceof WebSerialDriver || prevDriver instanceof SerialPortDriver) {
       prevDriver.destroy()
     }
     // re-seed scenario for mock

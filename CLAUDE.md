@@ -140,8 +140,8 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 ## 阶段 2 路线图
 1. ~~添加 Electron + electron-builder~~（已完成：vite-plugin-electron + electron-builder 脚手架）
 2. ~~添加 `src/main/`（主进程）和 `src/preload/`（contextBridge）~~（已完成占位）
-3. 实现 Web Serial API 的 `SerialDriver`
-4. 将 serial store 中的 `MockSerialSource` 替换为真实驱动
+3. ~~实现真实串口 `SerialDriver`~~（已完成：浏览器走 Web Serial API 的 `WebSerialDriver`；Electron 走 npm 库 `serialport` 经主进程 `SerialPortManager` + 渲染端 `SerialPortDriver`(IPC)，返回真实 COM 口名如 `COM5`）
+4. ~~将 serial store 中的 `MockSerialSource` 替换为真实驱动~~（已完成：驱动工厂 `src/serial/index.ts` 运行时按环境自动选择）
 5. 将 `useStorage` 从 localStorage 迁移到 electron-store
 6. 将 Blob 下载替换为 Electron `dialog` + `fs`
 

@@ -1,24 +1,38 @@
 import type { SerialDriver } from '@/types'
 import { WebSerialDriver } from './WebSerialDriver'
+import { SerialPortDriver } from './SerialPortDriver'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 
-export type DriverType = 'mock' | 'webserial'
+export type DriverType = 'mock' | 'webserial' | 'serialport'
 
 /**
- * 选择驱动类型：
- * - 开发模式默认使用 Mock（可通过 localStorage 切换）
- * - 生产/非开发模式使用 Web Serial
+ * 选择驱动类型，优先级：
+ *  1. Electron 环境 → serialport（主进程串口库，返回真实 COM 口名）
+ *  2. 开发模式 → 读取 localStorage 偏好，默认为 mock
+ *  3. 浏览器环境（Web Serial API）→ webserial
+ *  4. 兜底 → mock
  */
 function resolveDriverType(): DriverType {
+  // Electron 环境：始终使用 serialport（即使 dev 模式）
+  const isElectron = typeof window !== 'undefined' && !!(window as any).electron?.serial
+  if (isElectron) return 'serialport'
+
+  // 开发模式：读取 localStorage 中的 driver 偏好，默认为 mock
   if (import.meta.env.DEV) {
-    // 开发模式：读取 localStorage 中的 driver 偏好，默认为 mock
     try {
       const stored = localStorage.getItem('serial-demo:driver')
       if (stored === 'webserial') return 'webserial'
     } catch { /* localStorage 不可用 */ }
     return 'mock'
   }
-  return 'webserial'
+
+  // 浏览器环境（Web Serial API）
+  if (typeof navigator !== 'undefined' && 'serial' in navigator) {
+    return 'webserial'
+  }
+
+  // 兜底
+  return 'mock'
 }
 
 let _driverType: DriverType | null = null
@@ -46,6 +60,15 @@ export function setDriverType(type: DriverType): void {
 export function createSerialDriver(): SerialDriver {
   if (_driver) return _driver
   const type = getDriverType()
-  _driver = type === 'webserial' ? new WebSerialDriver() : new MockSerialSource()
+  switch (type) {
+    case 'serialport':
+      _driver = new SerialPortDriver()
+      break
+    case 'webserial':
+      _driver = new WebSerialDriver()
+      break
+    default:
+      _driver = new MockSerialSource()
+  }
   return _driver
 }

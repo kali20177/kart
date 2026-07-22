@@ -81,7 +81,12 @@ export default defineConfig({
                   lib: false,
                   rollupOptions: {
                     input: 'src/main/index.ts',
-                    output: { format: 'cjs', entryFileNames: 'index.cjs' }
+                    output: { format: 'cjs', entryFileNames: 'index.cjs' },
+                    // serialport / @serialport/* 含运行时动态 require 的原生 .node
+                    // 向量，不能被打进 bundle（路径会失效）。external 后在运行时由
+                    // Node 从打包应用内的 node_modules 解析，配合 electron-builder 的
+                    // asarUnpack 把 .node 解出 asar。
+                    external: ['serialport', /^@serialport\//]
                   }
                 }
               }

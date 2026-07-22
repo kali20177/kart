@@ -175,7 +175,8 @@ const parityOptions = [
 const scenarioOptions = SCENARIOS.map((s) => ({ label: s.label, value: s.id }))
 const driverModeOptions = [
   { label: 'Mock', value: 'mock' as DriverType },
-  { label: 'Web Serial', value: 'webserial' as DriverType }
+  { label: 'Web Serial', value: 'webserial' as DriverType },
+  { label: 'SerialPort', value: 'serialport' as DriverType }
 ]
 
 async function toggle() {

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+import { SerialPortManager } from './SerialPortManager'
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL
 
@@ -162,6 +163,66 @@ function configureWebSerial(): void {
   })
 }
 
+// ── serialport 原生串口驱动 ──
+
+// 每个窗口对应一个管理器（用于把数据事件推回本窗口渲染进程）
+const _serialManagers = new Map<number, SerialPortManager>()
+
+/** 注册 serialport 相关的 IPC handlers */
+function registerSerialPortIpc(): void {
+  // 枚举可用串口，返回真实 COM 口名
+  ipcMain.handle('serial:list-ports', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _serialManagers.get(win.id) : null
+    if (!mgr) return []
+    return await mgr.listPortsAsync()
+  })
+
+  // 打开串口
+  ipcMain.handle('serial:open', async (event, portName: string, options: {
+    baudRate: number
+    dataBits: 7 | 8
+    stopBits: 1 | 2
+    parity: 'none' | 'even' | 'odd'
+    flowControl: 'none' | 'hardware'
+  }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) throw new Error('窗口不存在')
+    const mgr = _serialManagers.get(win.id)
+    if (!mgr) throw new Error('串口管理器不可用')
+    await mgr.open(portName, options)
+  })
+
+  // 关闭串口
+  ipcMain.handle('serial:close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _serialManagers.get(win.id) : null
+    mgr?.close()
+  })
+
+  // 写入数据
+  ipcMain.handle('serial:write', async (event, data: Uint8Array) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _serialManagers.get(win.id) : null
+    if (!mgr?.isOpen) throw new Error('串口未打开')
+    return await mgr.write(Buffer.from(data))
+  })
+
+  // 获取信号状态
+  ipcMain.handle('serial:get-signals', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _serialManagers.get(win.id) : null
+    return await mgr?.getSignals() ?? { dcd: false, cts: false, dsr: false, ri: false }
+  })
+
+  // 检查串口是否已打开
+  ipcMain.handle('serial:is-open', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _serialManagers.get(win.id) : null
+    return mgr?.isOpen === true
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1100,
@@ -174,6 +235,9 @@ function createWindow(): void {
     }
   })
 
+  // 创建 serialport 管理器（绑定到本窗口，用于推送数据事件）
+  _serialManagers.set(win.id, new SerialPortManager(win))
+
   // 转发渲染进程 console 到终端（调试用）
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
     const tag = level === 3 ? 'ERR' : level === 1 ? 'WARN' : 'LOG'
@@ -185,13 +249,15 @@ function createWindow(): void {
     console.error(`[renderer] FAILED to load ${url}: ${code} ${desc}`)
   })
 
-  // 窗口关闭时清理录制写入流（end 触发缓冲区最后一次刷新）
+  // 窗口关闭时清理录制写入流 + serialport 管理器（end 触发缓冲区最后一次刷新）
   win.on('closed', () => {
     const entry = writeStreams.get(win.id)
     if (entry) {
       try { entry.stream.end() } catch { /* ignore */ }
       writeStreams.delete(win.id)
     }
+    _serialManagers.get(win.id)?.destroy()
+    _serialManagers.delete(win.id)
   })
 
   if (devServerUrl) {
@@ -204,6 +270,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerRecorderIpc()
+  registerSerialPortIpc()
   configureWebSerial()
 
   Menu.setApplicationMenu(null)

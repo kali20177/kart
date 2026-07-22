@@ -9,6 +9,9 @@
     "dist-electron/**",
     "package.json"
   ],
+  "asarUnpack": [
+    "**/*.node"
+  ],
   "mac": {
     "target": ["dmg", "zip"],
     "icon": "build/icon.icns",
