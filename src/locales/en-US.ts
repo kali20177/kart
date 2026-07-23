@@ -166,7 +166,7 @@ export default {
     resend: 'Resend',
     copy: 'Copy',
     copyFrame: 'Copy (with timestamp & direction)',
-    copyHex: 'Copy as HEX',
+    copyData: 'Copy data (no metadata)',
     coped: 'Copied',
     copyFailed: 'Copy failed',
     checksumFailed: 'Checksum failed',

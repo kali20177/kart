@@ -166,7 +166,7 @@ export default {
     resend: '重发',
     copy: '复制',
     copyFrame: '复制（带时间戳与方向）',
-    copyHex: '复制为 HEX',
+    copyData: '复制数据（不含元数据）',
     coped: '已复制',
     copyFailed: '复制失败',
     checksumFailed: '校验失败',

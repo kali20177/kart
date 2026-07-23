@@ -166,10 +166,17 @@ async function copyCurrent() {
   }
 }
 
-/** 复制为纯 HEX（不带前缀，喂脚本 / 编辑器用） */
-async function copyHex() {
+/** 当前视图模式标签 */
+const dataLabel = computed(() => (props.viewMode === 'hex' ? 'HEX' : 'ASCII'))
+
+/** 复制为纯数据（不含元数据，随 viewMode 变化） */
+async function copyData() {
   try {
-    await copy(bytesToHex(props.message.bytes))
+    const content =
+      props.viewMode === 'hex'
+        ? bytesToHex(props.message.bytes)
+        : decodeBytes(props.message.bytes, props.encoding)
+    await copy(content)
     toast.success(t('bubble.coped'))
   } catch {
     toast.error(t('bubble.copyFailed'))
@@ -225,7 +232,7 @@ function onRowContext(e: MouseEvent) {
         <span class="spacer" />
         <span v-if="!selectable" class="actions">
           <button :title="t('bubble.copyFrame')" @click="copyCurrent">{{ t('bubble.copy') }}</button>
-          <button :title="t('bubble.copyHex')" @click="copyHex">Hex</button>
+          <button :title="t('bubble.copyData')" @click="copyData">{{ dataLabel }}</button>
           <button v-if="isTx" :title="t('bubble.resend')" @click="emit('resend', message.bytes)">{{ t('bubble.resend') }}</button>
         </span>
       </div>
