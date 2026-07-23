@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
+import { useClipboard } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import type { DataMode, Encoding, Message } from '@/types'
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useMessage()
+const { copy } = useClipboard()
 
 const isTx = computed(() => props.message.direction === 'tx')
 
@@ -149,21 +151,29 @@ watchEffect((onCleanup) => {
 })
 
 /** 复制本帧：带时间戳 + 方向前缀，与气泡显示时间一致 */
-function copyCurrent() {
-  navigator.clipboard?.writeText(
-    formatMessageLine(props.message, {
-      viewMode: props.viewMode,
-      encoding: props.encoding,
-      timeStyle: 'short'
-    })
-  )
-  toast.success(t('bubble.coped'))
+async function copyCurrent() {
+  try {
+    await copy(
+      formatMessageLine(props.message, {
+        viewMode: props.viewMode,
+        encoding: props.encoding,
+        timeStyle: 'short'
+      })
+    )
+    toast.success(t('bubble.coped'))
+  } catch {
+    toast.error(t('bubble.copyFailed'))
+  }
 }
 
 /** 复制为纯 HEX（不带前缀，喂脚本 / 编辑器用） */
-function copyHex() {
-  navigator.clipboard?.writeText(bytesToHex(props.message.bytes))
-  toast.success(t('bubble.coped'))
+async function copyHex() {
+  try {
+    await copy(bytesToHex(props.message.bytes))
+    toast.success(t('bubble.coped'))
+  } catch {
+    toast.error(t('bubble.copyFailed'))
+  }
 }
 
 /** 多选模式下左键切换选中；非多选不响应（气泡本身不可点） */

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { useClipboard, useDebounceFn } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, NDropdown, NModal, useDialog, useMessage } from 'naive-ui'
 import MessageBubble from './MessageBubble.vue'
@@ -21,10 +22,22 @@ const messagesStore = useMessagesStore()
 const settingsStore = useSettingsStore()
 const dialog = useDialog()
 const toast = useMessage()
+const { copy } = useClipboard()
 const { t } = useI18n()
 
 const dirFilter = ref<'all' | Direction>('all')
 const keyword = ref('')
+// 搜索输入防抖：NInput 即时绑定 keyword（输入回显），debouncedKeyword 喂给
+// 过滤 / 命中区间 / 导航重置 / 气泡高亮门控，停顿 150ms 后统一重算，避免
+// 大量消息时每次按键全量扫描。
+const debouncedKeyword = ref('')
+const setKeyword = useDebounceFn((v: string) => {
+  debouncedKeyword.value = v
+}, 150)
+function onKeywordInput(v: string) {
+  keyword.value = v
+  setKeyword(v)
+}
 const timeInputStart = ref('')
 const timeInputEnd = ref('')
 const showTimeFilter = ref(false)
@@ -47,7 +60,7 @@ const deltaMap = computed(() => computeDeltas(messagesStore.messages))
 
 const { filtered, matchRanges, matchCount, hexError } = useMessageSearch({
   messages: computed(() => messagesStore.messages),
-  keyword,
+  keyword: debouncedKeyword,
   searchMode,
   encoding,
   dirFilter,
@@ -57,7 +70,7 @@ const { filtered, matchRanges, matchCount, hexError } = useMessageSearch({
 })
 
 // 任何筛选条件变化 → 导航从头开始（命中集合已变）
-watch([keyword, searchMode, dirFilter, timeStart, timeEnd, hasNote], () => {
+watch([debouncedKeyword, searchMode, dirFilter, timeStart, timeEnd, hasNote], () => {
   matchIndex.value = 0
 })
 // 实时流式收帧时 matchCount 会变，夹取 matchIndex 防越界（避免 5/3 这种显示）
@@ -246,8 +259,9 @@ function copySelected() {
       })
     )
     .join('\n')
-  navigator.clipboard?.writeText(lines)
-  toast.success(t('msgList.copiedN', { n: selectedCount.value }))
+  copy(lines)
+    .then(() => toast.success(t('msgList.copiedN', { n: selectedCount.value })))
+    .catch(() => toast.error(t('msgList.copyFailed')))
 }
 
 function exportSelected() {
@@ -300,11 +314,12 @@ watch(
         <NButton :type="dirFilter === 'tx' ? 'primary' : 'default'" @click="dirFilter = 'tx'">TX</NButton>
       </NButtonGroup>
       <NInput
-        v-model:value="keyword"
+        :value="keyword"
         size="tiny"
         :placeholder="searchMode === 'hex' ? t('msgList.searchHex') : t('msgList.searchKeyword')"
         clearable
         style="width: 180px"
+        @update:value="onKeywordInput"
         @keydown.enter="onSearchKeydown"
       />
       <span v-if="hexError" class="hex-err">{{ hexError }}</span>
@@ -381,7 +396,7 @@ watch(
               :encoding="settingsStore.settings.encoding"
               :selectable="multiSelect"
               :selected="selected.has(item.id)"
-              :keyword="keyword"
+              :keyword="debouncedKeyword"
               :search-mode="searchMode"
               :match-ranges="matchRanges.get(item.id) ?? []"
               :active-match="matchIndex === index && matchCount > 0"

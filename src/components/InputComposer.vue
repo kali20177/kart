@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, onMounted, nextTick } from 'vue'
+import { useStorage, useEventListener } from '@vueuse/core'
 import { NInput, NButton, NButtonGroup, NSelect, NInputNumber, NSwitch, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
 import SendHistoryPopover from './SendHistoryPopover.vue'
-import { storage } from '@/composables/useStorage'
 import { parseHexInput, bytesToHex } from '@/utils/hex'
 import { encodeWithEscapes } from '@/utils/encoding'
 import type { DataMode, LineEnding } from '@/types'
@@ -176,10 +176,11 @@ function onOpenFileTransfer() {
 const inputComp = ref<InstanceType<typeof NInput> | null>(null)
 const MIN_H = 40
 const MAX_H = 360
-const INPUT_HEIGHT_KEY = 'composer:inputHeight'
-const inputHeight = ref(storage.get(INPUT_HEIGHT_KEY, MIN_H * 2))
+const INPUT_HEIGHT_KEY = 'serial-demo:composer:inputHeight'
+const inputHeight = useStorage(INPUT_HEIGHT_KEY, MIN_H * 2)
 let dragStartY = 0
 let dragStartH = 0
+let stopMove: (() => void) | null = null
 
 function getTextarea(): HTMLTextAreaElement | null {
   const el = (inputComp.value as any)?.$el as HTMLElement | undefined
@@ -194,8 +195,9 @@ function onGripDown(e: PointerEvent) {
   dragStartH = ta.getBoundingClientRect().height
   document.body.style.cursor = 'row-resize'
   document.body.style.userSelect = 'none'
-  window.addEventListener('pointermove', onGripMove)
-  window.addEventListener('pointerup', onGripUp, { once: true })
+  // 拖拽期间动态注册，pointerup 时通过返回的 cleanup 解绑
+  stopMove = useEventListener(window, 'pointermove', onGripMove)
+  useEventListener(window, 'pointerup', onGripUp, { once: true })
 }
 
 function onGripMove(e: PointerEvent) {
@@ -208,13 +210,14 @@ function onGripMove(e: PointerEvent) {
 }
 
 function onGripUp() {
-  window.removeEventListener('pointermove', onGripMove)
+  stopMove?.()
+  stopMove = null
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
   const ta = getTextarea()
   if (ta) {
     const h = parseFloat(ta.style.height)
-    if (h >= MIN_H && h <= MAX_H) storage.set(INPUT_HEIGHT_KEY, h)
+    if (h >= MIN_H && h <= MAX_H) inputHeight.value = h
   }
 }
 
@@ -222,20 +225,21 @@ onMounted(async () => {
   await nextTick()
   const ta = getTextarea()
   if (ta) ta.style.height = `${inputHeight.value}px`
-  window.addEventListener('app:reset-layout', onResetLayout)
 })
 
 /** 「恢复默认设置」时就地重置输入框高度 */
 function onResetLayout() {
   inputHeight.value = MIN_H * 2
-  storage.set(INPUT_HEIGHT_KEY, MIN_H * 2)
   const ta = getTextarea()
   if (ta) ta.style.height = `${MIN_H * 2}px`
 }
 
+// setup 期注册，组件卸载时 useEventListener 自动解绑
+useEventListener(window, 'app:reset-layout', onResetLayout)
+
 onBeforeUnmount(() => {
-  window.removeEventListener('pointermove', onGripMove)
-  window.removeEventListener('app:reset-layout', onResetLayout)
+  // 兜底：拖拽进行中卸载时清理 pointermove
+  stopMove?.()
 })
 </script>
 

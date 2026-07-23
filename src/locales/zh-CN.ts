@@ -138,6 +138,7 @@ export default {
     deleteDialogOk: '删除',
     deleteDialogCancel: '取消',
     copiedN: '已复制 {n} 条',
+    copyFailed: '复制失败',
     exportedN: '已导出 {n} 条',
     pauseNotice: '暂停期间未显示数据: {start} – {end} ({dur}s)',
     hexError: 'HEX 格式错误',
@@ -167,6 +168,7 @@ export default {
     copyFrame: '复制（带时间戳与方向）',
     copyHex: '复制为 HEX',
     coped: '已复制',
+    copyFailed: '复制失败',
     checksumFailed: '校验失败',
   },
   composer: {

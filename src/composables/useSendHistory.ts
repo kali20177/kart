@@ -1,11 +1,13 @@
 import { ref } from 'vue'
-import { storage } from './useStorage'
+import { useStorage } from '@vueuse/core'
 
-const STORAGE_KEY = 'sendHistory'
+const STORAGE_KEY = 'serial-demo:sendHistory'
 const DEFAULT_MAX = 50
 
-// 模块级 ref，确保所有调用方共享同一份状态
-const history = ref<string[]>(storage.get<string[]>(STORAGE_KEY, []))
+// 模块级 ref，确保所有调用方共享同一份状态。
+// useStorage 返回响应式 ref，变更（含 in-place unshift/splice）自动落盘 localStorage，
+// 无需手动 persist。跨标签页亦同步。
+const history = useStorage<string[]>(STORAGE_KEY, [])
 const cursor = ref(-1)
 let max = DEFAULT_MAX
 
@@ -20,13 +22,8 @@ export function useSendHistory(maxOverride = DEFAULT_MAX) {
     if (history.value[0] !== trimmed) {
       history.value.unshift(trimmed)
       if (history.value.length > max) history.value.pop()
-      persist()
     }
     cursor.value = -1
-  }
-
-  function persist() {
-    storage.set(STORAGE_KEY, history.value.slice(0, max))
   }
 
   /** 上翻（更早的） */
@@ -55,7 +52,6 @@ export function useSendHistory(maxOverride = DEFAULT_MAX) {
     const idx = Math.max(0, Math.min(history.value.length - 1, index))
     history.value.splice(idx, 1)
     history.value = [...history.value]
-    persist()
     if (cursor.value >= idx) cursor.value = Math.max(-1, cursor.value - 1)
   }
 
@@ -63,7 +59,6 @@ export function useSendHistory(maxOverride = DEFAULT_MAX) {
   function clear() {
     history.value = []
     cursor.value = -1
-    persist()
   }
 
   return { history, add, prev, next, reset, remove, clear }

@@ -138,6 +138,7 @@ export default {
     deleteDialogOk: 'Delete',
     deleteDialogCancel: 'Cancel',
     copiedN: 'Copied {n}',
+    copyFailed: 'Copy failed',
     exportedN: 'Exported {n}',
     pauseNotice: 'Data not shown during pause: {start} – {end} ({dur}s)',
     hexError: 'Invalid HEX',
@@ -167,6 +168,7 @@ export default {
     copyFrame: 'Copy (with timestamp & direction)',
     copyHex: 'Copy as HEX',
     coped: 'Copied',
+    copyFailed: 'Copy failed',
     checksumFailed: 'Checksum failed',
   },
   composer: {

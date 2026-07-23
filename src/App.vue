@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { useStorage, useEventListener, useTitle } from '@vueuse/core'
 import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import MenuBar from './components/MenuBar.vue'
@@ -15,13 +16,13 @@ import FileTransferDialog from './components/FileTransferDialog.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
 import { useTheme } from './composables/useTheme'
-import { storage } from './composables/useStorage'
 import type { DataMode } from './types'
 import type { AsciiEntry } from './utils/ascii-table'
 
 const serial = useSerialStore()
 const settingsStore = useSettingsStore()
 const { t, locale } = useI18n()
+const title = useTitle()
 
 // 主题（替代 useIsDark + 手动 themeOverrides）
 const { naiveTheme, naiveOverrides } = useTheme()
@@ -32,7 +33,7 @@ watch(
   (l) => {
     locale.value = l
     document.documentElement.setAttribute('lang', l === 'zh-CN' ? 'zh-CN' : 'en')
-    document.title = t('app.name')
+    title.value = t('app.name')
   },
   { immediate: true }
 )
@@ -57,13 +58,14 @@ const commandsCollapsed = ref(false)
 const COL_MIN = 200
 const COL_MAX = 480
 const DEFAULT_RIGHT_WIDTH = 280
-const rightWidth = ref(storage.get('app:rightWidth', DEFAULT_RIGHT_WIDTH))
+const rightWidth = useStorage('serial-demo:app:rightWidth', DEFAULT_RIGHT_WIDTH)
 const dragging = ref(false)
 const rightStyle = computed(() =>
   commandsCollapsed.value ? {} : { width: rightWidth.value + 'px' }
 )
 let colDragStartX = 0
 let colDragStartW = 0
+let stopColMove: (() => void) | null = null
 
 function onColGripDown(e: PointerEvent) {
   if (commandsCollapsed.value) return
@@ -73,8 +75,9 @@ function onColGripDown(e: PointerEvent) {
   colDragStartW = rightWidth.value
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
-  window.addEventListener('pointermove', onColGripMove)
-  window.addEventListener('pointerup', onColGripUp, { once: true })
+  // 拖拽期间动态注册，pointerup 时通过返回的 cleanup 解绑
+  stopColMove = useEventListener(window, 'pointermove', onColGripMove)
+  useEventListener(window, 'pointerup', onColGripUp, { once: true })
 }
 
 function onColGripMove(e: PointerEvent) {
@@ -86,21 +89,24 @@ function onColGripMove(e: PointerEvent) {
 
 function onColGripUp() {
   dragging.value = false
-  window.removeEventListener('pointermove', onColGripMove)
+  stopColMove?.()
+  stopColMove = null
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
-  storage.set('app:rightWidth', rightWidth.value)
+  // rightWidth 为 useStorage 响应式 ref，变更自动落盘
 }
 
 /** 「恢复默认设置」时就地重置侧边栏宽度 */
 function onResetLayout() {
   rightWidth.value = DEFAULT_RIGHT_WIDTH
-  storage.set('app:rightWidth', DEFAULT_RIGHT_WIDTH)
 }
 
+// setup 期注册，组件卸载时 useEventListener 自动解绑
+useEventListener(window, 'app:reset-layout', onResetLayout)
+
 onBeforeUnmount(() => {
-  window.removeEventListener('pointermove', onColGripMove)
-  window.removeEventListener('app:reset-layout', onResetLayout)
+  // 兜底：拖拽进行中卸载时清理 pointermove（根组件实际不会卸载）
+  stopColMove?.()
 })
 
 watch(
@@ -138,7 +144,6 @@ function onInsertAscii(e: AsciiEntry) {
 
 onMounted(() => {
   serial.refreshPorts()
-  window.addEventListener('app:reset-layout', onResetLayout)
 })
 </script>
 
