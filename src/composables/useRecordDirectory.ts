@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import type { IFileWriter } from './useFileWriter'
-import { storage } from './useStorage'
+import { storage, STORAGE_PREFIX } from './useStorage'
 
 /**
  * 管理录制保存目录的 composable（单例）。
@@ -11,7 +11,9 @@ import { storage } from './useStorage'
 
 const DIR_STORAGE_KEY = 'record-dir-name'
 const DIR_PATH_KEY = 'record-dir-path'  // Electron only
-const PICKER_ID = 'serial-demo-record'
+// picker id 与 IndexedDB 名沿用存储前缀串，确保改名时一并更新、每次打开定位到上次目录。
+const PICKER_ID = STORAGE_PREFIX + 'record'
+const DB_NAME = STORAGE_PREFIX + 'record'
 
 // 单例状态
 const dirName = ref<string | null>(storage.get<string | null>(DIR_STORAGE_KEY, null))
@@ -22,7 +24,7 @@ let dirPath: string | null = storage.get<string | null>(DIR_PATH_KEY, null)
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('serial-demo', 1)
+    const request = indexedDB.open(DB_NAME, 1)
     request.onupgradeneeded = () => {
       request.result.createObjectStore('handles')
     }

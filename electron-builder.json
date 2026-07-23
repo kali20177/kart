@@ -1,6 +1,6 @@
 {
-  "appId": "com.serial-demo.app",
-  "productName": "serial-demo",
+  "appId": "com.kart.app",
+  "productName": "KART",
   "directories": {
     "output": "release"
   },

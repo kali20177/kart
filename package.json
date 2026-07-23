@@ -1,9 +1,9 @@
 {
-  "name": "serial-demo",
+  "name": "kart",
   "version": "0.1.0",
   "private": true,
-  "description": "嵌入式串口调试助手 —— 阶段 1：前端 UI（模拟数据驱动）",
-  "author": "serial-demo",
+  "description": "嵌入式串口调试助手",
+  "author": "kart",
   "type": "module",
   "main": "dist-electron/main/index.cjs",
   "scripts": {

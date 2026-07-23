@@ -1,7 +1,8 @@
 import { ref } from 'vue'
 import { useStorage } from '@vueuse/core'
+import { STORAGE_PREFIX } from './useStorage'
 
-const STORAGE_KEY = 'serial-demo:sendHistory'
+const STORAGE_KEY = STORAGE_PREFIX + 'sendHistory'
 const DEFAULT_MAX = 50
 
 // 模块级 ref，确保所有调用方共享同一份状态。

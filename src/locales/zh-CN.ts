@@ -1,7 +1,7 @@
 export default {
   app: {
-    name: '串口调试助手',
-    desc: '嵌入式串口调试助手 —— 阶段 1：前端 UI（模拟数据驱动）',
+    name: 'KART',
+    desc: '嵌入式串口调试助手',
     msg: '消息',
     waveform: '波形',
     dragResize: '拖动调整宽度',

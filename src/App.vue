@@ -16,6 +16,7 @@ import FileTransferDialog from './components/FileTransferDialog.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
 import { useTheme } from './composables/useTheme'
+import { STORAGE_PREFIX } from './composables/useStorage'
 import type { DataMode } from './types'
 import type { AsciiEntry } from './utils/ascii-table'
 
@@ -58,7 +59,7 @@ const commandsCollapsed = ref(false)
 const COL_MIN = 200
 const COL_MAX = 480
 const DEFAULT_RIGHT_WIDTH = 280
-const rightWidth = useStorage('serial-demo:app:rightWidth', DEFAULT_RIGHT_WIDTH)
+const rightWidth = useStorage(STORAGE_PREFIX + 'app:rightWidth', DEFAULT_RIGHT_WIDTH)
 const dragging = ref(false)
 const rightStyle = computed(() =>
   commandsCollapsed.value ? {} : { width: rightWidth.value + 'px' }

@@ -1,7 +1,7 @@
 export default {
   app: {
-    name: 'Serial Debug Assistant',
-    desc: 'Embedded Serial Debug Assistant — Phase 1: Frontend UI (mock data driven)',
+    name: 'KART',
+    desc: 'Embedded Serial Debug Assistant',
     msg: 'Messages',
     waveform: 'Waveform',
     dragResize: 'Drag to resize width',

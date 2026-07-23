@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSerialStore } from './serial'
+import { STORAGE_PREFIX } from '@/composables/useStorage'
 
-const KEY = 'serial-demo:customBaudRates'
+const KEY = STORAGE_PREFIX + 'customBaudRates'
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -57,7 +58,7 @@ describe('serial store · 自定义波特率', () => {
 })
 
 describe('serial store · reset', () => {
-  const PORT_KEY = 'serial-demo:portOptions'
+  const PORT_KEY = STORAGE_PREFIX + 'portOptions'
 
   it('恢复端口参数与自定义波特率默认值并落盘', () => {
     const s = useSerialStore()

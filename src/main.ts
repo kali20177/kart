@@ -6,10 +6,11 @@ import './styles/base.css'
 import './styles/tokens.css'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import { applyTokens, listThemes } from './themes'
+import { STORAGE_PREFIX } from './composables/useStorage'
 
 // 首帧：同步应用 CSS 变量，避免闪烁。
 // Pinia 此时尚未初始化，直接用 localStorage 读持久化的 themeId。
-const STORAGE_KEY = 'serial-demo:settings'
+const STORAGE_KEY = STORAGE_PREFIX + 'settings'
 let initialThemeId = 'glass-industrial-dark'
 try {
   const raw = localStorage.getItem(STORAGE_KEY)

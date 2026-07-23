@@ -7,6 +7,7 @@ import { useSerialStore } from '@/stores/serial'
 import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
 import SendHistoryPopover from './SendHistoryPopover.vue'
+import { STORAGE_PREFIX } from '@/composables/useStorage'
 import { parseHexInput, bytesToHex } from '@/utils/hex'
 import { encodeWithEscapes } from '@/utils/encoding'
 import type { DataMode, LineEnding } from '@/types'
@@ -176,7 +177,7 @@ function onOpenFileTransfer() {
 const inputComp = ref<InstanceType<typeof NInput> | null>(null)
 const MIN_H = 40
 const MAX_H = 360
-const INPUT_HEIGHT_KEY = 'serial-demo:composer:inputHeight'
+const INPUT_HEIGHT_KEY = STORAGE_PREFIX + 'composer:inputHeight'
 const inputHeight = useStorage(INPUT_HEIGHT_KEY, MIN_H * 2)
 let dragStartY = 0
 let dragStartH = 0

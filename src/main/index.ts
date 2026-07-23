@@ -227,7 +227,7 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 1100,
     height: 760,
-    title: '串口调试助手',
+    title: 'KART',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

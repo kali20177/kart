@@ -2,6 +2,7 @@ import type { SerialDriver } from '@/types'
 import { WebSerialDriver } from './WebSerialDriver'
 import { SerialPortDriver } from './SerialPortDriver'
 import { MockSerialSource } from '@/mock/MockSerialSource'
+import { STORAGE_PREFIX } from '@/composables/useStorage'
 
 export type DriverType = 'mock' | 'webserial' | 'serialport'
 
@@ -20,7 +21,7 @@ function resolveDriverType(): DriverType {
   // 开发模式：读取 localStorage 中的 driver 偏好，默认为 mock
   if (import.meta.env.DEV) {
     try {
-      const stored = localStorage.getItem('serial-demo:driver')
+      const stored = localStorage.getItem(STORAGE_PREFIX + 'driver')
       if (stored === 'webserial') return 'webserial'
     } catch { /* localStorage 不可用 */ }
     return 'mock'
@@ -52,7 +53,7 @@ export function setDriverType(type: DriverType): void {
   _driverType = type
   _driver = null
   try {
-    localStorage.setItem('serial-demo:driver', type)
+    localStorage.setItem(STORAGE_PREFIX + 'driver', type)
   } catch { /* ignore */ }
 }
 
