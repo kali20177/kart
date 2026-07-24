@@ -10,20 +10,17 @@ import {
   NSwitch,
   NButton,
   NButtonGroup,
-  useMessage
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useSerialStore } from '@/stores/serial'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
-import { parseHexInput } from '@/utils/hex'
 import { listThemes } from '@/themes'
 
 const show = defineModel<boolean>('show', { default: false })
 const settingsStore = useSettingsStore()
 const serial = useSerialStore()
 const recordDir = useRecordDirectory()
-const message = useMessage()
 const { t } = useI18n()
 const s = settingsStore.settings
 
@@ -64,32 +61,6 @@ const numericTypeOptions = computed(() => [
   { label: 'float64 (8B)', value: 'float64' }
 ])
 
-// 模拟注入
-const injectText = ref('Hello from MCU\r\n')
-const injectMode = ref<'ascii' | 'hex'>('ascii')
-const injectModeOptions = [
-  { label: 'ASCII', value: 'ascii' },
-  { label: 'HEX', value: 'hex' }
-]
-function doInject() {
-  if (!serial.connected) {
-    message.warning(t('settings.injectNeedConnect'))
-    return
-  }
-  let bytes: Uint8Array
-  if (injectMode.value === 'hex') {
-    const r = parseHexInput(injectText.value)
-    if (!r.ok) {
-      message.error(r.error ?? t('settings.injectHexError'))
-      return
-    }
-    bytes = r.bytes
-  } else {
-    bytes = new TextEncoder().encode(injectText.value)
-  }
-  serial.inject(bytes)
-}
-
 function pickDir() {
   recordDir.pick()
 }
@@ -126,11 +97,6 @@ const navItems = computed<NavItem[]>(() => [
     key: 'baud',
     label: t('settings.baudRate'),
     icon: 'M8 5a3 3 0 100 6 3 3 0 000-6zM5.5 8h5M8 5.5v5'
-  },
-  {
-    key: 'mock',
-    label: t('settings.mock'),
-    icon: 'M4 12l2-7h4l2 7M3 12h10v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1zM8 6v3'
   },
   {
     key: 'record',
@@ -335,22 +301,6 @@ const navItems = computed<NavItem[]>(() => [
           </div>
         </div>
 
-        <!-- ========== 模拟数据 ========== -->
-        <div v-if="activeTab === 'mock'" class="mock-section">
-          <div class="section-title">{{ t('settings.mockTitle') }}</div>
-          <NForm label-placement="top" size="small">
-            <NFormItem :label="t('settings.injectContent')">
-              <NSelect v-model:value="injectMode" :options="injectModeOptions" style="width: 100px" />
-            </NFormItem>
-            <NFormItem>
-              <div style="display: flex; gap: 8px; width: 100%">
-                <input v-model="injectText" class="inject-input" />
-                <NButton size="small" type="primary" @click="doInject">{{ t('settings.inject') }}</NButton>
-              </div>
-            </NFormItem>
-          </NForm>
-        </div>
-
         <!-- ========== 录制 ========== -->
         <div v-if="activeTab === 'record'" class="record-section">
           <div class="section-title">{{ t('settings.record') }}</div>
@@ -486,7 +436,6 @@ const navItems = computed<NavItem[]>(() => [
 
 /* ===== 波特率列表 ===== */
 .baud-section,
-.mock-section,
 .record-section {
   padding: 4px 0;
 }
@@ -509,18 +458,6 @@ const navItems = computed<NavItem[]>(() => [
   width: 72px;
   font-family: var(--mono-font);
   font-size: 13px;
-  color: var(--text);
-}
-
-/* ===== 注入输入框 ===== */
-.inject-input {
-  flex: 1;
-  font-family: var(--mono-font);
-  font-size: 12px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
   color: var(--text);
 }
 

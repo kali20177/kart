@@ -143,13 +143,6 @@ export const useSerialStore = defineStore('serial', () => {
     driver.setScenario(id)
   }
 
-  /** 手动注入模拟数据（设置面板用） */
-  function inject(bytes: Uint8Array) {
-    if (!import.meta.env.DEV) return
-    if (!(driver instanceof MockSerialSource)) return
-    driver.inject(bytes)
-  }
-
   /** 切换驱动类型（仅 DEV 模式生效） */
   async function switchDriver(type: DriverType) {
     if (type === driverType.value) return
@@ -305,7 +298,6 @@ export const useSerialStore = defineStore('serial', () => {
     connect,
     disconnect,
     setScenario,
-    inject,
     switchDriver,
     addCustomBaudRate,
     removeCustomBaudRate,

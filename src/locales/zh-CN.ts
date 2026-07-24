@@ -207,7 +207,6 @@ export default {
     waveform: '波形解析',
     connection: '连接',
     baudRate: '波特率',
-    mock: '模拟',
     reset: '恢复默认',
     // 接收
     encoding: '字符编码',
@@ -245,12 +244,6 @@ export default {
     baudEmpty: '在连接栏波特率框输入新数值即可添加；预设档位不可删除。',
     baudNote: '标注（可选）',
     delete: '删除',
-    // 模拟
-    mockTitle: '模拟数据（阶段 1）',
-    injectContent: '注入内容',
-    inject: '注入',
-    injectNeedConnect: '请先连接端口',
-    injectHexError: 'HEX 解析失败',
     record: '录制',
     checksum: '校验',
   },
