@@ -184,6 +184,7 @@ let dragStartH = 0
 let stopMove: (() => void) | null = null
 
 function getTextarea(): HTMLTextAreaElement | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const el = (inputComp.value as any)?.$el as HTMLElement | undefined
   return el ? el.querySelector('textarea') : null
 }

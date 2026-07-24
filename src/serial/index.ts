@@ -44,6 +44,7 @@ export function resolveDriverType(env: ResolveEnv): ResolveResult {
 
 /** 从当前运行环境收集判定入参 */
 function collectEnv(): ResolveEnv {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isElectron = typeof window !== 'undefined' && !!(window as any).electron?.serial
 
   let isDevMock = false

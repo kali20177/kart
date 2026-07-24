@@ -216,6 +216,7 @@ function onSaveNote() {
 
 const contextMenuOptions = computed(() => {
   const target = contextMessage.value
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const opts: any[] = [
     { label: t('msgList.insertDividerBefore'), key: 'insert-divider' },
   ]

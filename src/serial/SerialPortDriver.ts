@@ -82,6 +82,7 @@ export class SerialPortDriver implements SerialDriver {
 
   private _api(): ElectronSerial | null {
     if (typeof window === 'undefined') return null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = (window as any).electron?.serial
     return s || null
   }

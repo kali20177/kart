@@ -13,7 +13,7 @@ const mockDirName = ref<string | null>('test-dir')
 const mockIsConfigured = computed(() => mockDirName.value !== null)
 
 let mockCreateFile = vi.fn().mockResolvedValue(mockWriter)
-let mockPick = vi.fn().mockResolvedValue(undefined)
+const mockPick = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@/composables/useRecordDirectory', () => ({
   useRecordDirectory: () => ({
