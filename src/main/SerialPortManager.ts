@@ -2,6 +2,20 @@ import { BrowserWindow } from 'electron'
 import { SerialPort } from 'serialport'
 
 /**
+ * macOS 系统伪终端 —— IOKit 将其报告为串口设备，但并非用户可连接的真实串口。
+ * 在端口枚举时过滤掉，避免干扰用户选择。
+ */
+const MACOS_PSEUDO_TERMINAL_PATTERNS = [
+  /debug-console/i,          // Apple 调试控制台
+  /Bluetooth-Incoming-Port/i // 蓝牙串口服务
+]
+
+function isMacOSPseudoTerminal(path: string): boolean {
+  if (process.platform !== 'darwin') return false
+  return MACOS_PSEUDO_TERMINAL_PATTERNS.some((p) => p.test(path))
+}
+
+/**
  * native PortInfo（serialport.list() 返回项的子集）
  */
 interface NativePortInfo {
@@ -64,12 +78,14 @@ export class SerialPortManager {
   async listPortsAsync(): Promise<SerialPortInfo[]> {
     try {
       const infos: NativePortInfo[] = await SerialPort.list()
-      return infos.map((i) => ({
-        path: i.path,
-        manufacturer: i.manufacturer,
-        vendorId: i.vendorId,
-        productId: i.productId
-      }))
+      return infos
+        .filter((i) => !isMacOSPseudoTerminal(i.path))
+        .map((i) => ({
+          path: i.path,
+          manufacturer: i.manufacturer,
+          vendorId: i.vendorId,
+          productId: i.productId
+        }))
     } catch (e) {
       console.error('[serialport] listPorts failed:', e)
       return []
