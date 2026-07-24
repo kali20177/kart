@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, nextTick, ref, type VNode, type VNodeChild } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, ref, watch, type VNode, type VNodeChild } from 'vue'
 import { NSelect, NButton, NTooltip, NModal, NInput, useMessage } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { useSerialStore } from '@/stores/serial'
@@ -199,6 +199,46 @@ async function startRecording() {
     message.error(e instanceof Error ? e.message : String(e))
   }
 }
+
+// —— 磁带按钮内部状态 ——
+// 状态：录制中/出错用红色，停止中回到灰，闲置灰
+const tapeStateClass = computed(() => {
+  const s = recorder.state.status
+  return {
+    recording: s === 'recording',
+    error: s === 'error',
+    stopping: s === 'stopping'
+  }
+})
+
+/** 按钮内嵌的录制时长（mm:ss；>1h 切到 h:mm:ss），随 isRecording 启停 1s 定时器。 */
+const tapeDuration = ref('')
+let tapeTickTimer: ReturnType<typeof setInterval> | null = null
+function updateTapeDuration() {
+  const started = recorder.state.startedAt
+  if (!started) { tapeDuration.value = ''; return }
+  const elapsed = Math.floor((Date.now() - started) / 1000)
+  const h = Math.floor(elapsed / 3600)
+  const m = Math.floor((elapsed % 3600) / 60)
+  const sec = elapsed % 60
+  tapeDuration.value = h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    : `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+}
+watch(() => recorder.isRecording, (rec) => {
+  if (rec) {
+    updateTapeDuration()
+    if (tapeTickTimer) clearInterval(tapeTickTimer)
+    tapeTickTimer = setInterval(updateTapeDuration, 1000)
+  } else {
+    if (tapeTickTimer) { clearInterval(tapeTickTimer); tapeTickTimer = null }
+    // stopping 阶段保留最后读数，其余清空
+    if (recorder.state.status === 'idle') tapeDuration.value = ''
+  }
+}, { immediate: true })
+onBeforeUnmount(() => {
+  if (tapeTickTimer) { clearInterval(tapeTickTimer); tapeTickTimer = null }
+})
 </script>
 
 <template>
@@ -296,10 +336,16 @@ async function startRecording() {
             size="small"
             quaternary
             :disabled="recorder.state.status === 'stopping' || (!recorder.isRecording && !recorder.canRecord)"
-            :type="recorder.isRecording ? 'error' : 'default'"
             @click="recorder.isRecording ? recorder.stop() : startRecording()"
           >
-            <span class="rec-icon" :class="{ recording: recorder.isRecording }" />
+            <span class="rec-pill" :class="tapeStateClass">
+              <span class="rec-pill-dot" />
+              <span class="rec-pill-label">REC</span>
+              <span
+                v-if="recorder.isRecording || recorder.state.status === 'stopping'"
+                class="rec-pill-duration"
+              >{{ tapeDuration }}</span>
+            </span>
           </NButton>
         </template>
         {{
@@ -358,22 +404,75 @@ async function startRecording() {
   font-size: 12px;
   color: var(--text-dim);
 }
-.rec-icon {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+
+/* —— REC 胶囊录制按钮 —— */
+.rec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px 0 7px;
+  border: 1px solid var(--text-dim);
+  border-radius: 999px;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  line-height: 1;
+  user-select: none;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.rec-pill.recording {
+  color: #e04040;
+  border-color: #e04040;
+  background: rgba(224, 64, 64, 0.08);
+}
+.rec-pill.error {
+  color: #d97706;
+  border-color: #d97706;
+  background: rgba(217, 119, 6, 0.08);
+}
+.rec-pill-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-dim);
-  transition: background 0.15s, border-radius 0.15s;
+  border: 1.5px solid currentColor;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.18s, border-color 0.18s;
 }
-.rec-icon.recording {
-  background: #e04040;
-  border-radius: 2px;
-  animation: rec-icon-pulse 1.2s ease-in-out infinite;
+.rec-pill.recording .rec-pill-dot {
+  background: currentColor;
+  animation: rec-pill-blink 1s ease-in-out infinite;
 }
-@keyframes rec-icon-pulse {
+.rec-pill.error .rec-pill-dot {
+  background: currentColor;
+  animation: none;
+}
+@keyframes rec-pill-blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50%      { opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rec-pill.recording .rec-pill-dot {
+    animation-duration: 2.4s;
+  }
+}
+.rec-pill-duration {
+  font-variant-numeric: tabular-nums;
+  padding-left: 4px;
+  border-left: 1px solid currentColor;
+  opacity: 0.85;
+}
+.tape-duration {
+  margin-left: 6px;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #e04040;
+  line-height: 1;
+  user-select: none;
 }
 .spacer {
   flex: 1;
