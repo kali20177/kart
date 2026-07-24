@@ -4,7 +4,7 @@ import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate, Checks
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { WebSerialDriver } from '@/serial/WebSerialDriver'
 import { SerialPortDriver } from '@/serial/SerialPortDriver'
-import { createSerialDriver, getDriverType, setDriverType, type DriverType } from '@/serial'
+import { createSerialDriver, getDriverType, getUnsupportedReason, setDriverType, type DriverType } from '@/serial'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
 import { computeChecksum } from '@/utils/checksum'
@@ -24,6 +24,7 @@ const DEFAULT_OPTS: PortOptions = {
 export const useSerialStore = defineStore('serial', () => {
   let driver: SerialDriver = createSerialDriver()
   const driverType = ref<DriverType>(getDriverType())
+  const unsupportedReason = ref(getUnsupportedReason())
   const messages = useMessagesStore()
 
   const ports = ref<string[]>([])
@@ -156,6 +157,7 @@ export const useSerialStore = defineStore('serial', () => {
     const prevDriver = driver
     setDriverType(type)
     driverType.value = getDriverType()
+    unsupportedReason.value = getUnsupportedReason()
     driver = createSerialDriver()
     // 销毁旧驱动（serialport/webserial 都持有需要清理的本地资源）
     if (prevDriver instanceof WebSerialDriver || prevDriver instanceof SerialPortDriver) {
@@ -297,6 +299,7 @@ export const useSerialStore = defineStore('serial', () => {
     customBaudRates,
     summary,
     driverType,
+    unsupportedReason,
     refreshPorts,
     requestPort,
     connect,

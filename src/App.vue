@@ -13,6 +13,7 @@ import AsciiTable from './components/AsciiTable.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import StatusBar from './components/StatusBar.vue'
 import FileTransferDialog from './components/FileTransferDialog.vue'
+import IncompatibleBrowser from './components/IncompatibleBrowser.vue'
 import { useSerialStore } from './stores/serial'
 import { useSettingsStore } from './stores/settings'
 import { useTheme } from './composables/useTheme'
@@ -153,6 +154,7 @@ onMounted(() => {
     <NMessageProvider>
       <NDialogProvider>
       <div class="app">
+        <IncompatibleBrowser v-if="serial.driverType === 'unsupported'" :reason="serial.unsupportedReason" />
         <MenuBar />
         <ConnectionBar @open-ascii="showAscii = true" @open-settings="showSettings = true" />
 

@@ -38,15 +38,18 @@ npm run electron:preview # 构建后用 electron 直接运行（不打包）
 
 `src/types.ts` 定义了 `SerialDriver` 接口。所有 Pinia stores 依赖此接口而非具体实现，切换驱动时 store 无需改动。
 
-**三种驱动实现，通过工厂 `src/serial/index.ts` 运行时自动选择：**
+**驱动实现，通过工厂 `src/serial/index.ts` 运行时自动选择：**
 
 | 驱动 | 文件 | 环境 | 说明 |
 | --- | --- | --- | --- |
-| `mock` | `src/mock/MockSerialSource.ts` | 浏览器 DEV | 模拟串口数据，可切换场景（AT 应答/二进制帧/压测等） |
+| `mock` | `src/mock/MockSerialSource.ts` | 浏览器 DEV | 模拟串口数据，可切换场景（AT 应答/二进制帧/压测等）；仅 `?mock` 参数触发，不兜底 |
 | `webserial` | `src/serial/WebSerialDriver.ts` | 浏览器 | Web Serial API（Chromium 89+），需 HTTPS + 用户授权 |
 | `serialport` | `src/serial/SerialPortDriver.ts` | Electron | 通过 IPC 委托主进程 serialport npm 库，返回真实 COM 口名 |
+| `unsupported` | `src/serial/UnsupportedDriver.ts` | 不兼容浏览器 | 占位驱动（方法抛错/no-op）；配合 `IncompatibleBrowser` 全屏遮罩引导用户 |
 
-**驱动选择优先级：** Electron 环境 → serialport；DEV 模式 `?mock` 查询参数 → mock；浏览器有 Web Serial → webserial；兜底 → mock。运行环境自动确定驱动，无需用户手动选择。
+**驱动选择优先级：** Electron 环境 → serialport；DEV 模式 `?mock` 查询参数 → mock；非安全上下文 → unsupported（全屏遮罩提示改用 HTTPS / localhost）；浏览器有 Web Serial → webserial；兜底 → unsupported（全屏遮罩提示切换/升级浏览器）。运行环境自动确定驱动，无需用户手动选择。
+
+> mock 仅 DEV 调试用，不对普通用户暴露。浏览器不兼容时**不再兜底 mock**，而是由 `src/components/IncompatibleBrowser.vue` 全屏阻断遮罩引导用户切换/升级浏览器或改用 HTTPS，避免普通用户误把模拟数据当成真实串口流量。判定逻辑见 `resolveDriverType`（纯函数，有单测）。
 
 ### 数据流
 

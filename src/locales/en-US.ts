@@ -33,6 +33,13 @@ export default {
     ossNotice: 'Open source components used (all MIT licensed):',
     browserDevtools: 'Use F12 / Ctrl+Shift+I to open DevTools in browser',
   },
+  compat: {
+    title: 'Browser Incompatible',
+    noWebSerial: 'This browser does not support the Web Serial API and cannot access serial hardware.\nPlease use Chrome, Edge, or Opera (Chromium-based, version 89 or later).',
+    insecureContext: 'The Web Serial API requires a secure context (HTTPS or localhost).\nPlease access this app via https://, or deploy it locally (localhost).\nIf HTTPS is already in use and it still does not work, switch to a Chromium-based browser.',
+    learnMore: 'Learn More',
+    reload: 'Reload Page',
+  },
   log: {
     empty: 'No logs to export',
   },

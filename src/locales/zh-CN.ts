@@ -33,6 +33,13 @@ export default {
     ossNotice: '使用的开源组件（均为 MIT 许可）：',
     browserDevtools: '浏览器环境请使用 F12 / Ctrl+Shift+I 打开开发者工具',
   },
+  compat: {
+    title: '浏览器不兼容',
+    noWebSerial: '当前浏览器不支持 Web Serial API，无法访问串口硬件。\n请使用 Chrome、Edge 或 Opera（Chromium 内核，89 及以上版本）。',
+    insecureContext: 'Web Serial API 需要安全上下文（HTTPS 或 localhost）。\n请通过 https:// 访问本应用，或在本地（localhost）部署；\n若已使用 HTTPS 仍不支持，请更换为 Chromium 内核浏览器。',
+    learnMore: '了解兼容性',
+    reload: '刷新页面',
+  },
   log: {
     empty: '暂无日志可导出',
   },
