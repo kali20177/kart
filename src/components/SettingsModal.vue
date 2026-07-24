@@ -10,6 +10,7 @@ import {
   NSwitch,
   NButton,
   NButtonGroup,
+  useMessage,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
@@ -22,6 +23,7 @@ const settingsStore = useSettingsStore()
 const serial = useSerialStore()
 const recordDir = useRecordDirectory()
 const { t } = useI18n()
+const message = useMessage()
 const s = settingsStore.settings
 
 const activeTab = ref('receive')
@@ -61,8 +63,22 @@ const numericTypeOptions = computed(() => [
   { label: 'float64 (8B)', value: 'float64' }
 ])
 
-function pickDir() {
-  recordDir.pick()
+// 浏览器原生目录选择(File System Access API)仅 Chromium 在安全上下文下可用;
+// Electron 走专用 IPC 路径,恒可点。
+const canPickDir = computed(() => Boolean(window.electron?.recorder?.showDirectoryPicker) || ('showDirectoryPicker' in window))
+
+async function pickDir() {
+  try {
+    await recordDir.pick()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // useRecordDirectory.pick() 在环境不支持的分支抛出"当前环境不支持选择目录"
+    if (msg.includes('不支持选择目录')) {
+      message.error(t('record.pickerUnsupported'), { duration: 6000 })
+    } else {
+      message.error(`${t('record.pickFailed')}: ${msg}`, { duration: 6000 })
+    }
+  }
 }
 
 // 侧边栏导航项
@@ -317,8 +333,9 @@ const navItems = computed<NavItem[]>(() => [
             <NFormItem :label="t('record.saveDir')">
               <div class="record-dir-row">
                 <span class="record-dir-name">{{ recordDir.dirName.value ?? ('(' + t('record.notSet') + ')') }}</span>
-                <NButton size="small" @click="pickDir">{{ t('record.selectDir') }}</NButton>
+                <NButton size="small" :disabled="!canPickDir" @click="pickDir">{{ t('record.selectDir') }}</NButton>
               </div>
+              <div v-if="!canPickDir" class="record-dir-hint">{{ t('record.pickerUnsupported') }}</div>
             </NFormItem>
           </NForm>
         </div>
@@ -475,6 +492,13 @@ const navItems = computed<NavItem[]>(() => [
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.record-dir-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  opacity: 0.85;
 }
 
 /* ===== NForm 内间距微调 ===== */

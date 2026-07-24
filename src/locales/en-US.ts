@@ -56,6 +56,8 @@ export default {
     notSet: 'Not set',
     needConfig: 'Please configure a save directory in Settings first',
     errorWrite: 'Failed to write file',
+    pickerUnsupported: 'This browser cannot select a directory. Use a Chromium browser (Chrome/Edge) over HTTPS or localhost.',
+    pickFailed: 'Failed to select directory',
     statusRecording: 'Recording',
     statusError: 'Recording Error',
   },

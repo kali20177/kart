@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import type { IFileWriter } from './useFileWriter'
-import { storage, STORAGE_PREFIX } from './useStorage'
+import { storage } from './useStorage'
 
 /**
  * 管理录制保存目录的 composable（单例）。
@@ -12,8 +12,9 @@ import { storage, STORAGE_PREFIX } from './useStorage'
 const DIR_STORAGE_KEY = 'record-dir-name'
 const DIR_PATH_KEY = 'record-dir-path'  // Electron only
 // picker id 与 IndexedDB 名沿用存储前缀串，确保改名时一并更新、每次打开定位到上次目录。
-const PICKER_ID = STORAGE_PREFIX + 'record'
-const DB_NAME = STORAGE_PREFIX + 'record'
+// 注意：showDirectoryPicker 的 id 仅允许 ASCII 字母数字 / '-' / '_'，不能含 STORAGE_PREFIX 的冒号。
+const PICKER_ID = 'kart-record'
+const DB_NAME = 'kart-record'
 
 // 单例状态
 const dirName = ref<string | null>(storage.get<string | null>(DIR_STORAGE_KEY, null))
@@ -106,22 +107,13 @@ export function useRecordDirectory() {
       return
     }
 
-    // 浏览器路径：已有句柄但权限过期→先尝试重新授权
-    if (dirHandle) {
-      const ok = await ensurePermission()
-      if (ok) {
-        dirName.value = dirHandle.name
-        storage.set(DIR_STORAGE_KEY, dirName.value)
-        return
-      }
-    }
-
-    // 无句柄或权限被拒→弹出系统目录选择器
-    // 使用 id 参数让浏览器记住上次目录，重选时自动定位
+    // 浏览器路径：每次都重新弹出系统目录选择器。
+    // id 参数让浏览器记住上次目录，重选时自动定位到那里；
+    // 实际写入权限在 createFile 时按需 ensurePermission，不在此阻断重新选择。
     if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       const picker = window.showDirectoryPicker!
       try {
-        const handle = await picker({ id: PICKER_ID })
+        const handle = await picker({ id: PICKER_ID, mode: 'readwrite' } as { id: string; mode: 'readwrite' })
         dirHandle = handle as unknown as FileSystemDirectoryHandle
         dirName.value = handle.name
         storage.set(DIR_STORAGE_KEY, handle.name)
