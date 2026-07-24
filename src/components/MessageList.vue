@@ -4,6 +4,7 @@ import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } 
 import { useClipboard, useDebounceFn } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, NDropdown, NModal, useDialog, useMessage } from 'naive-ui'
+import type { DropdownOption, DropdownDividerOption } from 'naive-ui'
 import MessageBubble from './MessageBubble.vue'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
@@ -216,8 +217,7 @@ function onSaveNote() {
 
 const contextMenuOptions = computed(() => {
   const target = contextMessage.value
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const opts: any[] = [
+  const opts: (DropdownOption | DropdownDividerOption)[] = [
     { label: t('msgList.insertDividerBefore'), key: 'insert-divider' },
   ]
   if (target && target.kind !== 'divider' && target.kind !== 'file') {

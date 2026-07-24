@@ -55,7 +55,7 @@
     "simple-git-hooks@2.13.1": true
   },
   "lint-staged": {
-    "*.{ts,vue}": "eslint --fix"
+    "*.{ts,vue,js,mjs,cjs}": "eslint --fix"
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"

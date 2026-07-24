@@ -75,20 +75,8 @@ interface Serial extends EventTarget {
   requestPort(options?: SerialPortRequestOptions): Promise<SerialPort>
 }
 
-// preload 通过 contextBridge 暴露（仅 Electron 下存在）
+// File System Access API（仅安全上下文可用）
 interface Window {
-  electron?: {
-    platform: string
-    versions?: Record<string, string | undefined>
-    toggleDevTools?: () => void
-    recorder?: {
-      showDirectoryPicker(): Promise<string | null>
-      createFile(dirPath: string, fileName: string): Promise<{ fileName: string } | null>
-      writeChunk(chunk: Uint8Array): Promise<boolean>
-      closeFile(): Promise<boolean>
-      onWriteError(handler: (msg: string) => void): void
-    }
-  }
   showSaveFilePicker?(options?: {
     suggestedName?: string
     types?: Array<{
