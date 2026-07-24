@@ -46,7 +46,7 @@ npm run electron:preview # 构建后用 electron 直接运行（不打包）
 | `webserial` | `src/serial/WebSerialDriver.ts` | 浏览器 | Web Serial API（Chromium 89+），需 HTTPS + 用户授权 |
 | `serialport` | `src/serial/SerialPortDriver.ts` | Electron | 通过 IPC 委托主进程 serialport npm 库，返回真实 COM 口名 |
 
-**驱动选择优先级：** Electron 环境 → serialport；DEV 模式 → 读取 localStorage 偏好（默认 mock）；浏览器有 Web Serial → webserial；兜底 → mock。DEV 模式下可通过 UI 下拉切换驱动。
+**驱动选择优先级：** Electron 环境 → serialport；DEV 模式 `?mock` 查询参数 → mock；浏览器有 Web Serial → webserial；兜底 → mock。运行环境自动确定驱动，无需用户手动选择。
 
 ### 数据流
 

@@ -8,7 +8,6 @@ import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
 import type { MockScenarioId } from '@/types'
-import type { DriverType } from '@/serial'
 
 const isDev = import.meta.env.DEV
 
@@ -173,11 +172,6 @@ const parityOptions = [
   { label: 'Odd', value: 'odd' }
 ]
 const scenarioOptions = SCENARIOS.map((s) => ({ label: s.label, value: s.id }))
-const driverModeOptions = [
-  { label: 'Mock', value: 'mock' as DriverType },
-  { label: 'Web Serial', value: 'webserial' as DriverType },
-  { label: 'SerialPort', value: 'serialport' as DriverType }
-]
 
 async function toggle() {
   if (serial.connected) await serial.disconnect()
@@ -291,19 +285,6 @@ async function startRecording() {
         size="small"
         style="width: 150px"
         @update:value="(v: MockScenarioId) => serial.setScenario(v)"
-      />
-    </template>
-
-    <!-- 驱动模式切换（DEV 专属） -->
-    <template v-if="isDev">
-      <div class="divider" />
-      <NSelect
-        :value="serial.driverType"
-        :options="driverModeOptions"
-        size="small"
-        style="width: 110px"
-        :disabled="serial.connected"
-        @update:value="(v: DriverType) => serial.switchDriver(v)"
       />
     </template>
 

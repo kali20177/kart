@@ -2,29 +2,27 @@ import type { SerialDriver } from '@/types'
 import { WebSerialDriver } from './WebSerialDriver'
 import { SerialPortDriver } from './SerialPortDriver'
 import { MockSerialSource } from '@/mock/MockSerialSource'
-import { STORAGE_PREFIX } from '@/composables/useStorage'
 
 export type DriverType = 'mock' | 'webserial' | 'serialport'
 
 /**
  * 选择驱动类型，优先级：
  *  1. Electron 环境 → serialport（主进程串口库，返回真实 COM 口名）
- *  2. 开发模式 → 读取 localStorage 偏好，默认为 mock
+ *  2. DEV 模式 ?mock 查询参数 → mock（开发者调试用）
  *  3. 浏览器环境（Web Serial API）→ webserial
  *  4. 兜底 → mock
  */
 function resolveDriverType(): DriverType {
-  // Electron 环境：始终使用 serialport（即使 dev 模式）
+  // Electron 环境：始终使用 serialport
   const isElectron = typeof window !== 'undefined' && !!(window as any).electron?.serial
   if (isElectron) return 'serialport'
 
-  // 开发模式：读取 localStorage 中的 driver 偏好，默认为 mock
+  // DEV 模式：?mock 查询参数强制使用 mock 驱动
   if (import.meta.env.DEV) {
     try {
-      const stored = localStorage.getItem(STORAGE_PREFIX + 'driver')
-      if (stored === 'webserial') return 'webserial'
-    } catch { /* localStorage 不可用 */ }
-    return 'mock'
+      const params = new URLSearchParams(window.location.search)
+      if (params.has('mock')) return 'mock'
+    } catch { /* SSR / 无 window 环境 */ }
   }
 
   // 浏览器环境（Web Serial API）
@@ -46,15 +44,12 @@ export function getDriverType(): DriverType {
 }
 
 /** 切换驱动类型（仅在 DEV 模式下生效）。
- *  仅负责切换类型标识 + 落盘 + 清空模块级单例引用；旧驱动实例的销毁由调用方
- *  （serial store 的 switchDriver）持有引用后统一处理，避免在此处与调用方双重 destroy。 */
+ *  仅负责切换类型标识 + 清空模块级单例引用；旧驱动实例的销毁由调用方
+ *  （serial store 的 switchDriver）持有引用后统一处理。 */
 export function setDriverType(type: DriverType): void {
   if (!import.meta.env.DEV) return
   _driverType = type
   _driver = null
-  try {
-    localStorage.setItem(STORAGE_PREFIX + 'driver', type)
-  } catch { /* ignore */ }
 }
 
 /** 创建或获取当前驱动实例 */
