@@ -285,6 +285,7 @@ export default {
   },
   waveform: {
     points: '{n} pts',
+    pointsTip: 'Sample points in the visible window',
     dragHistory: 'Drag to review history',
     backSeconds: 'Review −{s}s',
     zoomLevel: 'Zoom ×{x}',

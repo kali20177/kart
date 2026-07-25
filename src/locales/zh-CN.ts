@@ -290,6 +290,7 @@ export default {
   },
   waveform: {
     points: '{n} 点',
+    pointsTip: '当前可视窗口内的采样点数',
     dragHistory: '拖拽回看历史',
     backSeconds: '回看 −{s}s',
     zoomLevel: '放大 ×{x}',

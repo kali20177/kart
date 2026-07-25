@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
-import { NButton, NTag, NDropdown, useMessage } from 'naive-ui'
+import { NButton, NTag, NDropdown, NTooltip, useMessage } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
@@ -489,7 +489,12 @@ function handleExport(key: string) {
 <template>
   <div class="wave-wrap">
     <div class="toolbar">
-      <NTag size="small" :bordered="false">{{ t('waveform.points', { n: pointCount }) }}</NTag>
+      <NTooltip>
+        <template #trigger>
+          <NTag size="small" :bordered="false">{{ t('waveform.points', { n: pointCount }) }}</NTag>
+        </template>
+        {{ t('waveform.pointsTip') }}
+      </NTooltip>
       <NButton
         v-for="i in channels()"
         :key="i"
