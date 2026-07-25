@@ -228,8 +228,7 @@ export default {
     light: '亮色',
     fontSize: '字号 (px)',
     pauseNotify: '暂停提示',
-    pauseNotifyOn: '恢复时提示缺失数据时间段',
-    pauseNotifyOff: '不提示',
+    pauseNotifyHint: '恢复时提示缺失数据时间段',
     lang: '语言',
     // 波形
     numericType: '数值类型',

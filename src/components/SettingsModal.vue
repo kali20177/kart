@@ -251,11 +251,11 @@ const navItems = computed<NavItem[]>(() => [
               >English</NButton>
             </NButtonGroup>
           </NFormItem>
-          <NFormItem :label="t('settings.pauseNotify')">
-            <NSwitch v-model:value="s.showPauseNotification">
-              <template #checked>{{ t('settings.pauseNotifyOn') }}</template>
-              <template #unchecked>{{ t('settings.pauseNotifyOff') }}</template>
-            </NSwitch>
+          <NFormItem>
+            <template #label>
+              {{ t('settings.pauseNotify') }}<span style="margin-left: 6px; color: var(--text-dim); font-weight: 400">{{ t('settings.pauseNotifyHint') }}</span>
+            </template>
+            <NSwitch v-model:value="s.showPauseNotification" />
           </NFormItem>
         </NForm>
 
@@ -266,10 +266,16 @@ const navItems = computed<NavItem[]>(() => [
             <NSelect v-model:value="s.waveform.parse.type" :options="numericTypeOptions" />
           </NFormItem>
           <NFormItem :label="t('settings.byteOrder')">
-            <NSwitch v-model:value="s.waveform.parse.littleEndian">
-              <template #checked>{{ t('settings.littleEndian') }}</template>
-              <template #unchecked>{{ t('settings.bigEndian') }}</template>
-            </NSwitch>
+            <NButtonGroup size="small">
+              <NButton
+                :type="s.waveform.parse.littleEndian ? 'primary' : 'default'"
+                @click="s.waveform.parse.littleEndian = true"
+              >{{ t('settings.littleEndian') }}</NButton>
+              <NButton
+                :type="!s.waveform.parse.littleEndian ? 'primary' : 'default'"
+                @click="s.waveform.parse.littleEndian = false"
+              >{{ t('settings.bigEndian') }}</NButton>
+            </NButtonGroup>
           </NFormItem>
           <NFormItem :label="t('settings.channels')">
             <NInputNumber
