@@ -111,7 +111,7 @@ describe('parseTextSamples carryover 跨回调', () => {
   })
 })
 
-describe('parseTextSamples 边界', () => {
+describe('parseTextSamples 终端', () => {
   it('空字节输入返回空、remainder 保留 carryover', () => {
     const c = cfg({ channels: 1 })
     const r = parseTextSamples(new Uint8Array(0), c, '12')
@@ -123,5 +123,87 @@ describe('parseTextSamples 边界', () => {
     const c = cfg({ channels: 0 })
     const { perChannel } = parseTextSamples(enc('5\n'), c)
     expect(perChannel).toEqual([[5]])
+  })
+})
+
+describe('parseTextSamples 标签化多通道', () => {
+  it('label:value 格式 -> 按标签名匹配通道', () => {
+    const c = cfg({ channels: 2 })
+    const idx = new Map<string, number>()
+    const { perChannel, remainder } = parseTextSamples(enc('Sin:0.5,Cos:0.86\n'), c, '', idx)
+    expect(remainder).toBe('')
+    expect(perChannel[0]).toEqual([0.5])
+    expect(perChannel[1]).toEqual([0.86])
+    expect(idx.get('Sin')).toBe(0)
+    expect(idx.get('Cos')).toBe(1)
+  })
+
+  it('标签跨行重排 -> 值按标签名归位', () => {
+    const c = cfg({ channels: 2 })
+    const idx = new Map<string, number>()
+    // 第一行：Cos→idx 0, Sin→idx 1
+    const r1 = parseTextSamples(enc('Cos:0.86,Sin:0.5\n'), c, '', idx)
+    expect(r1.perChannel[0]).toEqual([0.86]) // Cos
+    expect(r1.perChannel[1]).toEqual([0.5])  // Sin
+    // 第二行：Sin:0.7,Cos:0.9 — 调换位置，仍按标签归位
+    const r2 = parseTextSamples(enc('Sin:0.7,Cos:0.9\n'), c, '', idx)
+    // Sin→idx 1, Cos→idx 0
+    expect(r2.perChannel[0]).toEqual([0.9]) // Cos（idx 0）
+    expect(r2.perChannel[1]).toEqual([0.7]) // Sin（idx 1）
+  })
+
+  it('新标签出现 -> 动态分配新索引', () => {
+    const c = cfg({ channels: 2 })
+    const idx = new Map<string, number>()
+    // 第一行只有 1 个标签 token → perChannel 保持 minChannels=2
+    const r1 = parseTextSamples(enc('A:1\n'), c, '', idx)
+    expect(r1.perChannel.length).toBe(2) // minChannels=2（B 通道补 NaN）
+    expect(r1.perChannel[0][0]).toBe(1)
+    expect(r1.perChannel[1][0]).toBe(NaN)
+    // 第二行引入新标签 B → perChannel 保持 2（A 和 B 各占一个）
+    const r2 = parseTextSamples(enc('B:2\n'), c, '', idx)
+    expect(r2.perChannel.length).toBe(2)
+    expect(r2.perChannel[0][0]).toBe(NaN) // A 无值
+    expect(r2.perChannel[1][0]).toBe(2)   // B 值
+    expect(idx.size).toBe(2)
+  })
+
+  it('标签名更新 -> 新标签覆盖旧通道名', () => {
+    const c = cfg({ channels: 1 })
+    const idx = new Map<string, number>()
+    parseTextSamples(enc('Old:1\n'), c, '', idx)
+    expect(idx.get('Old')).toBe(0)
+    // 新标签名 New → 分配新索引（旧索引 0 仍被 Old 占着）
+    parseTextSamples(enc('New:2\n'), c, '', idx)
+    expect(idx.get('New')).toBe(1)
+    expect(idx.get('Old')).toBe(0)
+  })
+
+  it('无标签行与有标签行混用 -> 无标签 token 按位置落位', () => {
+    const c = cfg({ channels: 2 })
+    const idx = new Map<string, number>()
+    // 先建标签映射
+    parseTextSamples(enc('A:1,B:2\n'), c, '', idx)
+    // 再发无标签行（已知 idx 不会变，parseTextSamples 接收已有 idx 但行中无标签 token → 走位置计数器）
+    const { perChannel } = parseTextSamples(enc('10,20\n'), c, '', idx)
+    // 无标签 token → posCounter 0→通道 0、posCounter 1→通道 1
+    expect(perChannel[0]).toEqual([10])
+    expect(perChannel[1]).toEqual([20])
+  })
+
+  it('label:value 中数值无效 -> 整 token 被忽略', () => {
+    const c = cfg({ channels: 1 })
+    const idx = new Map<string, number>()
+    const { perChannel } = parseTextSamples(enc('Temp:12abc\n'), c, '', idx)
+    const all = perChannel.flat()
+    expect(all.length).toBe(0)
+  })
+
+  it('不传 labelIndex -> 全部按位置匹配（兼容无标签数据）', () => {
+    const c = cfg({ channels: 2 })
+    const { perChannel } = parseTextSamples(enc('Sin:0.5,Cos:0.86\n'), c)
+    // 无 labelIndex → "Sin:0.5" 和 "Cos:0.86" 都当无标签 token，按位置落通道 0、1
+    expect(perChannel[0]).toEqual([0.5])
+    expect(perChannel[1]).toEqual([0.86])
   })
 })

@@ -308,6 +308,7 @@ export default {
     export: '导出',
     exportCsvVisible: 'CSV（可见窗口）',
     exportCsvFull: 'CSV（完整历史）',
+    ch: 'CH',
   },
   checksum: {
     title: '校验和',

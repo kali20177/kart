@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 import { useWaveformStore } from './waveform'
 import { useSettingsStore } from './settings'
-import { waveformChunk, waveformTextChunk } from '@/mock/scenarios'
+import { waveformChunk, waveformTextChunk, waveformTextLabeledChunk } from '@/mock/scenarios'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 
@@ -440,5 +440,71 @@ describe('waveform store 文本行解析模式', () => {
     expect(wf.data[0][1]).toBe(2000)
 
     vi.useRealTimers()
+  })
+})
+
+describe('waveform store 标签化文本解析', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  async function useTextMode(channels: number) {
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.format = 'text'
+    settings.settings.waveform.parse.channels = channels
+    settings.settings.waveform.sampleRate = 20
+    await nextTick()
+    return useWaveformStore()
+  }
+
+  it('标签化行 -> 自动检测通道名', async () => {
+    const wf = await useTextMode(2)
+    wf.ingest(enc('Sin:0.5,Cos:0.86\n'))
+    expect(wf.data[1]).toEqual([0.5])
+    expect(wf.data[2]).toEqual([0.86])
+    expect(wf.textLabels).toEqual(['Sin', 'Cos'])
+  })
+
+  it('新标签出现 -> 动态增长通道', async () => {
+    const wf = await useTextMode(1)
+    wf.ingest(enc('A:1\n'))
+    expect(wf.textLabels.length).toBe(1)
+    expect(wf.textLabels[0]).toBe('A')
+    // B 标签出现后 textLabels 增加到 2，且 data 下一帧反映新通道
+    wf.ingest(enc('B:2\n'))
+    expect(wf.textLabels.length).toBe(2)
+    expect(wf.textLabels[1]).toBe('B')
+    // 新通道在 data 中反映出来（history 动态扩容后 recomputeView 切出新 shape）
+    // 注：B:2 行中 perChannel 扩展到 2，但 cur 在 ingest 前半段已扩容 → data 应含 2 通道
+    // 实际 data.length 取决于 recomputeView 基于 history 的最终形状
+    expect(wf.history.length).toBe(3) // X + 2ch
+  })
+
+  it('标签化 mock 场景 waveformTextLabeledChunk 可解析', async () => {
+    const wf = await useTextMode(2)
+    wf.ingest(waveformTextLabeledChunk(0))
+    wf.ingest(waveformTextLabeledChunk(1))
+    expect(wf.data[0].length).toBe(2)
+    expect(wf.data[1].length).toBe(2)
+    expect(wf.data[2].length).toBe(2)
+    // 6 个通道标签：Temp, Hum, Pres, Alt, Bat, RSSI
+    expect(wf.textLabels).toEqual(['Temp', 'Hum', 'Pres', 'Alt', 'Bat', 'RSSI'])
+    // history 应包含 X + 6 通道
+    expect(wf.history.length).toBe(7)
+    // 通道值在合理范围内
+    expect(wf.history[1][0]).toBeGreaterThan(20)  // Temp ~25, ch0
+    expect(wf.history[1][0]).toBeLessThan(30)
+    expect(wf.history[5][0]).toBeGreaterThan(0)   // Bat ~3.7, ch4
+    expect(wf.history[5][0]).toBeLessThan(5)
+    expect(wf.history[6][0]).toBeLessThan(-50)    // RSSI 负值
+  })
+
+  it('clear 重置标签', async () => {
+    const wf = await useTextMode(2)
+    wf.ingest(enc('Sin:0.5,Cos:0.86\n'))
+    expect(wf.textLabels.length).toBe(2)
+    wf.clear()
+    expect(wf.textLabels).toEqual([])
+    expect(wf.data[0].length).toBe(0)
   })
 })

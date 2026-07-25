@@ -193,6 +193,7 @@ export type MockScenarioId =
   | 'mixed-ascii'
   | 'waveform'
   | 'waveform-text'
+  | 'waveform-text-labeled'
 
 // ─── 文件下发类型（阶段 1 文件传输 UI） ───
 

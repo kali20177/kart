@@ -107,4 +107,18 @@ describe('exportWaveformAsCsv', () => {
     expect(lines[1]).toBe('0.000,0')
     expect(lines[lines.length - 1]).toBe('0.999,1998')
   })
+
+  it('uses textLabels for CSV header when provided', () => {
+    const data = makeData([1000, 1001], [0.5, 0.7], [0.86, 0.9])
+    const csv = exportWaveformAsCsv(data, [true, true], makeMeta(), ['Sin', 'Cos'])
+    const lines = csv.split('\n').filter(Boolean)
+    expect(lines[0]).toBe('﻿time_sec,Sin,Cos')
+  })
+
+  it('falls back to CH when textLabels is undefined', () => {
+    const data = makeData([1000], [42], [99])
+    const csv = exportWaveformAsCsv(data, [true, true], makeMeta())
+    const lines = csv.split('\n').filter(Boolean)
+    expect(lines[0]).toBe('﻿time_sec,CH1,CH2')
+  })
 })

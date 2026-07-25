@@ -6,7 +6,8 @@ import {
   logLine,
   throughputChunk,
   waveformChunk,
-  waveformTextChunk
+  waveformTextChunk,
+  waveformTextLabeledChunk
 } from './scenarios'
 
 /** 模拟串口源：用定时器代替真实硬件，提供多种调试场景 */
@@ -97,6 +98,10 @@ export class MockSerialSource implements SerialDriver {
       case 'waveform-text':
         // 每 50ms 一行 ASCII 数字 -> 20 行/秒，配合文本行解析 + 采样率 20
         this.timer = setInterval(() => this.emit(waveformTextChunk(this.seq++)), 50)
+        break
+      case 'waveform-text-labeled':
+        // 每 50ms 一行标签化文本（Sin:xxx,Cos:xxx）-> 20 行/秒，自动检测通道名
+        this.timer = setInterval(() => this.emit(waveformTextLabeledChunk(this.seq++)), 50)
         break
       case 'silent':
       case 'at-reply':

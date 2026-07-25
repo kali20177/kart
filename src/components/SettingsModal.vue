@@ -297,7 +297,8 @@ const navItems = computed<NavItem[]>(() => [
           <NFormItem v-else :label="t('settings.formatTextHint')">
             <span style="color: var(--text-dim); font-size: 12px; line-height: 1.6">
               Serial.println(analogRead(A0))<br>
-              a,b / a b / a;b
+              a,b / a b / a;b<br>
+              Sin:0.5, Cos:0.86 (label:value)
             </span>
           </NFormItem>
           <NFormItem :label="t('settings.channels')">

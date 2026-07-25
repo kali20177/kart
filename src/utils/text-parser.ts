@@ -12,6 +12,9 @@ import type { WaveformParseConfig } from '@/types'
  *  - 数字按 `[,\s;]+` 分割（逗号 / 空白 / 分号均可），覆盖 Arduino 常见写法：
  *      Serial.println(analogRead(A0))            -> 单值/行 -> 1 通道
  *      Serial.print(a); Serial.print(','); ...   -> a,b/行  -> 2 通道
+ *  - 支持 label:value 格式，按标签名匹配通道：
+ *      Serial.print("Sin:"); Serial.print(x); Serial.print(",Cos:"); Serial.println(y);
+ *      -> "Sin:0.5,Cos:0.86" -> 标签 "Sin"→通道0、"Cos"→通道1
  *  - 取每行前 `channels` 个有效数值；不足补 NaN（uPlot spanGaps 跨连，渲染为缺口）；
  *    多余忽略；整行无有效数值则跳过（不产生采样点）。
  *  - carryover 为上批未结束的半截行**字符串**，跨回调拼到下批开头（半截行不立即成点，
@@ -25,6 +28,14 @@ interface ParseResult {
   perChannel: number[][]
   /** 上批遗留的半截行字符串，原样传回给下次 parseTextSamples 的 carryover */
   remainder: string
+}
+
+/** 单个 token 的解析结果 */
+interface TokenValue {
+  /** 标签名（仅 label:value 格式时有值）；无标签 token 为 undefined */
+  label?: string
+  /** 解析出的数值；null 表示无效 */
+  value: number | null
 }
 
 /**
@@ -62,43 +73,95 @@ function parseFiniteNumber(token: string): number | null {
 }
 
 /**
+ * 解析单个 token：检测 label:value 格式，提取标签名与数值。
+ * - 匹配 `Label:value` → { label: "Label", value: parseFiniteNumber(value) }
+ * - 不匹配 → { value: parseFiniteNumber(token) }
+ * 标签名规则：字母或下划线开头，后可接字母/数字/下划线（符合 C/Arduino 变量名习惯）。
+ */
+function parseToken(token: string): TokenValue {
+  const trimmed = token.trim()
+  const labelMatch = trimmed.match(/^([a-zA-Z_]\w*)\s*:\s*(\S.*)$/)
+  if (labelMatch) {
+    const v = parseFiniteNumber(labelMatch[2])
+    if (v !== null) return { label: labelMatch[1], value: v }
+    // 标签有效但数值无效 → 整 token 无效
+    return { value: null }
+  }
+  return { value: parseFiniteNumber(token) }
+}
+
+/**
  * 把字节流按行切，读出每通道数值。
  *
- * @param bytes    本批到达的字节
- * @param cfg      解析配置（用 channels 决定每行取几个值）
- * @param carryover 上批遗留的半截行字符串（拼到本批文本前）
+ * @param bytes      本批到达的字节
+ * @param cfg        解析配置（用 channels 决定每行最少取几个值）
+ * @param carryover  上批遗留的半截行字符串（拼到本批文本前）
+ * @param labelIndex 标签→通道索引映射（由 waveform store 持有，非响应式）。
+ *                   首次传 undefined 或不传 → 按位置匹配（兼容无标签数据）。
+ *                   有值则该 Map 会原地更新（新标签分配新索引），调用方可通过
+ *                   .size 感知新增通道数。
  */
 export function parseTextSamples(
   bytes: Uint8Array,
   cfg: WaveformParseConfig,
-  carryover: string = ''
+  carryover: string = '',
+  labelIndex?: Map<string, number>
 ): ParseResult {
-  const channels = Math.max(1, cfg.channels)
+  const minChannels = Math.max(1, cfg.channels)
   const decoded = carryover + new TextDecoder().decode(bytes)
 
   // 按 \r\n / \n / \r 切行；末尾未结束的半截行作为 remainder 留给下批
   const parts = decoded.split(/\r\n|\n|\r/)
   const remainder = parts.pop() ?? ''
 
-  const perChannel: number[][] = Array.from({ length: channels }, () => [])
+  // 初始通道数 = minChannels；解析过程中如 labelIndex 增长则动态扩容
+  const perChannel: number[][] = Array.from({ length: minChannels }, () => [])
 
   for (const line of parts) {
     const trimmed = line.trim()
     if (!trimmed) continue
 
     const tokens = trimmed.split(/[,\s;]+/).filter(Boolean)
-    const values: number[] = []
+    const values = new Map<number, number>()
+    let posCounter = 0 // 无标签 token 的递增位置计数器
+
     for (const token of tokens) {
-      const v = parseFiniteNumber(token)
-      if (v !== null) values.push(v)
-      // 数值与 token 不一致顺序无关：仅收集有效数值，非数值 token 跳过
-      if (values.length >= channels) break
+      const tv = parseToken(token)
+      if (tv.value === null) continue
+
+      let ch: number
+      if (tv.label && labelIndex) {
+        // 标签化 token → 按标签名匹配 / 分配索引
+        const existing = labelIndex.get(tv.label)
+        if (existing != null) {
+          ch = existing
+        } else {
+          ch = labelIndex.size
+          labelIndex.set(tv.label, ch)
+        }
+      } else {
+        // 无标签 token → 按递增位置
+        ch = posCounter
+        posCounter++
+      }
+
+      // 动态扩容 perChannel。仅当 labelIndex 传入（有标签模式）或 pos-based 超出
+      // minChannels 时才扩容；无 labelIndex 时 minChannels 即为上限（兼容现有行为）。
+      if (ch >= perChannel.length) {
+        if (!labelIndex) continue // 无标签模式：位置超出 channels → 忽略（兼容）
+        while (perChannel.length <= ch) {
+          perChannel.push([])
+        }
+      }
+      values.set(ch, tv.value)
     }
 
-    if (values.length === 0) continue // 整行无有效数值 -> 跳过，不产生采样点
+    if (values.size === 0) continue // 整行无有效数值 → 跳过，不产生采样点
 
-    for (let c = 0; c < channels; c++) {
-      perChannel[c].push(values[c] ?? NaN)
+    // 有效通道数 ≥ 标签映射数或 minChannels；不足补 NaN
+    const chCount = Math.max(minChannels, perChannel.length)
+    for (let c = 0; c < chCount; c++) {
+      perChannel[c].push(values.has(c) ? values.get(c)! : NaN)
     }
   }
 

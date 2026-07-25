@@ -21,6 +21,11 @@ export const SCENARIOS: ScenarioDef[] = [
     id: 'waveform-text',
     label: 'Arduino 文本绘图',
     description: 'Serial.println 风格 ASCII 数字行，配合文本行解析 + 2 通道'
+  },
+  {
+    id: 'waveform-text-labeled',
+    label: 'Arduino 标签化文本',
+    description: 'Serial.println 标签化多通道（Sin:0.5, Cos:0.86），自动检测通道名'
   }
 ]
 
@@ -126,4 +131,41 @@ export function waveformTextChunk(seq: number): Uint8Array {
   const a = Math.round(Math.sin(2 * Math.PI * 2 * t) * 512 + 512 + (Math.random() - 0.5) * 40)
   const b = Math.round(Math.cos(2 * Math.PI * 2 * t) * 512 + 512 + (Math.random() - 0.5) * 40)
   return text(`${a},${b}\r\n`)
+}
+
+/**
+ * Arduino 标签化文本帧：Serial.println 风格的 label:value 多通道行。
+ * 模拟 Arduino 中常见的多传感器采集场景：
+ *   Serial.print("Temp:");  Serial.print(tmp);
+ *   Serial.print(",Hum:");   Serial.print(hum);
+ *   Serial.print(",Pres:");  Serial.print(pres);
+ *   Serial.print(",Alt:");   Serial.print(alt);
+ *   Serial.print(",Bat:");   Serial.print(bat);
+ *   Serial.print(",RSSI:");  Serial.println(rssi);
+ *
+ * 6 通道包含不同类型信号：慢变漂移、周期振荡、白噪声、阶跃下降，
+ * 用于验证标签化解析的动态通道增长、通道重排、图表多色显示。
+ *
+ * @param seq 已发送的行序号，决定时间轴起点
+ */
+export function waveformTextLabeledChunk(seq: number): Uint8Array {
+  const t = seq / 20
+  // 温度：25°C 基线 + 0.005Hz 慢变 ±3°C + 噪声
+  const temp = (25 + 3 * Math.sin(2 * Math.PI * 0.005 * t) + (Math.random() - 0.5) * 0.3).toFixed(2)
+  // 湿度：60% 基线 + 2Hz 微幅 + 噪声
+  const hum = (60 + 5 * Math.sin(2 * Math.PI * 2 * t) + (Math.random() - 0.5) * 4).toFixed(1)
+  // 气压：1013 hPa 基线 + 0.03Hz 慢变 ±5 + 噪声
+  const pres = (1013 + 5 * Math.sin(2 * Math.PI * 0.03 * t) + (Math.random() - 0.5) * 2).toFixed(1)
+  // 海拔：120m 基线 + 0.02Hz 慢变 ±15m（与气压负相关）+ 噪声
+  const alt = (120 - 15 * Math.sin(2 * Math.PI * 0.03 * t) + (Math.random() - 0.5) * 3).toFixed(1)
+  // 电池：3.7V 基线 - 0.00005×seq 缓慢消耗（模拟 0.005%/行）+ 噪声
+  const bat = (3.7 - seq * 0.00005 + (Math.random() - 0.5) * 0.01).toFixed(3)
+  // RSSI：-65dBm 基线 + 摆动 + 突发深衰（20% 概率额外跌 10-15dB）
+  let rssi = -65 + 4 * Math.sin(2 * Math.PI * 0.5 * t) + (Math.random() - 0.5) * 6
+  if (Math.random() < 0.2) rssi -= 10 + Math.random() * 15
+  const rssiInt = Math.round(rssi)
+
+  return text(
+    `Temp:${temp},Hum:${hum},Pres:${pres},Alt:${alt},Bat:${bat},RSSI:${rssiInt}\r\n`
+  )
 }

@@ -97,11 +97,18 @@ function formatSampleValue(v: number, cfg: WaveformParseConfig): string {
   return String(Math.round(v))
 }
 
-function channels(): number {
-  return Math.max(1, settings.settings.waveform.parse.channels)
+/** 通道标签名：优先取 textLabels[i]，回退到 CH1/CH2 */
+function channelLabel(i: number): string {
+  return waveform.textLabels[i] ?? `${t('waveform.ch')}${i + 1}`
 }
 
-/** 在 uPlot canvas 上画暂停恢复断点竖线 + 标签 */
+function channels(): number {
+  // 文本模式通道数按标签动态增长；二进制模式按设置
+  return Math.max(
+    Math.max(1, settings.settings.waveform.parse.channels),
+    waveform.textLabels.length
+  )
+}
 function drawResumeBreak(u: uPlot) {
   const x = waveform.resumeBreakX
   if (x <= 0) return
@@ -143,7 +150,7 @@ function onSetCursor(u: uPlot) {
     const v = u.data[i + 1]?.[idx]
     if (v != null) {
       vals.push({
-        label: `CH${i + 1}`,
+        label: channelLabel(i),
         value: formatSampleValue(v as number, settings.settings.waveform.parse),
         color: channelColor(i, ch)
       })
@@ -413,6 +420,14 @@ watch(
   }
 )
 
+// 动态通道标签变更（文本模式新标签出现）→ 同步可见性
+watch(
+  () => waveform.textLabels.length,
+  () => {
+    syncChannelVisibility()
+  }
+)
+
 onMounted(() => {
   rebuild()
   const el = containerRef.value
@@ -485,7 +500,7 @@ function handleExport(key: string) {
     scope,
     exportedAt: Date.now(),
   }
-  const content = exportWaveformAsCsv(sourceData, channelVisible.value, meta)
+  const content = exportWaveformAsCsv(sourceData, channelVisible.value, meta, waveform.textLabels)
   downloadTextFile(generateExportFilename('csv'), content)
 }
 </script>
@@ -513,7 +528,7 @@ function handleExport(key: string) {
         <span class="ch-dot" :style="{
           background: channelVisible[i - 1] ? channelColor(i - 1, channels()) : '#888'
         }" />
-        CH{{ i }}
+        {{ channelLabel(i - 1) }}
       </NButton>
       <NTag v-if="waveform.paused" size="small" :bordered="false" type="info">{{ t('waveform.dragHistory') }}</NTag>
       <NTag v-if="waveform.viewOffset > 0" size="small" :bordered="false" type="warning">

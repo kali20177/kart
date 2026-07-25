@@ -37,6 +37,10 @@ export const useWaveformStore = defineStore('waveform', () => {
   const settingsStore = useSettingsStore()
   const serial = useSerialStore()
 
+  // 文本模式通道标签名（响应式，供组件绑定图例/按钮/tooltip）。
+  // 必须在 history/data 初始化之前声明 —— buildEmpty() 参考它。
+  const textLabels = ref<string[]>([])
+
   // 完整历史缓冲（上限受 maxHistoryPoints 约束，从头裁剪）
   const history = shallowRef<number[][]>(buildEmpty())
   // 可视切片（组件渲染这层）
@@ -59,6 +63,8 @@ export const useWaveformStore = defineStore('waveform', () => {
   let carryover: Uint8Array = new Uint8Array(0)
   // 文本模式跨回调承接的半截行字符串（非响应式）
   let textCarryover = ''
+  // 文本模式标签→通道索引（非响应式，由解析器原地更新；clear() 时清空）
+  let labelIndex: Map<string, number> = new Map()
   // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
   const resumeBreakX = ref(-1)
   // 全局采样计数器（单调递增），决定 X 时间戳
@@ -78,9 +84,12 @@ export const useWaveformStore = defineStore('waveform', () => {
     return settingsStore.settings.waveform.parse
   }
 
-  /** 按当前通道数构造空数据：[X, ch1, ch2, …] */
+  /** 按当前有效通道数构造空数据：[X, ch1, ch2, …]
+   *  文本模式取 max(cfg.channels, textLabels.length) 以容纳标签检测到的动态通道；
+   *  二进制模式取 cfg.channels（textLabels 为空数组，max 退化为 cfg.channels）。 */
   function buildEmpty(): number[][] {
-    const ch = Math.max(1, parseCfg().channels)
+    const cfgCh = Math.max(1, parseCfg().channels)
+    const ch = Math.max(cfgCh, textLabels.value.length)
     const arr: number[][] = []
     for (let i = 0; i <= ch; i++) arr.push([])
     return arr
@@ -92,9 +101,17 @@ export const useWaveformStore = defineStore('waveform', () => {
     const cfg = parseCfg()
     let perChannel: number[][]
     if (cfg.format === 'text') {
-      const res = parseTextSamples(bytes, cfg, textCarryover)
+      const res = parseTextSamples(bytes, cfg, textCarryover, labelIndex)
       textCarryover = res.remainder
       perChannel = res.perChannel
+      // 同步 labelIndex → textLabels：新标签出现时自动追加
+      if (labelIndex.size !== textLabels.value.length) {
+        const arr = textLabels.value.slice()
+        for (const [label, idx] of labelIndex) {
+          arr[idx] = label
+        }
+        textLabels.value = arr
+      }
     } else {
       const res = parseSamples(bytes, cfg, carryover)
       carryover = res.remainder
@@ -105,6 +122,12 @@ export const useWaveformStore = defineStore('waveform', () => {
 
     if (startTime < 0) startTime = Date.now()
     const cur = history.value
+
+    // 动态通道增长（文本模式新标签出现 → perChannel 可能 > cur 通道数）
+    // 补足空数组，使 cur[c+1] 可安全 push
+    while (cur.length <= perChannel.length) {
+      cur.push([])
+    }
 
     // X 时间戳：
     //  - 文本模式：真实到达时间（与消息时间戳对齐）。文本到达速率未知且可变，
@@ -167,6 +190,8 @@ export const useWaveformStore = defineStore('waveform', () => {
   function clear() {
     carryover = new Uint8Array(0)
     textCarryover = ''
+    labelIndex = new Map()
+    textLabels.value = []
     resumeBreakX.value = -1
     sampleIndex = 0
     windowStartIndex = 0
@@ -300,5 +325,5 @@ export const useWaveformStore = defineStore('waveform', () => {
   // 订阅原始字节流（在 messages store 帧切分之前的同一份字节）
   serial.onData((bytes) => ingest(bytes))
 
-  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
+  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
 })

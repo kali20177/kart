@@ -303,6 +303,7 @@ export default {
     export: 'Export',
     exportCsvVisible: 'CSV (Visible)',
     exportCsvFull: 'CSV (Full History)',
+    ch: 'CH',
   },
   checksum: {
     title: 'Checksum',

@@ -17,9 +17,10 @@ export interface WaveformExportMeta {
 export function exportWaveformAsCsv(
   data: number[][],
   visibleChannels: boolean[],
-  _meta: WaveformExportMeta
+  _meta: WaveformExportMeta,
+  textLabels?: string[]
 ): string {
-  const header = buildHeader(visibleChannels)
+  const header = buildHeader(visibleChannels, textLabels)
   const rows: string[] = [header]
 
   const xArr = data[0]
@@ -40,11 +41,11 @@ export function exportWaveformAsCsv(
   return '﻿' + rows.join('\n') + '\n'
 }
 
-/** 根据可见通道数组构建 CSV 表头 */
-function buildHeader(visibleChannels: boolean[]): string {
+/** 根据可见通道数组与可选标签数组构建 CSV 表头 */
+function buildHeader(visibleChannels: boolean[], textLabels?: string[]): string {
   const labels: string[] = ['time_sec']
   for (let i = 0; i < visibleChannels.length; i++) {
-    if (visibleChannels[i]) labels.push(`CH${i + 1}`)
+    if (visibleChannels[i]) labels.push(textLabels?.[i] ?? `CH${i + 1}`)
   }
   return labels.join(',')
 }
