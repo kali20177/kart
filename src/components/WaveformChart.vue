@@ -7,6 +7,7 @@ import 'uplot/dist/uPlot.min.css'
 import { useI18n } from 'vue-i18n'
 import { useWaveformStore } from '@/stores/waveform'
 import { useSettingsStore } from '@/stores/settings'
+import { usePauseStore } from '@/stores/pause'
 import { useTheme } from '@/composables/useTheme'
 import { formatTimestamp } from '@/utils/message-format'
 import { exportWaveformAsCsv, type WaveformExportMeta } from '@/utils/export-waveform-csv'
@@ -15,6 +16,7 @@ import type { WaveformParseConfig } from '@/types'
 
 const waveform = useWaveformStore()
 const settings = useSettingsStore()
+const pauseStore = usePauseStore()
 const { isDark } = useTheme()
 const { t } = useI18n()
 
@@ -538,7 +540,7 @@ function handleExport(key: string) {
       >
         {{ waveform.paused ? t('waveform.paused') : t('waveform.pause') }}
       </NButton>
-      <NButton size="tiny" @click="waveform.clear()">{{ t('waveform.clear') }}</NButton>
+      <NButton size="tiny" @click="pauseStore.clearAll()">{{ t('waveform.clear') }}</NButton>
       <NDropdown trigger="click" :options="exportOptions" @select="handleExport">
         <NButton size="tiny">{{ t('waveform.export') }}</NButton>
       </NDropdown>

@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useMessagesStore } from './messages'
+import { useWaveformStore } from './waveform'
 
 /**
  * 应用级「暂停采集」状态——消息视图与波形视图共享的单一真相源。
@@ -25,5 +27,13 @@ export const usePauseStore = defineStore('pause', () => {
     if (paused.value) pauseStartTime.value = Date.now()
   }
 
-  return { paused, pauseStartTime, toggle }
+  /** 统一清空：消息列表与波形图也共享同一清空操作——一个视图清空，两边同时重置。
+   *  原因同暂停：两个视图的数据来自同一字节流，若各自独立清空，会失去对照（波形还在
+   *  显示旧数据时消息列表已空，或反之）。录制不受影响，与暂停一致。 */
+  function clearAll() {
+    useMessagesStore().clear()
+    useWaveformStore().clear()
+  }
+
+  return { paused, pauseStartTime, toggle, clearAll }
 })

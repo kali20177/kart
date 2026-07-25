@@ -8,6 +8,7 @@ import type { DropdownOption, DropdownDividerOption } from 'naive-ui'
 import MessageBubble from './MessageBubble.vue'
 import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
+import { usePauseStore } from '@/stores/pause'
 import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
 import type { DataMode, Direction, Message } from '@/types'
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 
 const messagesStore = useMessagesStore()
 const settingsStore = useSettingsStore()
+const pauseStore = usePauseStore()
 const dialog = useDialog()
 const toast = useMessage()
 const { copy } = useClipboard()
@@ -349,7 +351,7 @@ watch(
       <NButton size="tiny" :type="messagesStore.paused ? 'warning' : 'default'" @click="messagesStore.togglePause()">
         {{ messagesStore.paused ? t('msgList.paused') : t('msgList.pause') }}
       </NButton>
-      <NButton size="tiny" @click="messagesStore.clear()">{{ t('msgList.clearAll') }}</NButton>
+      <NButton size="tiny" @click="pauseStore.clearAll()">{{ t('msgList.clearAll') }}</NButton>
     </div>
 
     <!-- 时间筛选行 -->

@@ -20,7 +20,7 @@ describe('全局暂停：消息与波形共享同一状态', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => { vi.useRealTimers() })
 
   it('在波形视图暂停 → 消息视图 ingestRx 也丢弃', () => {
     const settings = useSettingsStore()
