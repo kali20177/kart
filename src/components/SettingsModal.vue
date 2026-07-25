@@ -65,7 +65,34 @@ const numericTypeOptions = computed(() => [
 
 // 浏览器原生目录选择(File System Access API)仅 Chromium 在安全上下文下可用;
 // Electron 走专用 IPC 路径,恒可点。
-const canPickDir = computed(() => Boolean(window.electron?.recorder?.showDirectoryPicker) || ('showDirectoryPicker' in window))
+// 以下两种嵌入式环境会静默失败,需直接禁用按钮并提示,避免用户陷入"选完没反应"的盲区:
+// - iframe 沙箱:window.self !== window.top
+// - 被其他 Electron 应用包裹(如 VSCode 简易浏览器):UA 含 Electron,但本应用 preload 未注入
+//   (自己的 Electron 应用 window.electron 一定存在,走上方 IPC 分支,不会误判)
+function detectEmbedded(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    if (window.self !== window.top) return true
+  } catch {
+    return true // 跨源访问 window.top 抛 SecurityError,基本可判定在 iframe 内
+  }
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  if (!window.electron?.recorder?.showDirectoryPicker && /Electron/i.test(ua)) return true
+  return false
+}
+const embedded = computed(() => detectEmbedded())
+const canPickDir = computed(() => {
+  if (typeof window === 'undefined') return false
+  if (window.electron?.recorder?.showDirectoryPicker) return true
+  if (embedded.value) return false
+  return 'showDirectoryPicker' in window
+})
+// 禁用按钮时的提示文案:优先 iframe/嵌入式,其次 API 不支持
+const pickerDisabledHint = computed(() =>
+  embedded.value && !window.electron?.recorder?.showDirectoryPicker
+    ? t('record.pickerInIframe')
+    : t('record.pickerUnsupported')
+)
 
 async function pickDir() {
   try {
@@ -335,7 +362,7 @@ const navItems = computed<NavItem[]>(() => [
                 <span class="record-dir-name">{{ recordDir.dirName.value ?? ('(' + t('record.notSet') + ')') }}</span>
                 <NButton size="small" :disabled="!canPickDir" @click="pickDir">{{ t('record.selectDir') }}</NButton>
               </div>
-              <div v-if="!canPickDir" class="record-dir-hint">{{ t('record.pickerUnsupported') }}</div>
+              <div v-if="!canPickDir" class="record-dir-hint">{{ pickerDisabledHint }}</div>
             </NFormItem>
           </NForm>
         </div>

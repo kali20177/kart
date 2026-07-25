@@ -57,6 +57,7 @@ export default {
     needConfig: 'Please configure a save directory in Settings first',
     errorWrite: 'Failed to write file',
     pickerUnsupported: 'This browser cannot select a directory. Use a Chromium browser (Chrome/Edge) over HTTPS or localhost.',
+    pickerInIframe: 'Embedded browser windows (e.g. VSCode preview) cannot select a directory. Open this app in a standalone browser tab, or use the desktop build.',
     pickFailed: 'Failed to select directory',
     statusRecording: 'Recording',
     statusError: 'Recording Error',

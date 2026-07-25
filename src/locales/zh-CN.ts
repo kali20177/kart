@@ -57,6 +57,7 @@ export default {
     needConfig: '请先在设置中配置录制目录',
     errorWrite: '写入文件失败',
     pickerUnsupported: '当前浏览器不支持选择目录,请使用 Chrome/Edge 等 Chromium 内核浏览器,并确保通过 HTTPS 或 localhost 访问',
+    pickerInIframe: '嵌入式浏览器窗口(如 VSCode 预览)不支持选择目录,请在独立的浏览器标签页中打开本应用,或使用桌面版',
     pickFailed: '选择目录失败',
     statusRecording: '录制中',
     statusError: '录制错误',
