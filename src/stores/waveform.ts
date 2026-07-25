@@ -9,7 +9,7 @@ import type { WaveformParseConfig } from '@/types'
  * 波形 store：订阅串口原始字节流 → 解析为多通道采样 → 历史/可视两层缓冲。
  *
  * 两层模型（区别于早期单一滑动窗口）：
- *  - history：完整保留的采样缓冲（[X, ch1, ch2, …]），上限 MAX_HISTORY，从头裁剪。
+ *  - history：完整保留的采样缓冲（[X, ch1, ch2, …]），上限为用户配置的 maxHistoryPoints，从头裁剪。
  *    这层保证「暂停后能回看历史」——旧数据不再被即时丢弃。
  *  - data：可视切片 = history 末尾向前偏移 viewOffset 个采样的 viewSize 长度窗口。
  *    组件只渲染这层（chart.setData(data)），x 轴 auto-fit 即正确显示当前窗口。
@@ -24,7 +24,7 @@ import type { WaveformParseConfig } from '@/types'
  * 组件通过 version 版本号感知更新——而非 watch 数组长度，因为窗口滚满后长度恒定。
  *
  * 订阅在 store 初始化时建立（早于 connect 也安全：listener 静等，连接后即有数据流入）。
- * 单例 store 生命周期 = 应用生命周期，缓冲受 MAX_HISTORY 约束，无需反订阅。
+ * 单例 store 生命周期 = 应用生命周期，缓冲受 maxHistoryPoints 约束，无需反订阅。
  *
  * 配置变更语义（关键）：
  *  - 解析配置（类型/字节序/通道数/偏移）变更 → 旧数据按旧配置解析、无法沿用，清空重建。
@@ -36,7 +36,7 @@ export const useWaveformStore = defineStore('waveform', () => {
   const settingsStore = useSettingsStore()
   const serial = useSerialStore()
 
-  // 完整历史缓冲（上限受 MAX_HISTORY 约束，从头裁剪）
+  // 完整历史缓冲（上限受 maxHistoryPoints 约束，从头裁剪）
   const history = shallowRef<number[][]>(buildEmpty())
   // 可视切片（组件渲染这层）
   const data = shallowRef<number[][]>(buildEmpty())
@@ -65,9 +65,6 @@ export const useWaveformStore = defineStore('waveform', () => {
   // 首个采样到达时刻；-1 表示尚未有数据
   let startTime = -1
 
-  /** 历史缓冲上限（常量）：~5min@640Hz、2 通道约 3MB，避免长会话无界内存增长。
-   *  maxPoints 设置上限 100k，恒 ≤ 此值，回看总有余量。 */
-  const MAX_HISTORY = 200_000
   /** 可视窗口跨度下限（常量）：滚轮放大最深至此（约 2 个采样），maxPoints 设置下限 100 恒大于此。
    *  可按需调大（如 10）以避免极小窗口的退化视图。 */
   const MIN_VIEW = 2
@@ -107,10 +104,13 @@ export const useWaveformStore = defineStore('waveform', () => {
     recomputeView()
   }
 
-  /** history 超 MAX_HISTORY 则从头裁剪（保留最新、丢弃最旧） */
+  /** history 超过 maxHistoryPoints 则从头裁剪（保留最新、丢弃最旧）。
+   *  上限可配置（设置 ▸ 波形解析 ▸ 历史缓冲上限），默认 200k（~5min@640Hz、2 通道约 3MB）；
+   *  UI min 锁定 maxPoints，故恒 ≥ 可视窗口，回看总有余量。 */
   function trimHistory(cur: number[][]) {
-    if (cur[0].length <= MAX_HISTORY) return
-    const drop = cur[0].length - MAX_HISTORY
+    const maxHistory = settingsStore.settings.waveform.maxHistoryPoints
+    if (cur[0].length <= maxHistory) return
+    const drop = cur[0].length - maxHistory
     for (let i = 0; i < cur.length; i++) cur[i] = cur[i].slice(drop)
     windowStartIndex += drop
   }
@@ -247,6 +247,15 @@ export const useWaveformStore = defineStore('waveform', () => {
       const mp = settingsStore.settings.waveform.maxPoints
       if (!zoomed.value) viewSize.value = mp
       else viewSize.value = Math.min(Math.max(viewSize.value, MIN_VIEW), mp)
+      recomputeView()
+    }
+  )
+
+  // 历史缓冲上限变更：改小立即从头裁剪 history（丢弃最旧）；改大无副作用。随后重切可视窗口。
+  watch(
+    () => settingsStore.settings.waveform.maxHistoryPoints,
+    () => {
+      trimHistory(history.value)
       recomputeView()
     }
   )

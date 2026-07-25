@@ -296,12 +296,27 @@ const navItems = computed<NavItem[]>(() => [
               style="width: 100%"
             />
           </NFormItem>
-          <NFormItem :label="t('settings.maxPoints')">
+          <NFormItem>
+            <template #label>
+              {{ t('settings.maxPoints') }}<span style="margin-left: 6px; color: var(--text-dim); font-weight: 400">100–100000</span>
+            </template>
             <NInputNumber
               v-model:value="s.waveform.maxPoints"
               :min="100"
               :max="100000"
               :step="500"
+              style="width: 100%"
+            />
+          </NFormItem>
+          <NFormItem>
+            <template #label>
+              {{ t('settings.maxHistoryPoints') }}<span style="margin-left: 6px; color: var(--text-dim); font-weight: 400">{{ s.waveform.maxPoints }}–1000000</span>
+            </template>
+            <NInputNumber
+              v-model:value="s.waveform.maxHistoryPoints"
+              :min="s.waveform.maxPoints"
+              :max="1000000"
+              :step="10000"
               style="width: 100%"
             />
           </NFormItem>

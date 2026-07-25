@@ -130,8 +130,10 @@ export interface WaveformSettings {
   parse: WaveformParseConfig
   /** 采样率（Hz）—— 仅决定 X 轴时间刻度，不参与解析 */
   sampleRate: number
-  /** 可视窗口点数（历史另保留至 MAX_HISTORY，暂停后可拖拽回看） */
+  /** 可视窗口点数（运行中显示的最新采样数，满后转滑动窗口） */
   maxPoints: number
+  /** 历史缓冲上限（采样数）；≥ maxPoints，暂停后可拖拽回看的总量 */
+  maxHistoryPoints: number
 }
 
 /** 导出偏好（持久化到 localStorage） */

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
-import type { AppSettings } from '@/types'
+import type { AppSettings, WaveformSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
 import { getTheme } from '@/themes'
 
@@ -25,7 +25,8 @@ const DEFAULTS: AppSettings = {
       byteOffset: 0
     },
     sampleRate: 640,
-    maxPoints: 5000
+    maxPoints: 5000,
+    maxHistoryPoints: 200_000
   },
   autoReconnect: false,
   showPauseNotification: true,
@@ -66,6 +67,14 @@ export const useSettingsStore = defineStore('settings', () => {
         : 'none'
     }
     delete persisted.rxVerifyChecksum
+    storage.set('settings', persisted)
+  }
+  // 五次迁移：waveform 新增 maxHistoryPoints（历史缓冲上限）。浅合并下 persisted.waveform
+  // 整体覆盖 DEFAULTS.waveform，旧数据缺该字段需显式补默认，否则 maxHistoryPoints 为 undefined。
+  // 注：persisted.waveform 经 storage 读回，内部字段实际可能缺失，故 cast 为 Partial 再判空。
+  const persistedWf = persisted.waveform as Partial<WaveformSettings> | undefined
+  if (persistedWf && persistedWf.maxHistoryPoints == null) {
+    persistedWf.maxHistoryPoints = DEFAULTS.waveform.maxHistoryPoints
     storage.set('settings', persisted)
   }
 

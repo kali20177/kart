@@ -239,7 +239,8 @@ export default {
     channels: '通道数',
     byteOffset: '字节偏移（帧头）',
     sampleRate: '采样率 (Hz)',
-    maxPoints: '最大点数',
+    maxPoints: '可视窗口点数',
+    maxHistoryPoints: '历史缓冲上限',
     // 连接
     autoReconnect: '掉线自动重连（阶段 2 生效）',
     // 波特率
