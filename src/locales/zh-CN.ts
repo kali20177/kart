@@ -136,6 +136,7 @@ export default {
     pause: '暂停',
     paused: '已暂停',
     clearAll: '清空',
+    export: '导出',
     backToLatest: '↓ 回到最新',
     selected: '已选 {n}',
     copy: '复制',

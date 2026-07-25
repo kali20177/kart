@@ -136,6 +136,7 @@ export default {
     pause: 'Pause',
     paused: 'Paused',
     clearAll: 'Clear',
+    export: 'Export',
     backToLatest: '↓ Back to latest',
     selected: '{n} selected',
     copy: 'Copy',

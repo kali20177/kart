@@ -111,6 +111,14 @@ const selectedCount = computed(() => selected.size)
 const scroller = ref<InstanceType<typeof DynamicScroller> | null>(null)
 const follow = ref(true)
 const showExportDialog = ref(false)
+
+function onClickExport() {
+  if (messagesStore.messages.length === 0) {
+    toast.warning(t('log.empty'))
+    return
+  }
+  showExportDialog.value = true
+}
 let scrollEl: HTMLElement | null = null
 
 function onScroll() {
@@ -352,6 +360,7 @@ watch(
         {{ messagesStore.paused ? t('msgList.paused') : t('msgList.pause') }}
       </NButton>
       <NButton size="tiny" @click="pauseStore.clearAll()">{{ t('msgList.clearAll') }}</NButton>
+      <NButton size="tiny" @click="onClickExport">{{ t('msgList.export') }}</NButton>
     </div>
 
     <!-- 时间筛选行 -->

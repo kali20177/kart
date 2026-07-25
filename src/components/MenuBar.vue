@@ -2,17 +2,14 @@
 import { computed, h, ref } from 'vue'
 import { NDropdown, NButton, NModal, useMessage, useDialog } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
-import { useMessagesStore } from '@/stores/messages'
 import { useSettingsStore } from '@/stores/settings'
 import { useSerialStore } from '@/stores/serial'
 import { useCommandsStore } from '@/stores/commands'
 import { useRecorderStore } from '@/stores/recorder'
 import { storage } from '@/composables/useStorage'
-import ExportDialog from './ExportDialog.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-const messages = useMessagesStore()
 const settingsStore = useSettingsStore()
 const serialStore = useSerialStore()
 const commandsStore = useCommandsStore()
@@ -23,7 +20,6 @@ const dialog = useDialog()
 const showAbout = ref(false)
 const showLicense = ref(false)
 const showShortcuts = ref(false)
-const showExportDialog = ref(false)
 
 /** 检测是否为 macOS（userAgent + platform 双保险，部分浏览器 platform 已被屏蔽） */
 const isMac = computed(() => {
@@ -79,7 +75,6 @@ function check(selected: boolean) {
 const fileMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.autoSave'), key: 'auto-save', icon: check(settingsStore.autoSave) },
   { type: 'divider', key: 'd1' },
-  { label: t('menu.exportLog'), key: 'export-log' },
   {
     label: recorder.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording'),
     key: 'toggle-recording',
@@ -102,13 +97,6 @@ function handleSelect(key: string) {
   switch (key) {
     case 'auto-save':
       settingsStore.autoSave = !settingsStore.autoSave
-      break
-    case 'export-log':
-      if (messages.messages.length === 0) {
-        message.warning(t('log.empty'))
-        return
-      }
-      showExportDialog.value = true
       break
     case 'toggle-recording':
       if (recorder.state.status === 'idle') {
@@ -214,12 +202,6 @@ function handleSelect(key: string) {
       </div>
     </div>
   </NModal>
-
-  <ExportDialog
-    v-if="showExportDialog"
-    :messages="messages.messages"
-    @close="showExportDialog = false"
-  />
 </template>
 
 <style scoped>
