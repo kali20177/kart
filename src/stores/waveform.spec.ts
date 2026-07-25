@@ -122,6 +122,62 @@ describe('waveform store ingest', () => {
   })
 })
 
+describe('waveform store 二进制模式 X 时间对齐（验证用）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('sampleRate 匹配时：每帧首采样 X = 到达时间（不漂移）', async () => {
+    vi.useFakeTimers()
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.format = 'binary'
+    settings.settings.waveform.parse.channels = 2
+    settings.settings.waveform.sampleRate = 640 // 32 样本 × (1000/640) = 50ms = 帧间隔
+    await nextTick()
+    const wf = useWaveformStore()
+
+    vi.setSystemTime(1000)
+    wf.ingest(waveformChunk(0)) // 帧 0：32 样本
+    expect(wf.history[0][0]).toBe(1000) // 首采样 = 到达
+
+    vi.setSystemTime(1050) // 50ms 后帧 1
+    wf.ingest(waveformChunk(1)) // 帧 1：样本 32-63
+    // 合成：1000 + 32×(1000/640) = 1050 = 到达时间（对齐）
+    expect(wf.history[0][32]).toBe(1050)
+
+    vi.setSystemTime(1100) // 50ms 后帧 2
+    wf.ingest(waveformChunk(2))
+    expect(wf.history[0][64]).toBe(1100) // 仍对齐，无漂移
+    vi.useRealTimers()
+  })
+
+  it('sampleRate 不匹配时：合成时间相对到达时间持续漂移', async () => {
+    vi.useFakeTimers()
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.format = 'binary'
+    settings.settings.waveform.parse.channels = 2
+    settings.settings.waveform.sampleRate = 1000 // 故意配错：实际 640Hz
+    await nextTick()
+    const wf = useWaveformStore()
+
+    vi.setSystemTime(1000)
+    wf.ingest(waveformChunk(0))
+    expect(wf.history[0][0]).toBe(1000) // 首帧首采样 = 到达
+
+    vi.setSystemTime(1050) // 实际 50ms 后到达
+    wf.ingest(waveformChunk(1))
+    // 合成：1000 + 32×(1000/1000) = 1032；真实到达 1050 -> 已漂移 18ms
+    expect(wf.history[0][32]).toBe(1032)
+    expect(wf.history[0][32]).toBeLessThan(1050) // 落后于真实到达
+
+    vi.setSystemTime(1100)
+    wf.ingest(waveformChunk(2))
+    // 合成：1000 + 64×1 = 1064；真实 1100 -> 漂移 36ms（线性增长）
+    expect(wf.history[0][64]).toBe(1064)
+    vi.useRealTimers()
+  })
+})
+
 describe('waveform store 历史回看', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
