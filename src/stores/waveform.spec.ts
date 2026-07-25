@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 import { useWaveformStore } from './waveform'
 import { useSettingsStore } from './settings'
-import { waveformChunk } from '@/mock/scenarios'
+import { waveformChunk, waveformTextChunk } from '@/mock/scenarios'
+
+const enc = (s: string) => new TextEncoder().encode(s)
 
 // 端到端验证 ingest → 解析 → 滑动窗口 的数据流（不依赖 uPlot / canvas）
 beforeEach(() => {
@@ -299,5 +301,88 @@ describe('waveform store 滚轮缩放', () => {
     wf.clear()
     expect(wf.zoomed).toBe(false)
     expect(wf.viewSize).toBe(10)
+  })
+})
+
+describe('waveform store 文本行解析模式', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  async function useTextMode(channels: number) {
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.format = 'text'
+    settings.settings.waveform.parse.channels = channels
+    settings.settings.waveform.sampleRate = 20
+    await nextTick()
+    return useWaveformStore()
+  }
+
+  it('逗号分隔 2 通道 -> 1 采样点 × 2 通道', async () => {
+    const wf = await useTextMode(2)
+    wf.ingest(enc('1,2\n'))
+    expect(wf.data[0].length).toBe(1) // X
+    expect(wf.data[1]).toEqual([1]) // CH1
+    expect(wf.data[2]).toEqual([2]) // CH2
+  })
+
+  it('多行 -> 多采样点，X 单调递增', async () => {
+    const wf = await useTextMode(1)
+    wf.ingest(enc('10\n20\n30\n'))
+    expect(wf.data[1]).toEqual([10, 20, 30])
+    expect(wf.data[0][2]).toBeGreaterThan(wf.data[0][0])
+  })
+
+  it('跨回调 carryover：半截行拼到下批', async () => {
+    const wf = await useTextMode(1)
+    wf.ingest(enc('12.'))
+    expect(wf.data[0].length).toBe(0) // 半截行不成点
+    wf.ingest(enc('5\n'))
+    expect(wf.data[0].length).toBe(1)
+    expect(wf.data[1]).toEqual([12.5])
+  })
+
+  it('mock 场景 waveformTextChunk 可被文本模式解析', async () => {
+    const wf = await useTextMode(2)
+    wf.ingest(waveformTextChunk(0))
+    wf.ingest(waveformTextChunk(1))
+    expect(wf.data[0].length).toBe(2) // 两行 -> 两采样点
+    expect(wf.data[1].length).toBe(2)
+    expect(wf.data[2].length).toBe(2)
+    // analogRead 量程 0~1024
+    for (const v of wf.data[1]) expect(v).toBeGreaterThanOrEqual(-4)
+    for (const v of wf.data[1]) expect(v).toBeLessThanOrEqual(1028)
+  })
+
+  it('切换回二进制模式 -> 清空重建（format 变更触发 watch clear）', async () => {
+    const settings = useSettingsStore()
+    const wf = await useTextMode(1)
+    wf.ingest(enc('1\n2\n'))
+    expect(wf.data[1].length).toBe(2)
+    settings.settings.waveform.parse.format = 'binary'
+    await nextTick()
+    expect(wf.data[0].length).toBe(0) // 已清空
+  })
+
+  it('X 用真实到达时间，不随 sampleRate 漂移（与消息时间戳对齐）', async () => {
+    vi.useFakeTimers()
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.format = 'text'
+    settings.settings.waveform.parse.channels = 1
+    settings.settings.waveform.sampleRate = 640 // 故意不匹配实际到达速率
+    await nextTick()
+    const wf = useWaveformStore()
+
+    vi.setSystemTime(1000)
+    wf.ingest(enc('1\n'))
+    expect(wf.data[0][0]).toBe(1000)
+
+    // 1 秒后第二个采样：真实时间应为 2000；
+    // 若误用合成时间(640Hz)会算成 startTime + 1×(1000/640) ≈ 1001.56（漂移）
+    vi.setSystemTime(2000)
+    wf.ingest(enc('2\n'))
+    expect(wf.data[0][1]).toBe(2000)
+
+    vi.useRealTimers()
   })
 })

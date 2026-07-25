@@ -113,15 +113,20 @@ export type NumericType =
   | 'float32'
   | 'float64'
 
+/** 波形解析格式：二进制结构化字节流 / 文本行（Arduino Serial.println 风格 ASCII 数字） */
+export type WaveformParseFormat = 'binary' | 'text'
+
 /** 波形解析配置：把连续字节流解析为多通道采样 */
 export interface WaveformParseConfig {
-  /** 数值类型（决定每采样字节数） */
+  /** 解析格式：'binary' 按结构化字节读，'text' 按 ASCII 文本行读数值 */
+  format: WaveformParseFormat
+  /** 数值类型（决定每采样字节数；仅 binary 生效，text 模式忽略） */
   type: NumericType
-  /** 大小端（uint8/int8 无效，仍保留以统一处理） */
+  /** 大小端（uint8/int8 无效，仍保留以统一处理；仅 binary 生效） */
   littleEndian: boolean
-  /** 交错通道数 */
+  /** 交错通道数（binary = 每 record 通道数；text = 每行取前 N 个数值） */
   channels: number
-  /** 每 record 起始跳过的字节数（如帧头），连续流通常为 0 */
+  /** 每 record 起始跳过的字节数（如帧头），连续流通常为 0；仅 binary 生效 */
   byteOffset: number
 }
 
@@ -187,6 +192,7 @@ export type MockScenarioId =
   | 'high-throughput'
   | 'mixed-ascii'
   | 'waveform'
+  | 'waveform-text'
 
 // ─── 文件下发类型（阶段 1 文件传输 UI） ───
 

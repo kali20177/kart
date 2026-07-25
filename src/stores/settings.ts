@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
-import type { AppSettings, WaveformSettings } from '@/types'
+import type { AppSettings, WaveformParseConfig, WaveformSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
 import { getTheme } from '@/themes'
 
@@ -19,6 +19,7 @@ const DEFAULTS: AppSettings = {
   locale: 'zh-CN',
   waveform: {
     parse: {
+      format: 'binary',
       type: 'int16',
       littleEndian: true,
       channels: 2,
@@ -75,6 +76,13 @@ export const useSettingsStore = defineStore('settings', () => {
   const persistedWf = persisted.waveform as Partial<WaveformSettings> | undefined
   if (persistedWf && persistedWf.maxHistoryPoints == null) {
     persistedWf.maxHistoryPoints = DEFAULTS.waveform.maxHistoryPoints
+    storage.set('settings', persisted)
+  }
+  // 六次迁移：waveform.parse 新增 format 字段（'binary' | 'text'）。浅合并下 persisted.parse
+  // 整体覆盖 DEFAULTS.parse，旧数据缺该字段需显式补 'binary'，否则 format 为 undefined。
+  const persistedParse = persistedWf?.parse as Partial<WaveformParseConfig> | undefined
+  if (persistedParse && persistedParse.format == null) {
+    persistedParse.format = 'binary'
     storage.set('settings', persisted)
   }
 

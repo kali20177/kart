@@ -3,6 +3,7 @@ import { parseSamples, recordSize, bytesPerSample } from '@/utils/byte-parser'
 import type { WaveformParseConfig } from '@/types'
 
 const cfg = (over: Partial<WaveformParseConfig> = {}): WaveformParseConfig => ({
+  format: 'binary',
   type: 'int16',
   littleEndian: true,
   channels: 1,

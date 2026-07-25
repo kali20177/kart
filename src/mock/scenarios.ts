@@ -16,6 +16,11 @@ export const SCENARIOS: ScenarioDef[] = [
     id: 'waveform',
     label: '波形采样',
     description: '结构化二进制多通道采样，配合波形视图'
+  },
+  {
+    id: 'waveform-text',
+    label: 'Arduino 文本绘图',
+    description: 'Serial.println 风格 ASCII 数字行，配合文本行解析 + 2 通道'
   }
 ]
 
@@ -100,4 +105,25 @@ export function waveformChunk(seq: number): Uint8Array {
     w += 2
   }
   return buf
+}
+
+/**
+ * Arduino 文本绘图风格帧：Serial.println 风格的 ASCII 数字行。
+ * 每行两个逗号分隔的整数，模拟：
+ *   Serial.print(a); Serial.print(','); Serial.println(b);
+ *
+ * - ch0 = round(sin(2π·2·t) · 512 + 512 + 噪声)  正弦摆动在 0~1024（analogRead 量程）+ ±20 噪声
+ * - ch1 = round(cos(2π·2·t) · 512 + 512 + 噪声)  余弦正交相位 + ±20 噪声
+ * - t = seq / 20（每 50ms 一行 -> 20 行/秒）
+ *
+ * 配合波形「文本行」解析模式 + 2 通道、采样率 20。整行为 ASCII 数字 + 逗号 + \r\n，
+ * 直接验证文本解析路径（TextDecoder 解码 -> 按行切 -> 数字解析 -> 多通道采样）。
+ *
+ * @param seq 已发送的行序号，决定时间轴起点
+ */
+export function waveformTextChunk(seq: number): Uint8Array {
+  const t = seq / 20
+  const a = Math.round(Math.sin(2 * Math.PI * 2 * t) * 512 + 512 + (Math.random() - 0.5) * 40)
+  const b = Math.round(Math.cos(2 * Math.PI * 2 * t) * 512 + 512 + (Math.random() - 0.5) * 40)
+  return text(`${a},${b}\r\n`)
 }

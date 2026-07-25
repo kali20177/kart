@@ -11,6 +11,7 @@ import { useTheme } from '@/composables/useTheme'
 import { formatTimestamp } from '@/utils/message-format'
 import { exportWaveformAsCsv, type WaveformExportMeta } from '@/utils/export-waveform-csv'
 import { downloadTextFile } from '@/utils/download'
+import type { WaveformParseConfig } from '@/types'
 
 const waveform = useWaveformStore()
 const settings = useSettingsStore()
@@ -83,10 +84,13 @@ function themeColors() {
   }
 }
 
-/** 格式化单个采样值：整数直接显示，浮点保留适当精度 */
-function formatSampleValue(v: number, type: string): string {
+/** 格式化单个采样值：整数直接显示，浮点保留适当精度；NaN（文本模式短行缺口）显示 '-' */
+function formatSampleValue(v: number, cfg: WaveformParseConfig): string {
+  if (Number.isNaN(v)) return '-'
   if (Number.isInteger(v)) return String(v)
-  if (type === 'float32' || type === 'float64') {
+  // 文本模式数值为任意浮点（如 analogRead / 传感器读数），按浮点格式化
+  const isFloat = cfg.format === 'text' || cfg.type === 'float32' || cfg.type === 'float64'
+  if (isFloat) {
     if (Math.abs(v) < 0.001 && v !== 0) return v.toExponential(3)
     return v.toFixed(Math.abs(v) < 1000 ? 4 : 2)
   }
@@ -140,7 +144,7 @@ function onSetCursor(u: uPlot) {
     if (v != null) {
       vals.push({
         label: `CH${i + 1}`,
-        value: formatSampleValue(v as number, settings.settings.waveform.parse.type),
+        value: formatSampleValue(v as number, settings.settings.waveform.parse),
         color: channelColor(i, ch)
       })
     }

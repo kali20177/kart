@@ -3,6 +3,7 @@ import { ref, shallowRef, watch } from 'vue'
 import { useSettingsStore } from './settings'
 import { useSerialStore } from './serial'
 import { parseSamples } from '@/utils/byte-parser'
+import { parseTextSamples } from '@/utils/text-parser'
 import type { WaveformParseConfig } from '@/types'
 
 /**
@@ -56,6 +57,8 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   // 跨回调承接的半截采样零头（非响应式）
   let carryover: Uint8Array = new Uint8Array(0)
+  // 文本模式跨回调承接的半截行字符串（非响应式）
+  let textCarryover = ''
   // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
   const resumeBreakX = ref(-1)
   // 全局采样计数器（单调递增），决定 X 时间戳
@@ -64,6 +67,8 @@ export const useWaveformStore = defineStore('waveform', () => {
   let windowStartIndex = 0
   // 首个采样到达时刻；-1 表示尚未有数据
   let startTime = -1
+  // 文本模式最后一个采样的真实 X（毫秒）；用于跨回调保单调与暂停断点。-Infinity 表示无数据
+  let lastSampleX = -Infinity
 
   /** 可视窗口跨度下限（常量）：滚轮放大最深至此（约 2 个采样），maxPoints 设置下限 100 恒大于此。
    *  可按需调大（如 10）以避免极小窗口的退化视图。 */
@@ -84,19 +89,42 @@ export const useWaveformStore = defineStore('waveform', () => {
   /** 接收原始字节 → 解析 → 追加进 history → 重切可视窗口 */
   function ingest(bytes: Uint8Array) {
     if (paused.value) return
-    const { perChannel, remainder } = parseSamples(bytes, parseCfg(), carryover)
-    carryover = remainder
+    const cfg = parseCfg()
+    let perChannel: number[][]
+    if (cfg.format === 'text') {
+      const res = parseTextSamples(bytes, cfg, textCarryover)
+      textCarryover = res.remainder
+      perChannel = res.perChannel
+    } else {
+      const res = parseSamples(bytes, cfg, carryover)
+      carryover = res.remainder
+      perChannel = res.perChannel
+    }
     const n = perChannel[0]?.length ?? 0
     if (n === 0) return
 
     if (startTime < 0) startTime = Date.now()
-    const rate = Math.max(1, settingsStore.settings.waveform.sampleRate)
-    const dt = 1000 / rate
     const cur = history.value
 
+    // X 时间戳：
+    //  - 文本模式：真实到达时间（与消息时间戳对齐）。文本到达速率未知且可变，
+    //    用合成时间会随 sampleRate 不匹配而持续漂移，故必须用 Date.now()。
+    //    同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
+    //  - 二进制模式：startTime + sampleIndex × dt。已知固定采样率，均匀时间轴；
+    //    sampleRate 变更可整体重算 X（见下方 watch）。
+    const xs: number[] = []
+    if (cfg.format === 'text') {
+      let x = Math.max(Date.now(), lastSampleX + 1)
+      for (let s = 0; s < n; s++) { xs.push(x); x++ }
+      lastSampleX = xs[xs.length - 1]
+    } else {
+      const rate = Math.max(1, settingsStore.settings.waveform.sampleRate)
+      const dt = 1000 / rate
+      for (let s = 0; s < n; s++) xs.push(startTime + (sampleIndex + s) * dt)
+    }
+
     for (let s = 0; s < n; s++) {
-      const x = startTime + sampleIndex * dt
-      cur[0].push(x)
+      cur[0].push(xs[s])
       for (let c = 0; c < perChannel.length; c++) cur[c + 1].push(perChannel[c][s])
       sampleIndex++
     }
@@ -138,10 +166,12 @@ export const useWaveformStore = defineStore('waveform', () => {
   /** 清空缓冲（计数器一并重置，X 轴从下一批采样重新起算；缩放一并重置） */
   function clear() {
     carryover = new Uint8Array(0)
+    textCarryover = ''
     resumeBreakX.value = -1
     sampleIndex = 0
     windowStartIndex = 0
     startTime = -1
+    lastSampleX = -Infinity
     viewOffset.value = 0
     viewSize.value = settingsStore.settings.waveform.maxPoints
     zoomed.value = false
@@ -156,9 +186,14 @@ export const useWaveformStore = defineStore('waveform', () => {
     // 恢复时回到最新（避免停留在历史里错过新数据）
     if (!paused.value) {
       // 计算断点 X：下一个采样将被放置的位置
-      const rate = Math.max(1, settingsStore.settings.waveform.sampleRate)
-      const dt = 1000 / rate
-      resumeBreakX.value = startTime >= 0 ? startTime + sampleIndex * dt : -1
+      if (parseCfg().format === 'text') {
+        // 文本模式 X 为真实到达时间，断点 = 最后一个采样时间（暂停前的真实时刻）
+        resumeBreakX.value = lastSampleX > 0 ? lastSampleX : -1
+      } else {
+        const rate = Math.max(1, settingsStore.settings.waveform.sampleRate)
+        const dt = 1000 / rate
+        resumeBreakX.value = startTime >= 0 ? startTime + sampleIndex * dt : -1
+      }
       viewOffset.value = 0
       recomputeView()
     }
@@ -226,9 +261,11 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   // 采样率变更：重算所有 history 的 X 时间戳（保留波形连续性，不制造断点；
   // 重算全部而非仅可视窗口，否则回看历史时时间轴会错）
+  // 文本模式 X 为真实到达时间，与采样率无关 -> 跳过
   watch(
     () => settingsStore.settings.waveform.sampleRate,
     (rate) => {
+      if (parseCfg().format === 'text') return
       if (startTime < 0) return
       const dt = 1000 / Math.max(1, rate)
       const xs = history.value[0]

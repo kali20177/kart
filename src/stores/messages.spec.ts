@@ -74,3 +74,42 @@ describe('messages store · removeByIds', () => {
     expect(s.messages.length).toBe(0)
   })
 })
+
+describe('messages store · 帧时间戳', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function flush() {
+    vi.advanceTimersByTime(16)
+  }
+
+  it('gap-timeout 帧时间戳用字节到达时间，而非 gap 触发时刻（与波形 X 对齐）', () => {
+    // 默认策略 gap-timeout, gapMs=20
+    const s = useMessagesStore()
+    vi.setSystemTime(1000)
+    s.ingestRx(new Uint8Array([0x41, 0x0a])) // 字节在 t=1000 到达
+    // gap 定时器在 t=1020 才触发关闭帧
+    vi.advanceTimersByTime(20)
+    flush()
+    expect(s.messages.length).toBe(1)
+    // 时间戳应为到达时刻 1000，而非 gap 触发时刻 1020（否则与波形 X 差 ~20ms）
+    expect(s.messages[0].timestamp).toBe(1000)
+  })
+
+  it('delimiter 帧立即切出，时间戳为到达时间', () => {
+    const settings = useSettingsStore()
+    settings.settings.frame.strategy = 'delimiter'
+    settings.settings.frame.delimiterHex = '0A'
+    const s = useMessagesStore()
+    vi.setSystemTime(5000)
+    s.ingestRx(new Uint8Array([0x41, 0x0a]))
+    flush()
+    expect(s.messages[0].timestamp).toBe(5000)
+  })
+})

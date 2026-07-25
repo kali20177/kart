@@ -32,8 +32,8 @@ export const useMessagesStore = defineStore('messages', () => {
     { deep: true }
   )
 
-  function makeMessage(direction: Direction, bytes: Uint8Array, error?: string): Message {
-    return { id: nextId++, direction, bytes, timestamp: Date.now(), error }
+  function makeMessage(direction: Direction, bytes: Uint8Array, error?: string, timestamp: number = Date.now()): Message {
+    return { id: nextId++, direction, bytes, timestamp, error }
   }
 
   /** rAF 合并刷入：把 pending 一次性并入 messages，并执行环形缓冲裁剪 */
@@ -58,10 +58,14 @@ export const useMessagesStore = defineStore('messages', () => {
   /** 接收原始字节：经帧切分后入队 */
   function ingestRx(bytes: Uint8Array) {
     if (paused.value) return
-    const frames = splitter.push(bytes, Date.now())
+    // 字节到达时间：作为帧时间戳，使消息时间与波形 X 轴（同样取到达时间）对齐。
+    // 注意 gap-timeout 策略下帧在 gapMs 后才关闭，但不能用关闭时刻作时间戳--
+    // 否则消息时间会系统性偏晚一个 gapMs（与波形差 ~20ms）。
+    const arrived = Date.now()
+    const frames = splitter.push(bytes, arrived)
     const s = settingsStore.settings
     for (const f of frames) {
-      pending.push(makeRxMessage(s, f))
+      pending.push(makeRxMessage(s, f, arrived))
       rxFrames.value++
     }
     if (frames.length > 0) scheduleFlush()
@@ -75,7 +79,8 @@ export const useMessagesStore = defineStore('messages', () => {
         const cur = settingsStore.settings
         const tail = splitter.flush()
         for (const f of tail) {
-          pending.push(makeRxMessage(cur, f))
+          // 时间戳用本批字节到达时间（arrived），而非定时器触发时刻
+          pending.push(makeRxMessage(cur, f, arrived))
           rxFrames.value++
         }
         if (tail.length > 0) scheduleFlush()
@@ -89,8 +94,8 @@ export const useMessagesStore = defineStore('messages', () => {
    * 校验前剔除帧尾的分隔符字节（保留在 frame 校验后补回显示用 bytes 不变——
    * 即：校验只看「真正载荷 + 校验和」），避免 \\r\\n 被当作载荷导致必败。
    */
-  function makeRxMessage(s: typeof settingsStore.settings, f: Uint8Array): Message {
-    const msg = makeMessage('rx', f)
+  function makeRxMessage(s: typeof settingsStore.settings, f: Uint8Array, timestamp: number): Message {
+    const msg = makeMessage('rx', f, undefined, timestamp)
     if (s.rxChecksumAlgorithm === 'none') return msg
     const len = checksumByteLength(s.rxChecksumAlgorithm)
     // 剥离帧尾可能存在的分隔符（分隔符切分器会原样保留在帧里）
