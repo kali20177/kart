@@ -1,17 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import type { Direction, Message } from '@/types'
 import { FrameSplitter } from '@/composables/useFrameSplitter'
 import { useSettingsStore } from './settings'
+import { usePauseStore } from './pause'
 import { verifyChecksum, checksumByteLength } from '@/utils/checksum'
 
 export const useMessagesStore = defineStore('messages', () => {
   const settingsStore = useSettingsStore()
+  // 应用级全局暂停（与波形视图共享）——见 pause store 说明。
+  const pause = usePauseStore()
+  // storeToRefs 取得保持响应式的 ref（直接访问 pause.paused 会被 Pinia 解包为普通布尔）。
+  const { paused, pauseStartTime } = storeToRefs(pause)
 
   // 用 shallowRef + 手动 triggerRef，避免逐条 push 触发深度响应式开销
   const messages = shallowRef<Message[]>([])
-  const paused = ref(false)
-  const pauseStartTime = ref(0)
   const rxFrames = ref(0)
   const txFrames = ref(0)
   const rxErrorFrames = ref(0)
@@ -193,8 +197,7 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   function togglePause() {
-    paused.value = !paused.value
-    if (paused.value) pauseStartTime.value = Date.now()
+    pause.toggle()
   }
 
   return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }

@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useSettingsStore } from './settings'
 import { useSerialStore } from './serial'
+import { usePauseStore } from './pause'
 import { parseSamples } from '@/utils/byte-parser'
 import { parseTextSamples } from '@/utils/text-parser'
 import type { WaveformParseConfig } from '@/types'
@@ -36,6 +38,10 @@ import type { WaveformParseConfig } from '@/types'
 export const useWaveformStore = defineStore('waveform', () => {
   const settingsStore = useSettingsStore()
   const serial = useSerialStore()
+  // 应用级全局暂停（与消息视图共享）——见 pause store 说明。
+  const pause = usePauseStore()
+  // storeToRefs 取得保持响应式的 ref（直接访问 pause.paused 会被 Pinia 解包为普通布尔）。
+  const { paused, pauseStartTime } = storeToRefs(pause)
 
   // 文本模式通道标签名（响应式，供组件绑定图例/按钮/tooltip）。
   // 必须在 history/data 初始化之前声明 —— buildEmpty() 参考它。
@@ -45,8 +51,6 @@ export const useWaveformStore = defineStore('waveform', () => {
   const history = shallowRef<number[][]>(buildEmpty())
   // 可视切片（组件渲染这层）
   const data = shallowRef<number[][]>(buildEmpty())
-  const paused = ref(false)
-  const pauseStartTime = ref(0)
   // 从尾部向回偏移的采样数：0 = 跟随最新；暂停后拖拽增大以回看更早历史
   const viewOffset = ref(0)
   // 可视窗口跨度（采样数）：默认 = maxPoints；滚轮缩放时独立变化（zoomed=true）。
@@ -206,10 +210,10 @@ export const useWaveformStore = defineStore('waveform', () => {
   }
 
   function togglePause() {
-    paused.value = !paused.value
-    if (paused.value) pauseStartTime.value = Date.now()
-    // 恢复时回到最新（避免停留在历史里错过新数据）
-    if (!paused.value) {
+    const wasPaused = paused.value
+    pause.toggle()
+    if (wasPaused) {
+      // 从暂停 → 运行：回到最新（避免停留在历史里错过新数据），并记录恢复断点。
       // 计算断点 X：下一个采样将被放置的位置
       if (parseCfg().format === 'text') {
         // 文本模式 X 为真实到达时间，断点 = 最后一个采样时间（暂停前的真实时刻）

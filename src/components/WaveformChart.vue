@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
-import { NButton, NTag, NDropdown, NTooltip, useMessage } from 'naive-ui'
+import { NButton, NTag, NDropdown, NTooltip } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
@@ -19,7 +19,6 @@ const { isDark } = useTheme()
 const { t } = useI18n()
 
 const containerRef = ref<HTMLDivElement | null>(null)
-const toast = useMessage()
 
 // 通道配色：按通道数均分色相环，保证任意通道数下颜色不重复
 function channelColor(index: number, total: number): string {
@@ -387,22 +386,12 @@ watch(
 // 主题切换 → 销毁重建（应用新配色；低频，重建成本可忽略）
 watch(isDark, () => rebuild())
 
-// 暂停状态切换 → 更新覆盖层光标（grab / 默认）；拖拽中不打断
-watch(
-  () => waveform.paused,
-  (p, wasPaused) => {
-    if (chart && !panActive) chart.over.style.cursor = p ? 'grab' : ''
-    // 暂停恢复时提醒缺失数据时间范围
-    if (wasPaused && !p && settings.settings.showPauseNotification) {
-      const start = waveform.pauseStartTime
-      const dur = Math.max(1, Math.round((Date.now() - start) / 1000))
-      toast.warning(
-        t('waveform.pauseNotice', { start: formatTimestamp(start, 'short'), end: formatTimestamp(Date.now(), 'short'), dur }),
-        { duration: 5000 }
-      )
-    }
-  }
-)
+// 暂停状态切换 → 更新覆盖层光标（grab / 默认）；拖拽中不打断。
+// 暂停已统一为应用级（messages 与 waveform 共享），暂停/恢复的缺失数据提示由
+// MessageList 统一发出，这里只管本视图的光标，避免与消息侧重复弹 toast。
+watch(() => waveform.paused, (p) => {
+  if (chart && !panActive) chart.over.style.cursor = p ? 'grab' : ''
+})
 
 // 断点标记变化 → 重绘（新断点出现 or 清空擦除）
 watch(
