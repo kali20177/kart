@@ -10,7 +10,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { usePauseStore } from '@/stores/pause'
 import { useTheme } from '@/composables/useTheme'
 import { formatTimestamp } from '@/utils/message-format'
-import { exportWaveformAsCsv, type WaveformExportMeta } from '@/utils/export-waveform-csv'
+import { exportWaveformAsCsv } from '@/utils/export-waveform-csv'
 import { downloadTextFile } from '@/utils/download'
 import type { WaveformParseConfig } from '@/types'
 
@@ -452,15 +452,17 @@ const pointCount = computed(() => {
   return waveform.data[0]?.length ?? 0
 })
 
-// 回看偏移折算为秒（data 中采样点间的实测时间跨度），用于工具栏提示
+// 回看偏移折算为秒（可视窗口右边缘距最新采样的真实时间差），用于工具栏提示
 const backSeconds = computed(() => {
-  const xs = waveform.data[0]
-  if (!xs || xs.length < 2) return 0
-  // 可视窗口内首个与最后一个采样之间的时间跨度
-  const span = (xs[xs.length - 1] - xs[0]) / 1000
-  // viewOffset / viewSize 的比例折算总回看时长（近似）
-  const ratio = waveform.viewOffset / Math.max(1, xs.length)
-  return ratio * span
+  // history 是 shallowRef 且原地 push（不触发响应式），借 version 作更新信号（同 pointCount）
+  void waveform.version
+  const hist = waveform.history[0]
+  const histLen = hist?.length ?? 0
+  if (histLen === 0 || waveform.viewOffset === 0) return 0
+  // 可视窗口右边缘 = 末尾前移 viewOffset 个采样；与最新采样（末尾）的时间差即回看时长
+  const rightEdgeIdx = histLen - 1 - waveform.viewOffset
+  if (rightEdgeIdx < 0) return 0
+  return (hist[histLen - 1] - hist[rightEdgeIdx]) / 1000
 })
 
 // 缩放倍率 = maxPoints / viewSize（放大后 >1），用于工具栏提示
@@ -485,11 +487,7 @@ function generateExportFilename(ext: string): string {
 function handleExport(key: string) {
   const scope = key === 'csv-visible' ? 'visible' : 'full'
   const sourceData = scope === 'visible' ? waveform.data : waveform.history
-  const meta: WaveformExportMeta = {
-    scope,
-    exportedAt: Date.now(),
-  }
-  const content = exportWaveformAsCsv(sourceData, channelVisible.value, meta, waveform.textLabels)
+  const content = exportWaveformAsCsv(sourceData, channelVisible.value, waveform.textLabels)
   downloadTextFile(generateExportFilename('csv'), content)
 }
 </script>

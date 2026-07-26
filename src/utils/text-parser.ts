@@ -1,10 +1,12 @@
-import type { WaveformParseConfig } from '@/types'
+// 纯解析原语：把「字节流 → 每通道数值」做成无状态纯函数，可独立单测。
+// X 时间戳策略与 carryover/labelIndex 跨回调状态由上层解析器
+// （见 waveform-parser.ts 的 TextLineParser）持有，本函数不感知。
 
 /**
  * 文本行解析器（Arduino Serial.println 风格）。
  *
  * 把字节流解码为文本，按换行切行，每行解析为若干十进制数字 -> 多通道采样。
- * 返回 { perChannel, remainder } 格式，waveform store 下游 ingest / history / view / chart 无需改动。
+ * 返回 { perChannel, remainder }，上层解析器据此构造 X 时间戳并维护跨回调状态。
  *
  * 设计要点：
  *  - **一行 = 一个采样点**。
@@ -95,16 +97,14 @@ function parseToken(token: string): TokenValue {
  * 把字节流按行切，读出每通道数值。
  *
  * @param bytes      本批到达的字节
- * @param cfg        解析配置（当前为空占位，未来协议在此扩展）
  * @param carryover  上批遗留的半截行字符串（拼到本批文本前）
- * @param labelIndex 标签→通道索引映射（由 waveform store 持有，非响应式）。
+ * @param labelIndex 标签→通道索引映射（由上层解析器持有，非响应式）。
  *                   首次传 undefined 或不传 → 按位置匹配（兼容无标签数据）。
  *                   有值则该 Map 会原地更新（新标签分配新索引），调用方可通过
  *                   .size 感知新增通道数。
  */
 export function parseTextSamples(
   bytes: Uint8Array,
-  _cfg: WaveformParseConfig,
   carryover: string = '',
   labelIndex?: Map<string, number>
 ): ParseResult {

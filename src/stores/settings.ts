@@ -71,7 +71,7 @@ export const useSettingsStore = defineStore('settings', () => {
     persistedWf.maxHistoryPoints = DEFAULTS.waveform.maxHistoryPoints
     storage.set('settings', persisted)
   }
-  // 七次迁移：移除二进制解析模式。旧数据可能残留 format/type/littleEndian/
+  // 六次迁移：移除二进制解析模式。旧数据可能残留 format/type/littleEndian/
   // byteOffset/sampleRate/channels 字段，清理以保持整洁。
   if (persistedWf) {
     const parse = persistedWf.parse as Record<string, unknown> | undefined

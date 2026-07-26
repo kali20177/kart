@@ -109,8 +109,7 @@ export interface FrameConfig {
  * - 标签化行（如 `Sin:0.5,Cos:0.86\n`）：按标签名自动分配通道
  *
  * 未来扩展新协议时：在此新增协议标识及专属配置字段，
- * 并在 waveform store 中按协议分发到对应解析器。 */
-/** 保留接口占位，未来协议在此扩展 */
+ * 并在 waveform store 中按协议分发到对应 WaveformParser 实现类。 */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface WaveformParseConfig {
 

@@ -1,13 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exportWaveformAsCsv, type WaveformExportMeta } from './export-waveform-csv'
-
-function makeMeta(overrides?: Partial<WaveformExportMeta>): WaveformExportMeta {
-  return {
-    scope: 'visible',
-    exportedAt: 1700000000000,
-    ...overrides
-  }
-}
+import { exportWaveformAsCsv } from './export-waveform-csv'
 
 /** 构建测试数据：[X, ch1, ch2, ...] */
 function makeData(xs: number[], ...channels: number[][]): number[][] {
@@ -21,7 +13,7 @@ describe('exportWaveformAsCsv', () => {
       [10, 20, 30],
       [100, 200, 300]
     )
-    const csv = exportWaveformAsCsv(data, [true, true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true, true])
     expect(csv.startsWith('﻿')).toBe(true)
     // BOM + header + 3 data rows + trailing newline
     const lines = csv.split('\n')
@@ -40,7 +32,7 @@ describe('exportWaveformAsCsv', () => {
       [100, 200],
       [1000, 2000]
     )
-    const csv = exportWaveformAsCsv(data, [true, false, true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true, false, true])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,CH1,CH3')
     expect(lines[1]).toBe('0.000,10,1000')
@@ -49,7 +41,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('all channels hidden yields only time column', () => {
     const data = makeData([1000, 1001], [10, 20])
-    const csv = exportWaveformAsCsv(data, [false, false], makeMeta())
+    const csv = exportWaveformAsCsv(data, [false, false])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec')
     expect(lines[1]).toBe('0.000')
@@ -58,7 +50,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('empty data returns BOM + header only', () => {
     const data = makeData([], [])
-    const csv = exportWaveformAsCsv(data, [true, true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true, true])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines.length).toBe(1)
     expect(lines[0]).toBe('﻿time_sec,CH1,CH2')
@@ -66,7 +58,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('single channel export', () => {
     const data = makeData([1000, 1001], [42, 99])
-    const csv = exportWaveformAsCsv(data, [true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,CH1')
     expect(lines[1]).toBe('0.000,42')
@@ -75,7 +67,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('handles float values', () => {
     const data = makeData([1000.5, 1001.25], [3.14159, -0.00123])
-    const csv = exportWaveformAsCsv(data, [true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,CH1')
     expect(lines[1]).toBe('0.000,3.14159')
@@ -85,7 +77,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('handles integer values without decimal point', () => {
     const data = makeData([0, 1000], [32767, -32768])
-    const csv = exportWaveformAsCsv(data, [true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[1]).toBe('0.000,32767')
     expect(lines[2]).toBe('1.000,-32768')
@@ -96,7 +88,7 @@ describe('exportWaveformAsCsv', () => {
     const xs = Array.from({ length: n }, (_, i) => i)
     const ch1 = Array.from({ length: n }, (_, i) => i * 2)
     const data = makeData(xs, ch1)
-    const csv = exportWaveformAsCsv(data, [true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines.length).toBe(n + 1) // header + 1000 data rows
     expect(lines[0]).toBe('﻿time_sec,CH1')
@@ -106,14 +98,14 @@ describe('exportWaveformAsCsv', () => {
 
   it('uses textLabels for CSV header when provided', () => {
     const data = makeData([1000, 1001], [0.5, 0.7], [0.86, 0.9])
-    const csv = exportWaveformAsCsv(data, [true, true], makeMeta(), ['Sin', 'Cos'])
+    const csv = exportWaveformAsCsv(data, [true, true], ['Sin', 'Cos'])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,Sin,Cos')
   })
 
   it('falls back to CH when textLabels is undefined', () => {
     const data = makeData([1000], [42], [99])
-    const csv = exportWaveformAsCsv(data, [true, true], makeMeta())
+    const csv = exportWaveformAsCsv(data, [true, true])
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,CH1,CH2')
   })

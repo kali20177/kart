@@ -48,15 +48,36 @@ describe('waveform store ingest（文本行解析）', () => {
     expect(wf.data[0].length).toBe(1)
   })
 
-  it('清空重置缓冲与计数器', () => {
+  it('清空重置缓冲、计数器与通道数', async () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 5
+    await nextTick()
     const wf = useWaveformStore()
-    wf.ingest(enc('1,2\n'))
+    wf.ingest(enc('1,2,3\n')) // 3 通道
     expect(wf.data[0].length).toBe(1)
+    expect(wf.channelCount).toBe(3)
     wf.clear()
     expect(wf.data[0].length).toBe(0)
+    expect(wf.channelCount).toBe(1) // 通道数一并归 1，不残留旧通道
     // 清空后重新开始
     wf.ingest(enc('1,2\n'))
     expect(wf.data[0].length).toBe(1)
+  })
+
+  it('回归：窗口滚满后 version 仍持续递增（图表刷新信号不能依赖长度）', async () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 5
+    await nextTick()
+    const wf = useWaveformStore()
+    for (let i = 0; i < 5; i++) wf.ingest(enc(`${i}\n`))
+    expect(wf.data[0].length).toBe(5) // 滚满 → 长度恒定
+    const v0 = wf.version
+    wf.ingest(enc('99\n'))
+    expect(wf.data[0].length).toBe(5) // 长度不变
+    expect(wf.version).toBeGreaterThan(v0) // 但版本号仍递增 → 图表仍会刷新
+    const v1 = wf.version
+    wf.ingest(enc('100\n'))
+    expect(wf.version).toBeGreaterThan(v1)
   })
 
   it('mock 场景 waveformTextChunk 可解析', () => {
@@ -238,6 +259,30 @@ describe('waveform store 滚轮缩放', () => {
     wf.resetZoom()
     expect(wf.viewSize).toBe(10)
     expect(wf.zoomed).toBe(false)
+  })
+
+  it('未缩放时改 maxPoints → viewSize 跟随', async () => {
+    const wf = await seedHistory(64) // maxPoints=10, viewSize=10, !zoomed
+    expect(wf.viewSize).toBe(10)
+    expect(wf.zoomed).toBe(false)
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 20
+    await nextTick()
+    expect(wf.viewSize).toBe(20)
+    expect(wf.zoomed).toBe(false)
+  })
+
+  it('缩放中改 maxPoints → 保持 viewSize 仅 clamp', async () => {
+    const wf = await seedHistory(64) // maxPoints=10
+    wf.zoom(0.5, null) // viewSize=5, zoomed
+    expect(wf.viewSize).toBe(5)
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 8 // 5 仍在 [2,8] → 保持
+    await nextTick()
+    expect(wf.viewSize).toBe(5)
+    settings.settings.waveform.maxPoints = 3 // 5 > 3 → clamp 至 3
+    await nextTick()
+    expect(wf.viewSize).toBe(3)
   })
 
   it('clear 重置缩放', async () => {

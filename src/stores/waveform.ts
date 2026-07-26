@@ -4,11 +4,16 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from './settings'
 import { useSerialStore } from './serial'
 import { usePauseStore } from './pause'
-import { parseTextSamples } from '@/utils/text-parser'
-import type { WaveformParseConfig } from '@/types'
+import { TextLineParser, type WaveformParser } from '@/utils/waveform-parser'
 
 /**
- * 波形 store：订阅串口原始字节流 → 文本行解析为多通道采样 → 历史/可视两层缓冲。
+ * 波形 store：订阅串口原始字节流 → 经 WaveformParser 解析为多通道采样 → 历史/可视两层缓冲。
+ *
+ * 解析器抽象：store 只持有单个 `parser: WaveformParser` 实例并通过接口委托，
+ * 不感知协议细节（carryover 类型、标签索引、X 时间戳策略均封装在解析器内）。
+ * 当前使用 TextLineParser（Arduino Serial.println 风格文本行）。
+ * 未来新增协议（如二进制结构化字节流）：新增一个实现 WaveformParser 的解析器类，
+ * 自带其 carryover 与 X 策略，store 的 ingest() 函数体无需改动——只换 parser 实例。
  *
  * 两层模型（区别于早期单一滑动窗口）：
  *  - history：完整保留的采样缓冲（[X, ch1, ch2, …]），上限为用户配置的 maxHistoryPoints，从头裁剪。
@@ -27,15 +32,10 @@ import type { WaveformParseConfig } from '@/types'
  * 订阅在 store 初始化时建立（早于 connect 也安全：listener 静等，连接后即有数据流入）。
  * 单例 store 生命周期 = 应用生命周期，缓冲受 maxHistoryPoints 约束，无需反订阅。
  *
- * X 时间戳：始终使用真实到达时间 Date.now()，与消息时间戳对齐。
+ * X 时间戳：由解析器用真实到达时间 Date.now() 构造（与消息时间戳对齐）。
  * 文本行到达速率未知且可变——Arduino Serial.println 间隔取决于 loop() 周期与
  * `delay()`，无法假设固定频率——故不用合成时间。
  * 同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
- *
- * 扩展点：
- *  - 未来新增协议时：在 WaveformParseConfig 增加协议标识字段（如 protocol: 'line' | 'json' | …）
- *    及协议专属配置；在 ingest() 中按协议接口分发到对应解析器，所有解析器返回 { perChannel, remainder }
- *    统一形状即可无缝接入两层缓冲模型。
  */
 export const useWaveformStore = defineStore('waveform', () => {
   const settingsStore = useSettingsStore()
@@ -70,22 +70,15 @@ export const useWaveformStore = defineStore('waveform', () => {
   // watch(length) 会停止触发，导致图表不再刷新（数据其实在变）。
   const version = ref(0)
 
-  // 跨回调承接的半截行字符串（非响应式）
-  let textCarryover = ''
-  // 标签→通道索引（非响应式，由解析器原地更新；clear() 时清空）
-  let labelIndex: Map<string, number> = new Map()
+  // 解析器实例（自持 carryover / labelIndex / lastSampleX 等协议状态）。
+  // 切换协议 = 换实例 + clear()；当前固定为文本行解析器。
+  const parser: WaveformParser = new TextLineParser()
   // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
   const resumeBreakX = ref(-1)
-  // 最后一个采样的真实 X（毫秒）；用于跨回调保单调与暂停断点。-Infinity 表示无数据
-  let lastSampleX = -Infinity
 
   /** 可视窗口跨度下限（常量）：滚轮放大最深至此（约 2 个采样），maxPoints 设置下限 100 恒大于此。
    *  可按需调大（如 10）以避免极小窗口的退化视图。 */
   const MIN_VIEW = 2
-
-  function parseCfg(): WaveformParseConfig {
-    return settingsStore.settings.waveform.parse
-  }
 
   /** 按当前有效通道数构造空数据：[X, ch1, ch2, …]
    *  通道数 = max(1, channelCount)，初始为 [X, CH1]，随数据到达动态增长。 */
@@ -97,28 +90,22 @@ export const useWaveformStore = defineStore('waveform', () => {
   }
 
   /**
-   * 接收原始字节 → 文本行解析 → 追加进 history → 重切可视窗口
+   * 接收原始字节 → 解析器解析 → 追加进 history → 重切可视窗口
    *
    * 通道数检测：解析结果 perChannel.length 即为实际通道数；
    * channelCount 在数据到达时自动更新，覆盖无标签（如 `214,920`）
    * 和有标签（Sin:0.5,Cos:0.86）两种场景。 */
   function ingest(bytes: Uint8Array) {
     if (paused.value) return
-    const cfg = parseCfg()
-    const res = parseTextSamples(bytes, cfg, textCarryover, labelIndex)
-    textCarryover = res.remainder
-    const perChannel = res.perChannel
+    const { xs, perChannel } = parser.ingest(bytes, Date.now())
 
-    // 同步 labelIndex → textLabels：新标签出现时自动追加
-    if (labelIndex.size !== textLabels.value.length) {
-      const arr = textLabels.value.slice()
-      for (const [label, idx] of labelIndex) {
-        arr[idx] = label
-      }
-      textLabels.value = arr
+    // 同步 parser.labels → textLabels：新标签出现时自动追加
+    const labels = parser.labels
+    if (labels.length !== textLabels.value.length) {
+      textLabels.value = labels.slice()
     }
 
-    const n = perChannel[0]?.length ?? 0
+    const n = xs.length
     if (n === 0) return
 
     const cur = history.value
@@ -133,16 +120,6 @@ export const useWaveformStore = defineStore('waveform', () => {
     // 让组件在无标签数据（如 `214,920`）到达时也能检测到通道数变化。
     const chNow = Math.max(textLabels.value.length, perChannel.length)
     if (chNow !== channelCount.value) channelCount.value = chNow
-
-    // X 时间戳：真实到达时间（与消息时间戳对齐）。
-    // 同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
-    let x = Math.max(Date.now(), lastSampleX + 1)
-    const xs: number[] = []
-    for (let s = 0; s < n; s++) {
-      xs.push(x)
-      x++
-    }
-    lastSampleX = xs[xs.length - 1]
 
     for (let s = 0; s < n; s++) {
       cur[0].push(xs[s])
@@ -182,13 +159,12 @@ export const useWaveformStore = defineStore('waveform', () => {
     version.value++
   }
 
-  /** 清空缓冲（计数器一并重置，X 轴从下一批采样重新起算；缩放一并重置） */
+  /** 清空缓冲（解析器状态、通道数、计数器一并重置；X 轴从下一批采样重新起算；缩放一并重置） */
   function clear() {
-    textCarryover = ''
-    labelIndex = new Map()
+    parser.reset()
     textLabels.value = []
+    channelCount.value = 1
     resumeBreakX.value = -1
-    lastSampleX = -Infinity
     viewOffset.value = 0
     viewSize.value = settingsStore.settings.waveform.maxPoints
     zoomed.value = false
@@ -201,8 +177,10 @@ export const useWaveformStore = defineStore('waveform', () => {
     const wasPaused = paused.value
     pause.toggle()
     if (wasPaused) {
-      // 从暂停 → 运行：回到最新（避免停留在历史里错过新数据），并记录恢复断点
-      resumeBreakX.value = lastSampleX > 0 ? lastSampleX : -1
+      // 从暂停 → 运行：回到最新（避免停留在历史里错过新数据），并记录恢复断点。
+      // 断点 = history 末尾采样 X（暂停前最后一个真实时刻），从 history 读取而非解析器内部状态。
+      const xs = history.value[0]
+      resumeBreakX.value = xs.length > 0 ? xs[xs.length - 1] : -1
       viewOffset.value = 0
       recomputeView()
     }
@@ -265,7 +243,9 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   // —— 配置变更响应 ——
 
-  // 解析配置变更：旧数据按旧配置解析，无法沿用 → 清空重建
+  // 解析配置变更：旧数据按旧配置解析，无法沿用 → 清空重建（parser.reset()）。
+  // 未来新增协议字段时，在此 watch 内按新协议重建 parser 实例（如 parser = createParser(cfg)），
+  // 再 clear()；ingest() 函数体无需改动。
   watch(() => settingsStore.settings.waveform.parse, clear, { deep: true })
 
   // 最大点数变更：现为「可视点数」→ 未缩放时 viewSize 跟随新 maxPoints；

@@ -1,19 +1,13 @@
-export interface WaveformExportMeta {
-  scope: 'visible' | 'full'
-  exportedAt: number
-}
-
 /**
  * 将波形数据导出为 CSV 字符串（含 BOM，Excel 可直接打开）。
  * data 格式为 [X, ch1, ch2, ...]（与 waveform.data / waveform.history 一致）。
  * X 为绝对时间戳（毫秒），导出时转为相对秒数（从首个采样点开始）。
  * 仅输出 visibleChannels 中为 true 的通道列。
- * 越过元数据，保持 CSV 为干净矩形表格，可直接导入 pandas / MATLAB。
+ * 保持 CSV 为干净矩形表格，可直接导入 pandas / MATLAB。
  */
 export function exportWaveformAsCsv(
   data: number[][],
   visibleChannels: boolean[],
-  _meta: WaveformExportMeta,
   textLabels?: string[]
 ): string {
   const header = buildHeader(visibleChannels, textLabels)
