@@ -85,17 +85,13 @@ function themeColors() {
   }
 }
 
-/** 格式化单个采样值：整数直接显示，浮点保留适当精度；NaN（文本模式短行缺口）显示 '-' */
-function formatSampleValue(v: number, cfg: WaveformParseConfig): string {
+/** 格式化单个采样值：整数直接显示，浮点保留适当精度；NaN（短行缺口）显示 '-' */
+function formatSampleValue(v: number, _cfg: WaveformParseConfig): string {
   if (Number.isNaN(v)) return '-'
   if (Number.isInteger(v)) return String(v)
   // 文本模式数值为任意浮点（如 analogRead / 传感器读数），按浮点格式化
-  const isFloat = cfg.format === 'text' || cfg.type === 'float32' || cfg.type === 'float64'
-  if (isFloat) {
-    if (Math.abs(v) < 0.001 && v !== 0) return v.toExponential(3)
-    return v.toFixed(Math.abs(v) < 1000 ? 4 : 2)
-  }
-  return String(Math.round(v))
+  if (Math.abs(v) < 0.001 && v !== 0) return v.toExponential(3)
+  return v.toFixed(Math.abs(v) < 1000 ? 4 : 2)
 }
 
 /** 通道标签名：优先取 textLabels[i]，回退到 CH1/CH2 */
@@ -104,11 +100,10 @@ function channelLabel(i: number): string {
 }
 
 function channels(): number {
-  // 文本模式通道数按标签动态增长；二进制模式按设置
-  return Math.max(
-    Math.max(1, settings.settings.waveform.parse.channels),
-    waveform.textLabels.length
-  )
+  // 通道数 = max(标签数, 解析器实际检测到的通道数)；
+  // channelCount 随数据到达按 perChannel.length 动态增长，
+  // 覆盖无标签多 token 场景（如 `214,920`）和标签化场景。
+  return Math.max(1, waveform.channelCount)
 }
 function drawResumeBreak(u: uPlot) {
   const x = waveform.resumeBreakX
@@ -401,13 +396,15 @@ watch(
   () => { if (chart) chart.redraw() }
 )
 
-// 通道数变更 → 仅同步可见性数组长度（新增默认可见）。不在此 applyChannelVisible()：
-// 旧 chart.series 还是旧长度，setSeries 越界是空操作；真正重应用由 syncData() 检测
-// series 数不匹配 → rebuild() → applyChannelVisible() 完成。
+// 通道数变更 → 同步可见性数组长度；若 chart.series 数量不匹配则重建
 watch(
-  () => settings.settings.waveform.parse.channels,
+  () => waveform.channelCount,
   () => {
     syncChannelVisibility()
+    if (chart) {
+      const expectedSeries = channels() + 1 // X + N channels
+      if (chart.series.length !== expectedSeries) rebuild()
+    }
   }
 )
 
@@ -455,10 +452,15 @@ const pointCount = computed(() => {
   return waveform.data[0]?.length ?? 0
 })
 
-// 回看偏移折算为秒（viewOffset 采样 / 采样率），用于工具栏提示
+// 回看偏移折算为秒（data 中采样点间的实测时间跨度），用于工具栏提示
 const backSeconds = computed(() => {
-  const rate = Math.max(1, settings.settings.waveform.sampleRate)
-  return waveform.viewOffset / rate
+  const xs = waveform.data[0]
+  if (!xs || xs.length < 2) return 0
+  // 可视窗口内首个与最后一个采样之间的时间跨度
+  const span = (xs[xs.length - 1] - xs[0]) / 1000
+  // viewOffset / viewSize 的比例折算总回看时长（近似）
+  const ratio = waveform.viewOffset / Math.max(1, xs.length)
+  return ratio * span
 })
 
 // 缩放倍率 = maxPoints / viewSize（放大后 >1），用于工具栏提示
@@ -484,10 +486,6 @@ function handleExport(key: string) {
   const scope = key === 'csv-visible' ? 'visible' : 'full'
   const sourceData = scope === 'visible' ? waveform.data : waveform.history
   const meta: WaveformExportMeta = {
-    sampleRate: settings.settings.waveform.sampleRate,
-    numericType: settings.settings.waveform.parse.type,
-    channels: settings.settings.waveform.parse.channels,
-    littleEndian: settings.settings.waveform.parse.littleEndian,
     scope,
     exportedAt: Date.now(),
   }

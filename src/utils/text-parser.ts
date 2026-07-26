@@ -4,19 +4,20 @@ import type { WaveformParseConfig } from '@/types'
  * 文本行解析器（Arduino Serial.println 风格）。
  *
  * 把字节流解码为文本，按换行切行，每行解析为若干十进制数字 -> 多通道采样。
- * 与 byte-parser.parseSamples 返回形状一致（{ perChannel, remainder }），
- * 故 waveform store 下游 ingest / history / view / chart 无需改动。
+ * 返回 { perChannel, remainder } 格式，waveform store 下游 ingest / history / view / chart 无需改动。
  *
  * 设计要点：
- *  - **一行 = 一个采样点**（与二进制模式一个 record = 一个采样点对齐）。
+ *  - **一行 = 一个采样点**。
  *  - 数字按 `[,\s;]+` 分割（逗号 / 空白 / 分号均可），覆盖 Arduino 常见写法：
  *      Serial.println(analogRead(A0))            -> 单值/行 -> 1 通道
  *      Serial.print(a); Serial.print(','); ...   -> a,b/行  -> 2 通道
  *  - 支持 label:value 格式，按标签名匹配通道：
  *      Serial.print("Sin:"); Serial.print(x); Serial.print(",Cos:"); Serial.println(y);
  *      -> "Sin:0.5,Cos:0.86" -> 标签 "Sin"→通道0、"Cos"→通道1
- *  - 取每行前 `channels` 个有效数值；不足补 NaN（uPlot spanGaps 跨连，渲染为缺口）；
- *    多余忽略；整行无有效数值则跳过（不产生采样点）。
+ *  - 通道数由数据内容自动检测——无标签 token 按递增位置、有标签 token 按 labelIndex 分配；
+ *    不依赖外部配置。
+ *  - 数值不足的通道补 NaN（uPlot spanGaps 跨连，渲染为缺口）；
+ *    整行无有效数值则跳过（不产生采样点）。
  *  - carryover 为上批未结束的半截行**字符串**，跨回调拼到下批开头（半截行不立即成点，
  *    等下批补全换行后再切，避免把 `12.` + `5` 误判成两个点）。
  *
@@ -94,7 +95,7 @@ function parseToken(token: string): TokenValue {
  * 把字节流按行切，读出每通道数值。
  *
  * @param bytes      本批到达的字节
- * @param cfg        解析配置（用 channels 决定每行最少取几个值）
+ * @param cfg        解析配置（当前为空占位，未来协议在此扩展）
  * @param carryover  上批遗留的半截行字符串（拼到本批文本前）
  * @param labelIndex 标签→通道索引映射（由 waveform store 持有，非响应式）。
  *                   首次传 undefined 或不传 → 按位置匹配（兼容无标签数据）。
@@ -103,19 +104,19 @@ function parseToken(token: string): TokenValue {
  */
 export function parseTextSamples(
   bytes: Uint8Array,
-  cfg: WaveformParseConfig,
+  _cfg: WaveformParseConfig,
   carryover: string = '',
   labelIndex?: Map<string, number>
 ): ParseResult {
-  const minChannels = Math.max(1, cfg.channels)
+  const minChannels = 1
   const decoded = carryover + new TextDecoder().decode(bytes)
 
   // 按 \r\n / \n / \r 切行；末尾未结束的半截行作为 remainder 留给下批
   const parts = decoded.split(/\r\n|\n|\r/)
   const remainder = parts.pop() ?? ''
 
-  // 初始通道数 = minChannels；解析过程中如 labelIndex 增长则动态扩容
-  const perChannel: number[][] = Array.from({ length: minChannels }, () => [])
+  // 初始通道数 = 1；解析过程中按 token 位置 / 标签自动扩容
+  const perChannel: number[][] = [[]]
 
   for (const line of parts) {
     const trimmed = line.trim()
@@ -145,20 +146,16 @@ export function parseTextSamples(
         posCounter++
       }
 
-      // 动态扩容 perChannel。仅当 labelIndex 传入（有标签模式）或 pos-based 超出
-      // minChannels 时才扩容；无 labelIndex 时 minChannels 即为上限（兼容现有行为）。
-      if (ch >= perChannel.length) {
-        if (!labelIndex) continue // 无标签模式：位置超出 channels → 忽略（兼容）
-        while (perChannel.length <= ch) {
-          perChannel.push([])
-        }
+      // 动态扩容 perChannel（标签模式或 pos 增长均可触发）
+      while (perChannel.length <= ch) {
+        perChannel.push([])
       }
       values.set(ch, tv.value)
     }
 
     if (values.size === 0) continue // 整行无有效数值 → 跳过，不产生采样点
 
-    // 有效通道数 ≥ 标签映射数或 minChannels；不足补 NaN
+    // 有效通道数 ≥ minChannels；不足补 NaN
     const chCount = Math.max(minChannels, perChannel.length)
     for (let c = 0; c < chCount; c++) {
       perChannel[c].push(values.has(c) ? values.get(c)! : NaN)

@@ -13,11 +13,6 @@ export const SCENARIOS: ScenarioDef[] = [
   { id: 'high-throughput', label: '高吞吐压测', description: '高频灌数据，验证虚拟滚动与节流' },
   { id: 'mixed-ascii', label: '混合 ASCII', description: '周期日志 + 偶发中文（GBK）' },
   {
-    id: 'waveform',
-    label: '波形采样',
-    description: '结构化二进制多通道采样，配合波形视图'
-  },
-  {
     id: 'waveform-text',
     label: 'Arduino 文本绘图',
     description: 'Serial.println 风格 ASCII 数字行，配合文本行解析 + 2 通道'
@@ -76,43 +71,6 @@ export function logLine(seq: number): Uint8Array {
 }
 
 /**
- * 波形采样帧：32 采样 × 2 通道 × int16 LE = 128 字节。
- * 通道交错排列（与解析器 record 模型一致）：[s0ch0, s0ch1, s1ch0, s1ch1, …]。
- *
- * 故意加入慢变调制 + 噪声，使信号非纯周期：滑动窗口滚满后，新进数据与滚出数据
- * 不再逐周期重复，波形持续可见变化（更像真实传感器：慢漂移 + 周期信号 + 白噪声）。
- *
- * - ch0 = round(sin(2π·2·t) · env + 噪声)
- *        env = 16000 + 6000·sin(2π·0.1·t)   2 Hz 正弦，幅度被 0.1Hz 包络调制（10000–22000）+ ±400 噪声
- * - ch1 = round(sin(2π·5·t) · 12000 + drift + 噪声)
- *        drift = 4000·sin(2π·0.07·t)        5 Hz 正弦 + 0.07Hz 慢变直流偏置（±4000）+ ±800 噪声
- * - t = (seq*32 + i) / 640（每 50ms 一帧 → 640 采样/秒）
- * - 所有幅度 ≤ ±22000，int16 安全（±32767）
- *
- * @param seq 已发送的帧序号，决定时间轴起点
- */
-export function waveformChunk(seq: number): Uint8Array {
-  const samples = 32
-  const buf = new Uint8Array(samples * 2 * 2) // 32 采样 × 2 通道 × 2 字节
-  const dv = new DataView(buf.buffer)
-  let w = 0
-  for (let i = 0; i < samples; i++) {
-    const t = (seq * samples + i) / 640
-    // ch0：2Hz 正弦 × 0.1Hz 慢变包络 + 小噪声
-    const env = 16000 + 6000 * Math.sin(2 * Math.PI * 0.1 * t)
-    const ch0 = Math.round(Math.sin(2 * Math.PI * 2 * t) * env + (Math.random() - 0.5) * 800)
-    // ch1：5Hz 正弦 + 0.07Hz 慢变直流偏置 + 噪声
-    const drift = 4000 * Math.sin(2 * Math.PI * 0.07 * t)
-    const ch1 = Math.round(Math.sin(2 * Math.PI * 5 * t) * 12000 + drift + (Math.random() - 0.5) * 1600)
-    dv.setInt16(w, ch0, true)
-    w += 2
-    dv.setInt16(w, ch1, true)
-    w += 2
-  }
-  return buf
-}
-
-/**
  * Arduino 文本绘图风格帧：Serial.println 风格的 ASCII 数字行。
  * 每行两个逗号分隔的整数，模拟：
  *   Serial.print(a); Serial.print(','); Serial.println(b);
@@ -121,7 +79,7 @@ export function waveformChunk(seq: number): Uint8Array {
  * - ch1 = round(cos(2π·2·t) · 512 + 512 + 噪声)  余弦正交相位 + ±20 噪声
  * - t = seq / 20（每 50ms 一行 -> 20 行/秒）
  *
- * 配合波形「文本行」解析模式 + 2 通道、采样率 20。整行为 ASCII 数字 + 逗号 + \r\n，
+ * 配合波形「文本行」解析模式 + 2 通道。整行为 ASCII 数字 + 逗号 + \r\n，
  * 直接验证文本解析路径（TextDecoder 解码 -> 按行切 -> 数字解析 -> 多通道采样）。
  *
  * @param seq 已发送的行序号，决定时间轴起点

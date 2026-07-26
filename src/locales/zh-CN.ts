@@ -232,17 +232,7 @@ export default {
     pauseNotifyHint: '恢复时提示缺失数据时间段',
     lang: '语言',
     // 波形
-    parseFormat: '解析格式',
-    formatBinary: '二进制（结构化字节流）',
-    formatText: '文本行（Arduino Serial.println）',
     formatTextHint: '每行解析为数值（逗号/空格/分号分隔）',
-    numericType: '数值类型',
-    byteOrder: '字节序',
-    littleEndian: '小端 LE',
-    bigEndian: '大端 BE',
-    channels: '通道数',
-    byteOffset: '字节偏移（帧头）',
-    sampleRate: '采样率 (Hz)',
     maxPoints: '可视窗口点数',
     maxHistoryPoints: '历史缓冲上限',
     // 连接

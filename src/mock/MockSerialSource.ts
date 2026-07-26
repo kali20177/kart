@@ -5,7 +5,6 @@ import {
   gbkSample,
   logLine,
   throughputChunk,
-  waveformChunk,
   waveformTextChunk,
   waveformTextLabeledChunk
 } from './scenarios'
@@ -90,10 +89,6 @@ export class MockSerialSource implements SerialDriver {
           else this.emit(logLine(this.seq))
           this.seq++
         }, 600)
-        break
-      case 'waveform':
-        // 每 50ms 一帧 128 字节 = 32 采样 → 640 采样/秒，匹配默认 sampleRate:640
-        this.timer = setInterval(() => this.emit(waveformChunk(this.seq++)), 50)
         break
       case 'waveform-text':
         // 每 50ms 一行 ASCII 数字 -> 20 行/秒，配合文本行解析 + 采样率 20

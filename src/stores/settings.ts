@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
-import type { AppSettings, WaveformParseConfig, WaveformSettings } from '@/types'
+import type { AppSettings, WaveformSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
 import { getTheme } from '@/themes'
 
@@ -18,14 +18,7 @@ const DEFAULTS: AppSettings = {
   fontSize: 13,
   locale: 'zh-CN',
   waveform: {
-    parse: {
-      format: 'binary',
-      type: 'int16',
-      littleEndian: true,
-      channels: 2,
-      byteOffset: 0
-    },
-    sampleRate: 640,
+    parse: {},
     maxPoints: 5000,
     maxHistoryPoints: 200_000
   },
@@ -78,12 +71,21 @@ export const useSettingsStore = defineStore('settings', () => {
     persistedWf.maxHistoryPoints = DEFAULTS.waveform.maxHistoryPoints
     storage.set('settings', persisted)
   }
-  // 六次迁移：waveform.parse 新增 format 字段（'binary' | 'text'）。浅合并下 persisted.parse
-  // 整体覆盖 DEFAULTS.parse，旧数据缺该字段需显式补 'binary'，否则 format 为 undefined。
-  const persistedParse = persistedWf?.parse as Partial<WaveformParseConfig> | undefined
-  if (persistedParse && persistedParse.format == null) {
-    persistedParse.format = 'binary'
-    storage.set('settings', persisted)
+  // 七次迁移：移除二进制解析模式。旧数据可能残留 format/type/littleEndian/
+  // byteOffset/sampleRate/channels 字段，清理以保持整洁。
+  if (persistedWf) {
+    const parse = persistedWf.parse as Record<string, unknown> | undefined
+    let dirty = false
+    if (parse) {
+      for (const k of ['format', 'type', 'littleEndian', 'byteOffset', 'channels']) {
+        if (k in parse) { delete parse[k]; dirty = true }
+      }
+    }
+    if ('sampleRate' in (persistedWf as Record<string, unknown>)) {
+      delete (persistedWf as Record<string, unknown>).sampleRate
+      dirty = true
+    }
+    if (dirty) storage.set('settings', persisted)
   }
 
   const settings = reactive<AppSettings>(

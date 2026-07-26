@@ -102,39 +102,23 @@ export interface FrameConfig {
   fixedLength: number
 }
 
-/** 波形数值类型 —— 决定每采样字节数与 DataView 读取方法 */
-export type NumericType =
-  | 'uint8'
-  | 'int8'
-  | 'uint16'
-  | 'int16'
-  | 'uint32'
-  | 'int32'
-  | 'float32'
-  | 'float64'
-
-/** 波形解析格式：二进制结构化字节流 / 文本行（Arduino Serial.println 风格 ASCII 数字） */
-export type WaveformParseFormat = 'binary' | 'text'
-
-/** 波形解析配置：把连续字节流解析为多通道采样 */
+/** 波形解析配置：把连续字节流解析为多通道采样。
+ *
+ * 当前仅实现文本行解析（Arduino Serial.println 风格），通道数由数据内容自动检测：
+ * - 无标签数值行（如 `1,2\n`）：按 token 数量自动扩容
+ * - 标签化行（如 `Sin:0.5,Cos:0.86\n`）：按标签名自动分配通道
+ *
+ * 未来扩展新协议时：在此新增协议标识及专属配置字段，
+ * 并在 waveform store 中按协议分发到对应解析器。 */
+/** 保留接口占位，未来协议在此扩展 */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface WaveformParseConfig {
-  /** 解析格式：'binary' 按结构化字节读，'text' 按 ASCII 文本行读数值 */
-  format: WaveformParseFormat
-  /** 数值类型（决定每采样字节数；仅 binary 生效，text 模式忽略） */
-  type: NumericType
-  /** 大小端（uint8/int8 无效，仍保留以统一处理；仅 binary 生效） */
-  littleEndian: boolean
-  /** 交错通道数（binary = 每 record 通道数；text = 每行取前 N 个数值） */
-  channels: number
-  /** 每 record 起始跳过的字节数（如帧头），连续流通常为 0；仅 binary 生效 */
-  byteOffset: number
+
 }
 
 /** 波形视图设置 */
 export interface WaveformSettings {
   parse: WaveformParseConfig
-  /** 采样率（Hz）—— 仅决定 X 轴时间刻度，不参与解析 */
-  sampleRate: number
   /** 可视窗口点数（运行中显示的最新采样数，满后转滑动窗口） */
   maxPoints: number
   /** 历史缓冲上限（采样数）；≥ maxPoints，暂停后可拖拽回看的总量 */
@@ -191,7 +175,6 @@ export type MockScenarioId =
   | 'binary-frames'
   | 'high-throughput'
   | 'mixed-ascii'
-  | 'waveform'
   | 'waveform-text'
   | 'waveform-text-labeled'
 

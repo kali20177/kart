@@ -1,8 +1,4 @@
 export interface WaveformExportMeta {
-  sampleRate: number
-  numericType: string
-  channels: number
-  littleEndian: boolean
   scope: 'visible' | 'full'
   exportedAt: number
 }

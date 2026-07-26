@@ -52,20 +52,8 @@ const checksumAlgoOptions = computed(() => [
 const themeOptions = computed(() =>
   listThemes().map(t => ({ label: t.name, value: t.id }))
 )
-const numericTypeOptions = computed(() => [
-  { label: 'uint8 (1B)', value: 'uint8' },
-  { label: 'int8 (1B)', value: 'int8' },
-  { label: 'uint16 (2B)', value: 'uint16' },
-  { label: 'int16 (2B)', value: 'int16' },
-  { label: 'uint32 (4B)', value: 'uint32' },
-  { label: 'int32 (4B)', value: 'int32' },
-  { label: 'float32 (4B)', value: 'float32' },
-  { label: 'float64 (8B)', value: 'float64' }
-])
-const waveformFormatOptions = computed(() => [
-  { label: t('settings.formatBinary'), value: 'binary' },
-  { label: t('settings.formatText'), value: 'text' }
-])
+// waveformFormatOptions 已移除（仅保留文本行解析模式）
+// 未来扩展新协议时在此添加协议选择器
 
 // 浏览器原生目录选择(File System Access API)仅 Chromium 在安全上下文下可用;
 // Electron 走专用 IPC 路径,恒可点。
@@ -266,57 +254,12 @@ const navItems = computed<NavItem[]>(() => [
         <!-- ========== 波形解析 ========== -->
         <NForm v-if="activeTab === 'waveform'" label-placement="top" size="small">
           <div class="section-title">{{ t('settings.waveform') }}</div>
-          <NFormItem :label="t('settings.parseFormat')">
-            <NSelect v-model:value="s.waveform.parse.format" :options="waveformFormatOptions" />
-          </NFormItem>
-          <template v-if="s.waveform.parse.format === 'binary'">
-            <NFormItem :label="t('settings.numericType')">
-              <NSelect v-model:value="s.waveform.parse.type" :options="numericTypeOptions" />
-            </NFormItem>
-            <NFormItem :label="t('settings.byteOrder')">
-              <NButtonGroup size="small">
-                <NButton
-                  :type="s.waveform.parse.littleEndian ? 'primary' : 'default'"
-                  @click="s.waveform.parse.littleEndian = true"
-                >{{ t('settings.littleEndian') }}</NButton>
-                <NButton
-                  :type="!s.waveform.parse.littleEndian ? 'primary' : 'default'"
-                  @click="s.waveform.parse.littleEndian = false"
-                >{{ t('settings.bigEndian') }}</NButton>
-              </NButtonGroup>
-            </NFormItem>
-            <NFormItem :label="t('settings.byteOffset')">
-              <NInputNumber
-                v-model:value="s.waveform.parse.byteOffset"
-                :min="0"
-                :max="64"
-                style="width: 100%"
-              />
-            </NFormItem>
-          </template>
-          <NFormItem v-else :label="t('settings.formatTextHint')">
+          <NFormItem :label="t('settings.formatTextHint')">
             <span style="color: var(--text-dim); font-size: 12px; line-height: 1.6">
               Serial.println(analogRead(A0))<br>
               a,b / a b / a;b<br>
               Sin:0.5, Cos:0.86 (label:value)
             </span>
-          </NFormItem>
-          <NFormItem :label="t('settings.channels')">
-            <NInputNumber
-              v-model:value="s.waveform.parse.channels"
-              :min="1"
-              :max="16"
-              style="width: 100%"
-            />
-          </NFormItem>
-          <NFormItem :label="t('settings.sampleRate')">
-            <NInputNumber
-              v-model:value="s.waveform.sampleRate"
-              :min="1"
-              :max="100000"
-              :step="10"
-              style="width: 100%"
-            />
           </NFormItem>
           <NFormItem>
             <template #label>

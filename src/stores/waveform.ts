@@ -4,12 +4,11 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from './settings'
 import { useSerialStore } from './serial'
 import { usePauseStore } from './pause'
-import { parseSamples } from '@/utils/byte-parser'
 import { parseTextSamples } from '@/utils/text-parser'
 import type { WaveformParseConfig } from '@/types'
 
 /**
- * 波形 store：订阅串口原始字节流 → 解析为多通道采样 → 历史/可视两层缓冲。
+ * 波形 store：订阅串口原始字节流 → 文本行解析为多通道采样 → 历史/可视两层缓冲。
  *
  * 两层模型（区别于早期单一滑动窗口）：
  *  - history：完整保留的采样缓冲（[X, ch1, ch2, …]），上限为用户配置的 maxHistoryPoints，从头裁剪。
@@ -20,7 +19,6 @@ import type { WaveformParseConfig } from '@/types'
  *    运行中（!paused）恒为 0，随数据流入自动跟随最新；暂停后由拖拽调整。
  *  - viewSize：可视窗口跨度（显示多少个采样）。默认 = maxPoints；滚轮缩放可改，
  *    放大取更少但更密集的真实采样 → 看到真实细节（示波器时基缩放）。
- *    与 viewOffset 正交：viewOffset 是窗口位置、viewSize 是窗口跨度，共同定义窗口几何。
  *    zoomed 标志区分「未缩放（viewSize 跟随 maxPoints）」与「缩放中（viewSize 独立）」。
  *
  * 用 shallowRef 持有大数组（避免数千元素深响应式开销，同 messages store 做法），
@@ -29,11 +27,15 @@ import type { WaveformParseConfig } from '@/types'
  * 订阅在 store 初始化时建立（早于 connect 也安全：listener 静等，连接后即有数据流入）。
  * 单例 store 生命周期 = 应用生命周期，缓冲受 maxHistoryPoints 约束，无需反订阅。
  *
- * 配置变更语义（关键）：
- *  - 解析配置（类型/字节序/通道数/偏移）变更 → 旧数据按旧配置解析、无法沿用，清空重建。
- *  - 采样率变更 → 仅重算所有 history 的 X 时间戳（不制造波形断点；回看时时间轴仍正确）。
- *  - 最大点数变更 → 未缩放时 viewSize 跟随新 maxPoints、缩放中仅 clamp；即时重切可视窗口
- *    （maxPoints 现为「默认可视点数」，不再裁剪 history）。
+ * X 时间戳：始终使用真实到达时间 Date.now()，与消息时间戳对齐。
+ * 文本行到达速率未知且可变——Arduino Serial.println 间隔取决于 loop() 周期与
+ * `delay()`，无法假设固定频率——故不用合成时间。
+ * 同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
+ *
+ * 扩展点：
+ *  - 未来新增协议时：在 WaveformParseConfig 增加协议标识字段（如 protocol: 'line' | 'json' | …）
+ *    及协议专属配置；在 ingest() 中按协议接口分发到对应解析器，所有解析器返回 { perChannel, remainder }
+ *    统一形状即可无缝接入两层缓冲模型。
  */
 export const useWaveformStore = defineStore('waveform', () => {
   const settingsStore = useSettingsStore()
@@ -43,9 +45,14 @@ export const useWaveformStore = defineStore('waveform', () => {
   // storeToRefs 取得保持响应式的 ref（直接访问 pause.paused 会被 Pinia 解包为普通布尔）。
   const { paused, pauseStartTime } = storeToRefs(pause)
 
-  // 文本模式通道标签名（响应式，供组件绑定图例/按钮/tooltip）。
+  // 通道标签名（响应式，供组件绑定图例/按钮/tooltip）。
   // 必须在 history/data 初始化之前声明 —— buildEmpty() 参考它。
   const textLabels = ref<string[]>([])
+
+  // 当前通道数（响应式）：取 textLabels 长度和 history 实际形状的最大值，
+  // 确保无标签数据也能被正确渲染。
+  // 注意 history 是 shallowRef，通道数变化时要用 version 驱动重算。
+  const channelCount = ref(1)
 
   // 完整历史缓冲（上限受 maxHistoryPoints 约束，从头裁剪）
   const history = shallowRef<number[][]>(buildEmpty())
@@ -63,21 +70,13 @@ export const useWaveformStore = defineStore('waveform', () => {
   // watch(length) 会停止触发，导致图表不再刷新（数据其实在变）。
   const version = ref(0)
 
-  // 跨回调承接的半截采样零头（非响应式）
-  let carryover: Uint8Array = new Uint8Array(0)
-  // 文本模式跨回调承接的半截行字符串（非响应式）
+  // 跨回调承接的半截行字符串（非响应式）
   let textCarryover = ''
-  // 文本模式标签→通道索引（非响应式，由解析器原地更新；clear() 时清空）
+  // 标签→通道索引（非响应式，由解析器原地更新；clear() 时清空）
   let labelIndex: Map<string, number> = new Map()
   // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
   const resumeBreakX = ref(-1)
-  // 全局采样计数器（单调递增），决定 X 时间戳
-  let sampleIndex = 0
-  // 当前 history 第一个点对应的全局索引（裁剪后推进，用于采样率变更时重算 X）
-  let windowStartIndex = 0
-  // 首个采样到达时刻；-1 表示尚未有数据
-  let startTime = -1
-  // 文本模式最后一个采样的真实 X（毫秒）；用于跨回调保单调与暂停断点。-Infinity 表示无数据
+  // 最后一个采样的真实 X（毫秒）；用于跨回调保单调与暂停断点。-Infinity 表示无数据
   let lastSampleX = -Infinity
 
   /** 可视窗口跨度下限（常量）：滚轮放大最深至此（约 2 个采样），maxPoints 设置下限 100 恒大于此。
@@ -89,85 +88,78 @@ export const useWaveformStore = defineStore('waveform', () => {
   }
 
   /** 按当前有效通道数构造空数据：[X, ch1, ch2, …]
-   *  文本模式取 max(cfg.channels, textLabels.length) 以容纳标签检测到的动态通道；
-   *  二进制模式取 cfg.channels（textLabels 为空数组，max 退化为 cfg.channels）。 */
+   *  通道数 = max(1, channelCount)，初始为 [X, CH1]，随数据到达动态增长。 */
   function buildEmpty(): number[][] {
-    const cfgCh = Math.max(1, parseCfg().channels)
-    const ch = Math.max(cfgCh, textLabels.value.length)
+    const ch = Math.max(1, channelCount.value)
     const arr: number[][] = []
     for (let i = 0; i <= ch; i++) arr.push([])
     return arr
   }
 
-  /** 接收原始字节 → 解析 → 追加进 history → 重切可视窗口 */
+  /**
+   * 接收原始字节 → 文本行解析 → 追加进 history → 重切可视窗口
+   *
+   * 通道数检测：解析结果 perChannel.length 即为实际通道数；
+   * channelCount 在数据到达时自动更新，覆盖无标签（如 `214,920`）
+   * 和有标签（Sin:0.5,Cos:0.86）两种场景。 */
   function ingest(bytes: Uint8Array) {
     if (paused.value) return
     const cfg = parseCfg()
-    let perChannel: number[][]
-    if (cfg.format === 'text') {
-      const res = parseTextSamples(bytes, cfg, textCarryover, labelIndex)
-      textCarryover = res.remainder
-      perChannel = res.perChannel
-      // 同步 labelIndex → textLabels：新标签出现时自动追加
-      if (labelIndex.size !== textLabels.value.length) {
-        const arr = textLabels.value.slice()
-        for (const [label, idx] of labelIndex) {
-          arr[idx] = label
-        }
-        textLabels.value = arr
+    const res = parseTextSamples(bytes, cfg, textCarryover, labelIndex)
+    textCarryover = res.remainder
+    const perChannel = res.perChannel
+
+    // 同步 labelIndex → textLabels：新标签出现时自动追加
+    if (labelIndex.size !== textLabels.value.length) {
+      const arr = textLabels.value.slice()
+      for (const [label, idx] of labelIndex) {
+        arr[idx] = label
       }
-    } else {
-      const res = parseSamples(bytes, cfg, carryover)
-      carryover = res.remainder
-      perChannel = res.perChannel
+      textLabels.value = arr
     }
+
     const n = perChannel[0]?.length ?? 0
     if (n === 0) return
 
-    if (startTime < 0) startTime = Date.now()
     const cur = history.value
 
-    // 动态通道增长（文本模式新标签出现 → perChannel 可能 > cur 通道数）
+    // 动态通道增长（新标签出现 / 无标签多 token → perChannel 可能 > cur 通道数）
     // 补足空数组，使 cur[c+1] 可安全 push
     while (cur.length <= perChannel.length) {
       cur.push([])
     }
 
-    // X 时间戳：
-    //  - 文本模式：真实到达时间（与消息时间戳对齐）。文本到达速率未知且可变，
-    //    用合成时间会随 sampleRate 不匹配而持续漂移，故必须用 Date.now()。
-    //    同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
-    //  - 二进制模式：startTime + sampleIndex × dt。已知固定采样率，均匀时间轴；
-    //    sampleRate 变更可整体重算 X（见下方 watch）。
+    // 同步 channelCount：取 textLabels.length 和 perChannel.length 的最大值，
+    // 让组件在无标签数据（如 `214,920`）到达时也能检测到通道数变化。
+    const chNow = Math.max(textLabels.value.length, perChannel.length)
+    if (chNow !== channelCount.value) channelCount.value = chNow
+
+    // X 时间戳：真实到达时间（与消息时间戳对齐）。
+    // 同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
+    let x = Math.max(Date.now(), lastSampleX + 1)
     const xs: number[] = []
-    if (cfg.format === 'text') {
-      let x = Math.max(Date.now(), lastSampleX + 1)
-      for (let s = 0; s < n; s++) { xs.push(x); x++ }
-      lastSampleX = xs[xs.length - 1]
-    } else {
-      const rate = Math.max(1, settingsStore.settings.waveform.sampleRate)
-      const dt = 1000 / rate
-      for (let s = 0; s < n; s++) xs.push(startTime + (sampleIndex + s) * dt)
+    for (let s = 0; s < n; s++) {
+      xs.push(x)
+      x++
     }
+    lastSampleX = xs[xs.length - 1]
 
     for (let s = 0; s < n; s++) {
       cur[0].push(xs[s])
       for (let c = 0; c < perChannel.length; c++) cur[c + 1].push(perChannel[c][s])
-      sampleIndex++
     }
     trimHistory(cur)
     recomputeView()
   }
 
   /** history 超过 maxHistoryPoints 则从头裁剪（保留最新、丢弃最旧）。
-   *  上限可配置（设置 ▸ 波形解析 ▸ 历史缓冲上限），默认 200k（~5min@640Hz、2 通道约 3MB）；
+   *  上限可配置（设置 ▸ 波形解析 ▸ 历史缓冲上限），默认 200k；
    *  UI min 锁定 maxPoints，故恒 ≥ 可视窗口，回看总有余量。 */
   function trimHistory(cur: number[][]) {
     const maxHistory = settingsStore.settings.waveform.maxHistoryPoints
     if (cur[0].length <= maxHistory) return
     const drop = cur[0].length - maxHistory
     for (let i = 0; i < cur.length; i++) cur[i] = cur[i].slice(drop)
-    windowStartIndex += drop
   }
 
   /**
@@ -192,14 +184,10 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   /** 清空缓冲（计数器一并重置，X 轴从下一批采样重新起算；缩放一并重置） */
   function clear() {
-    carryover = new Uint8Array(0)
     textCarryover = ''
     labelIndex = new Map()
     textLabels.value = []
     resumeBreakX.value = -1
-    sampleIndex = 0
-    windowStartIndex = 0
-    startTime = -1
     lastSampleX = -Infinity
     viewOffset.value = 0
     viewSize.value = settingsStore.settings.waveform.maxPoints
@@ -213,16 +201,8 @@ export const useWaveformStore = defineStore('waveform', () => {
     const wasPaused = paused.value
     pause.toggle()
     if (wasPaused) {
-      // 从暂停 → 运行：回到最新（避免停留在历史里错过新数据），并记录恢复断点。
-      // 计算断点 X：下一个采样将被放置的位置
-      if (parseCfg().format === 'text') {
-        // 文本模式 X 为真实到达时间，断点 = 最后一个采样时间（暂停前的真实时刻）
-        resumeBreakX.value = lastSampleX > 0 ? lastSampleX : -1
-      } else {
-        const rate = Math.max(1, settingsStore.settings.waveform.sampleRate)
-        const dt = 1000 / rate
-        resumeBreakX.value = startTime >= 0 ? startTime + sampleIndex * dt : -1
-      }
+      // 从暂停 → 运行：回到最新（避免停留在历史里错过新数据），并记录恢复断点
+      resumeBreakX.value = lastSampleX > 0 ? lastSampleX : -1
       viewOffset.value = 0
       recomputeView()
     }
@@ -288,23 +268,6 @@ export const useWaveformStore = defineStore('waveform', () => {
   // 解析配置变更：旧数据按旧配置解析，无法沿用 → 清空重建
   watch(() => settingsStore.settings.waveform.parse, clear, { deep: true })
 
-  // 采样率变更：重算所有 history 的 X 时间戳（保留波形连续性，不制造断点；
-  // 重算全部而非仅可视窗口，否则回看历史时时间轴会错）
-  // 文本模式 X 为真实到达时间，与采样率无关 -> 跳过
-  watch(
-    () => settingsStore.settings.waveform.sampleRate,
-    (rate) => {
-      if (parseCfg().format === 'text') return
-      if (startTime < 0) return
-      const dt = 1000 / Math.max(1, rate)
-      const xs = history.value[0]
-      for (let i = 0; i < xs.length; i++) {
-        xs[i] = startTime + (windowStartIndex + i) * dt
-      }
-      recomputeView()
-    }
-  )
-
   // 最大点数变更：现为「可视点数」→ 未缩放时 viewSize 跟随新 maxPoints；
   // 缩放中保持用户倍率，仅 clamp 到新 [MIN_VIEW, maxPoints]。随后重切可视窗口。
   watch(
@@ -329,5 +292,5 @@ export const useWaveformStore = defineStore('waveform', () => {
   // 订阅原始字节流（在 messages store 帧切分之前的同一份字节）
   serial.onData((bytes) => ingest(bytes))
 
-  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
+  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
 })

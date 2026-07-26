@@ -3,10 +3,6 @@ import { exportWaveformAsCsv, type WaveformExportMeta } from './export-waveform-
 
 function makeMeta(overrides?: Partial<WaveformExportMeta>): WaveformExportMeta {
   return {
-    sampleRate: 640,
-    numericType: 'int16',
-    channels: 2,
-    littleEndian: true,
     scope: 'visible',
     exportedAt: 1700000000000,
     ...overrides
@@ -44,7 +40,7 @@ describe('exportWaveformAsCsv', () => {
       [100, 200],
       [1000, 2000]
     )
-    const csv = exportWaveformAsCsv(data, [true, false, true], makeMeta({ channels: 3 }))
+    const csv = exportWaveformAsCsv(data, [true, false, true], makeMeta())
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,CH1,CH3')
     expect(lines[1]).toBe('0.000,10,1000')
@@ -70,7 +66,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('single channel export', () => {
     const data = makeData([1000, 1001], [42, 99])
-    const csv = exportWaveformAsCsv(data, [true], makeMeta({ channels: 1 }))
+    const csv = exportWaveformAsCsv(data, [true], makeMeta())
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,CH1')
     expect(lines[1]).toBe('0.000,42')
@@ -79,7 +75,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('handles float values', () => {
     const data = makeData([1000.5, 1001.25], [3.14159, -0.00123])
-    const csv = exportWaveformAsCsv(data, [true], makeMeta({ channels: 1, numericType: 'float32' }))
+    const csv = exportWaveformAsCsv(data, [true], makeMeta())
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[0]).toBe('﻿time_sec,CH1')
     expect(lines[1]).toBe('0.000,3.14159')
@@ -89,7 +85,7 @@ describe('exportWaveformAsCsv', () => {
 
   it('handles integer values without decimal point', () => {
     const data = makeData([0, 1000], [32767, -32768])
-    const csv = exportWaveformAsCsv(data, [true], makeMeta({ channels: 1 }))
+    const csv = exportWaveformAsCsv(data, [true], makeMeta())
     const lines = csv.split('\n').filter(Boolean)
     expect(lines[1]).toBe('0.000,32767')
     expect(lines[2]).toBe('1.000,-32768')
@@ -100,7 +96,7 @@ describe('exportWaveformAsCsv', () => {
     const xs = Array.from({ length: n }, (_, i) => i)
     const ch1 = Array.from({ length: n }, (_, i) => i * 2)
     const data = makeData(xs, ch1)
-    const csv = exportWaveformAsCsv(data, [true], makeMeta({ channels: 1 }))
+    const csv = exportWaveformAsCsv(data, [true], makeMeta())
     const lines = csv.split('\n').filter(Boolean)
     expect(lines.length).toBe(n + 1) // header + 1000 data rows
     expect(lines[0]).toBe('﻿time_sec,CH1')
