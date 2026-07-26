@@ -263,7 +263,7 @@ onBeforeUnmount(() => {
       </template>
       {{ t('conn.requestPort') }}
     </NTooltip>
-    <NTooltip>
+    <NTooltip v-if="serial.driverType !== 'webserial'">
       <template #trigger>
         <NButton size="small" :disabled="serial.connected" @click="serial.refreshPorts()">⟳</NButton>
       </template>
