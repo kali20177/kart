@@ -1,5 +1,5 @@
 import type { LogLevel } from '@/types'
-import { LEVEL_ORDER } from './log-level'
+import { LEVEL_ORDER, splitContextLine } from './log-level'
 import { downloadTextFile } from './download'
 
 /** 一条持久化的日志记录。context 单独存字段，message 不再内嵌 [context] 前缀 */
@@ -51,9 +51,6 @@ function safeStringify(v: unknown): string {
   if (v instanceof Error) return `${v.name}: ${v.message}`
   try { return JSON.stringify(v) } catch { return String(v) }
 }
-
-/** 形如 "[serial] xxx" 的首参前缀 —— 用于从 console 调用中提取 context */
-const CONTEXT_PREFIX = /^\[([^\[\]]{1,32})\]\s*/
 
 export class Logger {
   private db: IDBDatabase | null = null
@@ -193,14 +190,10 @@ export class Logger {
         // 低于阈值的 console 调用（如三方库 debug 刷屏）不落盘，直接透传
         if (LEVEL_ORDER[level] >= LEVEL_ORDER[this.minLevel]) {
           // 从首参 "[xxx] ..." 前缀提取 context，并从 message 中剥掉前缀避免导出重复
-          let context = 'app'
-          let parts = args
           const s0 = typeof args[0] === 'string' ? args[0] : ''
-          const m = CONTEXT_PREFIX.exec(s0)
-          if (m) {
-            context = m[1]
-            parts = [s0.slice(m[0].length), ...args.slice(1)]
-          }
+          const { context, message: head } = splitContextLine(s0, 'app')
+          // head !== s0 表示剥到了前缀，用剥前缀后的首参替换；否则保持原 args 不变
+          const parts = head !== s0 ? [head, ...args.slice(1)] : args
           const message = parts.map(a => safeStringify(a)).join(' ').trim()
           if (message) {
             this.store({ timestamp: Date.now(), level, context, message })
@@ -213,30 +206,25 @@ export class Logger {
 
   // ─── 全局错误兜底 ───
 
-  /** 注册 window.onerror / unhandledrejection（幂等） */
+  /** 注册 window.onerror / unhandledrejection（幂等）。
+   *  走 this.error -> emit：既落 IDB，也经原始 console 输出，Electron 下会经
+   *  console-message 事件进入主进程文件日志--否则崩溃记录在导出时会被文件日志
+   *  优先策略丢掉（见 downloadExport）。 */
   registerGlobalHandlers(): void {
     if (this.handlersRegistered) return
     this.handlersRegistered = true
 
     window.addEventListener('error', (event) => {
-      this.store({
-        timestamp: Date.now(),
-        level: 'error',
-        context: 'window',
-        message: `${event.message} @ ${event.filename}:${event.lineno}`,
-        data: event.error?.stack ?? undefined,
-      })
+      this.error('window', `${event.message} @ ${event.filename}:${event.lineno}`, event.error?.stack ?? undefined)
     })
 
     window.addEventListener('unhandledrejection', (event) => {
       const reason = event.reason
-      this.store({
-        timestamp: Date.now(),
-        level: 'error',
-        context: 'promise',
-        message: reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason),
-        data: reason instanceof Error ? reason.stack : undefined,
-      })
+      this.error(
+        'promise',
+        reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason),
+        reason instanceof Error ? reason.stack : undefined
+      )
     })
   }
 
@@ -270,7 +258,7 @@ export class Logger {
 
   /**
    * 导出并下载日志文件。
-   * - Electron：优先取主进程文件日志（权威来源——含主进程事件与全部渲染端 console），
+   * - Electron：优先取主进程文件日志（权威来源--含主进程事件与全部渲染端 console），
    *   读不到时回落 IDB；
    * - 浏览器：从 IDB 导出。
    * 返回导出行数（0 = 无日志可导出）。

@@ -2,23 +2,26 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { app } from 'electron'
 import type { LogLevel } from '../types'
-import { LEVEL_ORDER, mapConsoleLevel, formatLogLine } from '../utils/log-level'
+import { LEVEL_ORDER, mapConsoleLevel, formatLogLine, splitContextLine } from '../utils/log-level'
 
 /** 日志保留天数 */
 const RETENTION_DAYS = 30
-/** log:read 导出上限（字节）。超出只保留最新尾部——用户回传日志够定位问题即可 */
+/** log:read 导出上限（字节）。超出只保留最新尾部--用户回传日志够定位问题即可 */
 const READ_MAX_BYTES = 2 * 1024 * 1024
+/** close() 等待刷盘的超时，避免流卡死时阻塞退出流程 */
+const CLOSE_FLUSH_TIMEOUT_MS = 1000
 
 /**
  * 主进程文件日志。按日期轮转（YYYY-MM-DD.log，UTC），保留 30 天。
- * 渲染进程的 console-message 事件也由此转发写入同一目录——Electron 下
+ * 渲染进程的 console-message 事件也由此转发写入同一目录--Electron 下
  * 这套文件日志是权威来源：主进程事件 + 全部渲染端 console 都在这里，
  * 「导出日志」菜单经 log:read IPC 从这里读取。
  *
  * 健壮性约定：
  * - init() 之前（或日志目录不可用时）写入自动回落 stderr，
  *   保证启动早期的致命错误不会因"日志还没初始化"被静默吞掉；
- * - errorSync() 供 uncaughtException 使用——进程即将退出，异步流来不及刷盘；
+ * - errorSync() 供 uncaughtException 使用--进程即将退出，异步流来不及刷盘；
+ * - close() 等待 WriteStream flush 完成（带超时兜底），保证退出前缓冲落盘；
  * - WriteStream 的 'error' 事件被接管，磁盘故障不会变成二次未捕获异常。
  */
 class MainLogger {
@@ -38,12 +41,20 @@ class MainLogger {
     setImmediate(() => this.cleanupOldLogs())
   }
 
-  /** 退出前调用，尽力刷盘 */
-  close(): void {
-    if (this.stream) {
-      try { this.stream.end() } catch { /* */ }
-      this.stream = null
-    }
+  /** 退出前调用，等待缓冲区刷盘完成（带超时兜底，避免卡死退出流程）。
+   *  返回的 Promise 在流 flush 完成、出错或超时后 resolve。 */
+  close(): Promise<void> {
+    const stream = this.stream
+    this.stream = null
+    if (!stream) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      let done = false
+      const finish = () => { if (!done) { done = true; resolve() } }
+      stream.once('finish', finish)
+      stream.once('error', finish) // 流错误也要放行，避免 resolve 永不触发
+      try { stream.end() } catch { finish() }
+      setTimeout(finish, CLOSE_FLUSH_TIMEOUT_MS) // 兜底：未 finish 也放行退出
+    })
   }
 
   // ─── 文件管理 ───
@@ -118,10 +129,13 @@ class MainLogger {
   /**
    * 接收 Electron console-message 事件并落文件日志。
    * level 语义见 mapConsoleLevel（0=debug 1=info 2=warn 3=error）。
+   * 渲染端 logger.emit 输出 "[context] message" 形式，这里提取真实 context 以便按模块过滤；
+   * 三方库无前缀的 console 回落到 'renderer'。
    */
   handleConsoleMessage(level: number, message: string, line?: number, sourceId?: string): void {
     const loc = sourceId ? ` (${sourceId}:${line ?? 0})` : ''
-    this.write(mapConsoleLevel(level), 'renderer', message + loc)
+    const { context, message: body } = splitContextLine(message, 'renderer')
+    this.write(mapConsoleLevel(level), context, body + loc)
   }
 
   // ─── 读取（供渲染进程「导出日志」） ───
@@ -142,21 +156,55 @@ class MainLogger {
     let total = 0
     for (let i = names.length - 1; i >= 0; i--) {
       const name = names[i]
-      let content: string
-      try { content = fs.readFileSync(path.join(this.logDir, name), 'utf-8') } catch { continue }
+      const fp = path.join(this.logDir, name)
       const header = `===== ${name} =====\n`
-      if (total + header.length + content.length > READ_MAX_BYTES) {
-        const remain = READ_MAX_BYTES - total - header.length - 32
-        if (remain > 1024) {
-          out.push(header + '...[older lines truncated]...\n' + content.slice(content.length - remain))
-        }
+
+      let stat: fs.Stats
+      try { stat = fs.statSync(fp) } catch { continue }
+
+      // 剩余预算（字节），预留 32 给截断提示文案
+      const budget = READ_MAX_BYTES - total - header.length - 32
+      if (budget <= 1024) {
         out.push(`===== 更早的日志已截断，完整日志见 ${this.logDir} =====`)
         break
       }
-      out.push(header + content)
-      total += header.length + content.length
+
+      if (stat.size <= budget) {
+        // 文件整体放得下，直接读全部
+        let content: string
+        try { content = fs.readFileSync(fp, 'utf-8') } catch { continue }
+        out.push(header + content)
+        total += header.length + content.length
+      } else {
+        // 文件比剩余预算大：只读尾部 budget 字节，避免把整个大文件读进内存
+        out.push(header + '...[older lines truncated]...\n' + this.readTail(fp, budget, stat.size))
+        out.push(`===== 更早的日志已截断，完整日志见 ${this.logDir} =====`)
+        break
+      }
     }
     return out.reverse()
+  }
+
+  /** 读取文件尾部 n 字节并截为完整行（起点可能落在一行中间，丢掉首个半截行）。 */
+  private readTail(fp: string, n: number, size: number): string {
+    let fd: number | undefined
+    try {
+      const start = Math.max(0, size - n)
+      const len = Math.min(n, size)
+      const buf = Buffer.alloc(len)
+      fd = fs.openSync(fp, 'r')
+      fs.readSync(fd, buf, 0, len, start)
+      let s = buf.toString('utf-8')
+      if (start > 0) {
+        const nl = s.indexOf('\n')
+        if (nl >= 0 && nl < s.length - 1) s = s.slice(nl + 1)
+      }
+      return s
+    } catch {
+      return ''
+    } finally {
+      if (fd !== undefined) { try { fs.closeSync(fd) } catch { /* */ } }
+    }
   }
 }
 

@@ -333,7 +333,14 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('will-quit', () => {
+// will-quit 里 preventDefault 后异步等待日志刷盘，再 app.exit 真正退出。
+// app.exit 本身不再触发 will-quit，flushing flag 仅作防御性兜底；
+// close() 带超时兜底，流卡死也不会阻塞退出流程。
+let flushing = false
+app.on('will-quit', (event) => {
+  if (flushing) return
+  flushing = true
+  event.preventDefault()
   mainLogger.info('main', '应用退出')
-  mainLogger.close()
+  mainLogger.close().finally(() => app.exit(0))
 })

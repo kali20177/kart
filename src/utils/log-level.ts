@@ -22,3 +22,21 @@ export function mapConsoleLevel(level: number): LogLevel {
 export function formatLogLine(timestampIso: string, level: LogLevel, context: string, message: string): string {
   return `[${timestampIso}] [${level.toUpperCase()}] [${context}] ${message}\n`
 }
+
+/** 形如 "[context] message" 的首参前缀 -- 渲染端 logger.emit 输出该格式，两端都需从中还原 context */
+const CONTEXT_PREFIX = /^\[([^\[\]]{1,32})\]\s*/
+
+export interface SplitContext {
+  context: string
+  message: string
+}
+
+/**
+ * 从 "[ctx] msg" 行首提取 context 与剩余 message；无前缀时 context 回落到 fallback。
+ * 渲染端劫持 console、主进程接收 console-message 都用它，使两端记录的 context 一致。
+ */
+export function splitContextLine(line: string, fallback: string): SplitContext {
+  const m = CONTEXT_PREFIX.exec(line)
+  if (m) return { context: m[1], message: line.slice(m[0].length) }
+  return { context: fallback, message: line }
+}
