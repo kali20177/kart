@@ -90,5 +90,11 @@ contextBridge.exposeInMainWorld('electron', {
     onWriteError: (handler: (msg: string) => void) => {
       writeErrorHandler = handler
     }
+  },
+
+  // 日志：渲染端「导出日志」的数据来源。无需 write 通道——
+  // 渲染端任何 console 输出都会经主进程 console-message 事件落到同一批日志文件。
+  log: {
+    read: () => ipcRenderer.invoke('log:read') as Promise<string[] | null>,
   }
 })

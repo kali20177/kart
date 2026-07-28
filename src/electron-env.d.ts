@@ -17,6 +17,10 @@ declare global {
         closeFile(): Promise<boolean>
         onWriteError(handler: (msg: string) => void): void
       }
+      log?: {
+        /** 读取主进程全部日志文件内容（导出日志用） */
+        read(): Promise<string[] | null>
+      }
     }
   }
 }

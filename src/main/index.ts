@@ -2,6 +2,22 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { SerialPortManager } from './SerialPortManager'
+import { mainLogger } from './logger'
+
+// ── 全局错误拦截（必须在最前面注册） ──
+// errorSync 用同步写盘 + stderr 双通道：此时日志可能尚未 init（logDir 为空会回落 stderr），
+// 且进程即将退出，异步 WriteStream 来不及刷盘。
+process.on('uncaughtException', (err) => {
+  mainLogger.errorSync('main', `Uncaught exception: ${err.name}: ${err.message}\n${err.stack ?? ''}`)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error
+    ? `${reason.name}: ${reason.message}\n${reason.stack ?? ''}`
+    : String(reason)
+  mainLogger.error('main', `Unhandled rejection: ${msg}`)
+})
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL
 
@@ -190,7 +206,14 @@ function registerSerialPortIpc(): void {
     if (!win) throw new Error('窗口不存在')
     const mgr = _serialManagers.get(win.id)
     if (!mgr) throw new Error('串口管理器不可用')
-    await mgr.open(portName, options)
+    try {
+      await mgr.open(portName, options)
+      const p = options.parity === 'none' ? 'N' : options.parity === 'even' ? 'E' : 'O'
+      mainLogger.info('serial', `port opened: ${portName} @ ${options.baudRate} ${options.dataBits}${p}${options.stopBits} flow=${options.flowControl}`)
+    } catch (e) {
+      mainLogger.error('serial', `open failed: ${portName}: ${e instanceof Error ? e.message : String(e)}`)
+      throw e
+    }
   })
 
   // 关闭串口
@@ -223,6 +246,16 @@ function registerSerialPortIpc(): void {
   })
 }
 
+/** 注册主进程日志相关 IPC handlers */
+function registerLoggerIpc(): void {
+  // 「导出日志」菜单的数据来源：返回全部日志文件内容（主进程事件 + 渲染端 console
+  // 经 console-message 转发后都在这些文件里）。无需单独的 log:write 通道——
+  // 渲染端任何 console 输出都会经 console-message 事件落到同一目录。
+  ipcMain.handle('log:read', () => {
+    return mainLogger.readAll()
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1100,
@@ -238,15 +271,19 @@ function createWindow(): void {
   // 创建 serialport 管理器（绑定到本窗口，用于推送数据事件）
   _serialManagers.set(win.id, new SerialPortManager(win))
 
-  // 转发渲染进程 console 到终端（调试用）
+  // 转发渲染进程 console 到日志文件（保留源码位置便于定位）
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
-    const tag = level === 3 ? 'ERR' : level === 1 ? 'WARN' : 'LOG'
-    console.log(`[renderer:${tag}] ${message} (${sourceId}:${line})`)
+    mainLogger.handleConsoleMessage(level, message, line, sourceId)
   })
 
-  // 页面加载失败时打印错误
+  // 页面加载失败时记录错误
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
-    console.error(`[renderer] FAILED to load ${url}: ${code} ${desc}`)
+    mainLogger.error('renderer', `Failed to load ${url}: ${code} ${desc}`)
+  })
+
+  // 渲染进程崩溃/异常退出——用户报障时最关键的一条
+  win.webContents.on('render-process-gone', (_e, details) => {
+    mainLogger.error('main', `Renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`)
   })
 
   // 窗口关闭时清理录制写入流 + serialport 管理器（end 触发缓冲区最后一次刷新）
@@ -261,15 +298,21 @@ function createWindow(): void {
   })
 
   if (devServerUrl) {
+    mainLogger.info('main', `load dev server: ${devServerUrl}`)
     win.loadURL(devServerUrl)
   } else {
-    win.loadFile(path.join(__dirname, '../../dist/index.html'))
+    const html = path.join(__dirname, '../../dist/index.html')
+    mainLogger.info('main', `load file: ${html}`)
+    win.loadFile(html)
   }
 }
 
 app.whenReady().then(() => {
+  mainLogger.init()
+  mainLogger.info('main', `应用启动: v${app.getVersion()} electron=${process.versions.electron} chrome=${process.versions.chrome} node=${process.versions.node} platform=${process.platform}/${process.arch}`)
   registerRecorderIpc()
   registerSerialPortIpc()
+  registerLoggerIpc()
   configureWebSerial()
 
   Menu.setApplicationMenu(null)
@@ -288,4 +331,9 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', () => {
+  mainLogger.info('main', '应用退出')
+  mainLogger.close()
 })

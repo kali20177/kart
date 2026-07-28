@@ -30,7 +30,7 @@ npm run electron:preview # 构建后用 electron 直接运行（不打包）
 - **虚拟滚动**：vue-virtual-scroller（大量消息列表高性能渲染）
 - **测试**：Vitest + jsdom + `@vue/test-utils`
 - **注册源**：国内 npm 镜像（`registry.npmmirror.com`），配置在 `.npmrc`
-- **无 linter/formatter** —— `vue-tsc` 类型检查是唯一的代码质量门禁
+- **代码质量门禁**：`vue-tsc` 类型检查 + ESLint（`npm run lint`，flat config `eslint.config.js`，lint-staged 提交时自动 `--fix`）
 
 ## 架构
 
@@ -58,11 +58,12 @@ npm run electron:preview # 构建后用 electron 直接运行（不打包）
 ### 层次结构
 
 ```
-src/types.ts              — 共享类型（Message、PortOptions、SerialDriver、QuickCommand、AppSettings 等）
-src/utils/                — 纯工具函数（hex、encoding、checksum、byte-parser、search、export-*、message-format、ascii-table、baud、download）—— 无框架依赖
+src/types.ts              — 共享类型（Message、PortOptions、SerialDriver、QuickCommand、AppSettings、LogLevel 等）
+src/utils/                — 纯工具函数（hex、encoding、checksum、byte-parser、search、export-*、message-format、ascii-table、baud、download、log-level）—— 无框架依赖
+src/utils/logger.ts       — 渲染进程 Logger 单例（IDB 持久化 + console 劫持 + window 全局错误兜底 + 日志导出）
 src/mock/                 — MockSerialSource + 场景生成器
 src/serial/               — 串口驱动工厂 + WebSerialDriver + SerialPortDriver（Electron IPC）
-src/main/                 — Electron 主进程（SerialPortManager — 封装 serialport 库）
+src/main/                 — Electron 主进程（SerialPortManager — 封装 serialport 库；logger.ts — 按日轮转的文件日志）
 src/preload/              — Electron 预加载（contextBridge 暴露 serial/recorder/platform API）
 src/composables/          — Vue composables（useFrameSplitter、useSendHistory、useStorage、useMessageSearch、useTheme、useFileWriter、useRecordDirectory）
 src/stores/               — Pinia stores（serial、messages、commands、settings、recorder、transfer、waveform）
@@ -120,6 +121,7 @@ AsciiTable      → ascii-table/utils
 - **设置**：编码（UTF-8/ASCII/GBK）、帧策略、缓冲上限、默认视图、主题（亮/暗）、字号、发送/接收校验算法、录制格式与目录。
 - **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数。
 - **导出**：消息列表 CSV/JSON 导出、波形 CSV 导出、快速命令 JSON 导入导出。
+- **应用日志**：面向用户报障。浏览器端写 IndexedDB；Electron 下主进程按日轮转文件日志（`userData/logs/YYYY-MM-DD.log`，保留 30 天）并汇聚渲染端全部 console（`console-message` 事件转发）。文件菜单「导出日志」一键下载：Electron 优先取主进程文件（权威来源，含主进程事件），浏览器取 IDB，导出文件头自动附带版本/平台/驱动等环境信息。关键生命周期均有埋点：驱动选择、连接/断连（含会话时长与流量）、写入失败、录制、文件传输、全局错误。级别/行格式/level 映射集中在纯函数 `src/utils/log-level.ts`（两端共用、有单测）。
 - **状态栏**：连接态、端口参数概要、RX/TX/帧/ERR 统计、信号线状态（DCD/CTS/DSR/RI）、活跃文件下发紧凑条。
 - **主题**：多主题注册表 + 3 套内置主题（glass-industrial-dark、glass-industrial-light、oled-hud），明暗二元，无"跟随系统"。
 

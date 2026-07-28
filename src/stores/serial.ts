@@ -12,6 +12,7 @@ import { isPresetBaud, isValidBaud, loadCustomBaudRates } from '@/utils/baud'
 import type { DataMode, LineEnding } from '@/types'
 import { useMessagesStore } from './messages'
 import { storage } from '@/composables/useStorage'
+import { logger } from '@/utils/logger'
 
 const DEFAULT_OPTS: PortOptions = {
   baudRate: 115200,
@@ -97,7 +98,13 @@ export const useSerialStore = defineStore('serial', () => {
     if (driver instanceof MockSerialSource) {
       driver.setScenario(scenario.value)
     }
-    await driver.open(selectedPort.value, { ...options })
+    try {
+      await driver.open(selectedPort.value, { ...options })
+    } catch (e) {
+      logger.error('serial', `connect failed: ${selectedPort.value} @ ${summary.value} driver=${driverType.value}`, e)
+      throw e
+    }
+    logger.info('serial', `connected: ${selectedPort.value} @ ${summary.value} driver=${driverType.value}`)
     storage.set('portOptions', { ...options })
     rxBytes.value = 0
     txBytes.value = 0
@@ -115,6 +122,7 @@ export const useSerialStore = defineStore('serial', () => {
     signalTimer = setInterval(() => {
       if (!driver.isOpen) {
         // 驱动检测到物理断连，触发 full cleanup
+        logger.warn('serial', 'device lost (driver reported closed)')
         disconnect()
         return
       }
@@ -124,6 +132,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   async function disconnect() {
     if (!connected.value) return
+    const started = sessionStartedAt.value
     unsubscribe?.()
     unsubscribe = null
     if (signalTimer) {
@@ -134,6 +143,10 @@ export const useSerialStore = defineStore('serial', () => {
     connected.value = false
     sessionStartedAt.value = null
     signals.value = { dcd: false, cts: false, dsr: false, ri: false }
+    const session = started
+      ? ` (session ${Math.max(1, Math.round((Date.now() - started) / 1000))}s rx=${rxBytes.value}B tx=${txBytes.value}B)`
+      : ''
+    logger.info('serial', `disconnected${session}`)
   }
 
   function setScenario(id: MockScenarioId) {
@@ -227,6 +240,7 @@ export const useSerialStore = defineStore('serial', () => {
       return { ok: true }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      logger.warn('serial', `write failed: ${msg}`)
       messages.addTx(bytes, msg)
       return { ok: false, error: msg }
     }
@@ -248,6 +262,7 @@ export const useSerialStore = defineStore('serial', () => {
       return { ok: true }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      logger.warn('serial', `write failed: ${msg}`)
       if (record) messages.addTx(bytes, msg)
       return { ok: false, error: msg }
     }
@@ -266,6 +281,7 @@ export const useSerialStore = defineStore('serial', () => {
       return { ok: true }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      logger.warn('serial', `write failed: ${msg}`)
       messages.addTx(bytes, msg)
       return { ok: false, error: msg }
     }

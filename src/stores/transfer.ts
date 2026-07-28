@@ -4,6 +4,7 @@ import type { FileTransferConfig, FileTransferState, TransferPresetId, TransferS
 import { useSerialStore } from './serial'
 import { useMessagesStore } from './messages'
 import { crc16modbus } from '@/utils/checksum'
+import { logger } from '@/utils/logger'
 
 /** 预设配置（也供 FileTransferDialog 复用） */
 export const PRESETS: Record<TransferPresetId, Partial<FileTransferConfig>> = {
@@ -455,13 +456,20 @@ export const useTransferStore = defineStore('transfer', () => {
     fileBytes = null
     filePath = ''
 
+    const rec = transfers.value.find((t) => t.id === id)
+    const tag = rec ? `${rec.filename} (${rec.sent}/${rec.total}B)` : id
+
     const patch: Partial<FileTransferState> = {
       status,
-      elapsedMs: Date.now() - (transfers.value.find((t) => t.id === id)?.startedAt ?? Date.now())
+      elapsedMs: Date.now() - (rec?.startedAt ?? Date.now())
     }
     if (failedChunk !== undefined) patch.failedChunk = failedChunk
     if (status === 'error') patch.error = '发送失败（重试耗尽）'
     updateTransfer(id, patch)
+
+    if (status === 'completed') logger.info('transfer', `completed: ${tag} in ${patch.elapsedMs}ms`)
+    else if (status === 'error') logger.error('transfer', `failed: ${tag} at chunk ${failedChunk ?? '?'} (retries exhausted)`)
+    else logger.info('transfer', `aborted: ${tag}`)
 
     if (activeId.value === id) activeId.value = null
   }
@@ -483,6 +491,8 @@ export const useTransferStore = defineStore('transfer', () => {
     fileBytes = bytes
     filePath = file.name
     fileConfig = { ...config }
+
+    logger.info('transfer', `start: ${file.name} ${file.size}B chunk=${config.chunkSize || 'whole'} framing=${config.framing} ack=${config.waitForAck} repeat=${config.repeat || 1}`)
 
     // 保存最后配置
     lastConfig.value = { ...config }

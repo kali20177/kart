@@ -42,6 +42,8 @@ export default {
   },
   log: {
     empty: 'No logs to export',
+    exported: 'Logs exported',
+    exportFailed: 'Failed to export logs',
   },
   record: {
     start: 'Record',

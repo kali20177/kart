@@ -3,6 +3,9 @@
 /** 数据方向 */
 export type Direction = 'rx' | 'tx'
 
+/** 日志级别 */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
 /** 显示 / 输入模式 */
 export type DataMode = 'ascii' | 'hex'
 

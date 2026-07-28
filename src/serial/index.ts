@@ -3,6 +3,7 @@ import { WebSerialDriver } from './WebSerialDriver'
 import { SerialPortDriver } from './SerialPortDriver'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { UnsupportedDriver } from './UnsupportedDriver'
+import { logger } from '@/utils/logger'
 
 export type DriverType = 'mock' | 'webserial' | 'serialport' | 'unsupported'
 export type UnsupportedReason = 'insecure-context' | 'no-web-serial'
@@ -63,7 +64,10 @@ function collectEnv(): ResolveEnv {
 let _resolved: ResolveResult | null = null
 
 function getResolved(): ResolveResult {
-  if (!_resolved) _resolved = resolveDriverType(collectEnv())
+  if (!_resolved) {
+    _resolved = resolveDriverType(collectEnv())
+    logger.info('serial', `driver resolved: ${_resolved.type}${_resolved.reason ? ` (${_resolved.reason})` : ''}`)
+  }
   return _resolved
 }
 
@@ -84,6 +88,7 @@ export function setDriverType(type: DriverType): void {
   if (!import.meta.env.DEV) return
   _resolved = { type, reason: null }
   _driver = null
+  logger.info('serial', `driver switched (DEV): ${type}`)
 }
 
 let _driver: SerialDriver | null = null

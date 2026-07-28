@@ -42,6 +42,8 @@ export default {
   },
   log: {
     empty: '暂无日志可导出',
+    exported: '日志已导出',
+    exportFailed: '日志导出失败',
   },
   record: {
     start: '录制',

@@ -8,6 +8,7 @@ import { useCommandsStore } from '@/stores/commands'
 import { useRecorderStore } from '@/stores/recorder'
 import { storage } from '@/composables/useStorage'
 import { useI18n } from 'vue-i18n'
+import { logger } from '@/utils/logger'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -75,12 +76,14 @@ function check(selected: boolean) {
 const fileMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.autoSave'), key: 'auto-save', icon: check(settingsStore.autoSave) },
   { type: 'divider', key: 'd1' },
+  { label: t('menu.exportLog'), key: 'export-log' },
+  { type: 'divider', key: 'd2' },
   {
     label: recorder.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording'),
     key: 'toggle-recording',
     disabled: !recorder.supported || recorder.state.status === 'stopping'
   },
-  { type: 'divider', key: 'd2' },
+  { type: 'divider', key: 'd3' },
   { label: t('menu.resetDefaults'), key: 'reset-defaults' }
 ])
 
@@ -98,6 +101,17 @@ function handleSelect(key: string) {
     case 'auto-save':
       settingsStore.autoSave = !settingsStore.autoSave
       break
+    case 'export-log':
+      logger.downloadExport()
+        .then(count => {
+          if (count > 0) message.success(t('log.exported'))
+          else message.info(t('log.empty'))
+        })
+        .catch(e => {
+          logger.error('app', 'log export failed', e)
+          message.error(t('log.exportFailed'))
+        })
+      break
     case 'toggle-recording':
       if (recorder.state.status === 'idle') {
         recorder.start().catch((e) => {
@@ -114,6 +128,7 @@ function handleSelect(key: string) {
         positiveText: t('menu.resetDefaults'),
         negativeText: t('common.cancel'),
         onPositiveClick: () => {
+          logger.info('app', 'settings reset to defaults')
           // 1. 设置 -> 默认（reset 改内存；autoSave=true 时 deep watch 自动落盘）
           settingsStore.reset()
           // 2. autoSave 开关本身也恢复默认 true（若原为 false，其 watch 会补落盘 settings）

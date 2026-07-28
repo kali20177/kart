@@ -5,6 +5,7 @@ import { useSerialStore } from './serial'
 import { useSettingsStore } from './settings'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
 import type { IFileWriter } from '@/composables/useFileWriter'
+import { logger } from '@/utils/logger'
 
 const FLUSH_INTERVAL_MS = 500
 const FLUSH_SIZE_BYTES = 64 * 1024
@@ -101,6 +102,8 @@ export const useRecorderStore = defineStore('recorder', () => {
       error: undefined
     })
 
+    logger.info('recorder', `recording started: ${w.getFileName()} format=${format}`)
+
     unsubRx = serial.onData((bytes) => ingest(bytes, 'rx', format))
     unsubTx = serial.onTxData((bytes) => ingest(bytes, 'tx', format))
 
@@ -109,6 +112,7 @@ export const useRecorderStore = defineStore('recorder', () => {
     if (window.electron?.recorder?.onWriteError) {
       window.electron.recorder.onWriteError((msg) => {
         if (!stopping && state.value.status === 'recording') {
+          logger.error('recorder', `stream write error: ${msg}`)
           patchState({ status: 'error', error: `写盘错误: ${msg}` })
         }
       })
@@ -143,6 +147,8 @@ export const useRecorderStore = defineStore('recorder', () => {
     await flushBuffer()
     await writer?.close()
     writer = null
+
+    logger.info('recorder', `recording stopped: ${state.value.fileName} ${state.value.fileSize}B ${state.value.byteCount}B`)
 
     stopping = false
     patchState({ status: 'idle' })
@@ -191,6 +197,7 @@ export const useRecorderStore = defineStore('recorder', () => {
     if (bufferSize > BUFFER_HARD_LIMIT_BYTES) {
       const dropped = buffer.shift()
       if (dropped) bufferSize -= dropped.length
+      logger.error('recorder', `buffer overflow (>${BUFFER_HARD_LIMIT_BYTES}B), write too slow`)
       patchState({
         status: 'error',
         error: '写入跟不上数据速率，录制已停止，请降低波特率或检查磁盘'
@@ -221,6 +228,7 @@ export const useRecorderStore = defineStore('recorder', () => {
         const msg = e instanceof Error ? e.message : String(e)
         // 停止流程中发生的错误不翻成 error，避免冲掉正在收敛的 idle 态
         if (!stopping) {
+          logger.error('recorder', `flush failed: ${msg}`)
           patchState({ status: 'error', error: `写入失败: ${msg}` })
         }
       }

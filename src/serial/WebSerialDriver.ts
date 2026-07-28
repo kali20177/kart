@@ -1,4 +1,5 @@
 import type { PortOptions, SerialSignals, SerialDriver } from '@/types'
+import { logger } from '@/utils/logger'
 
 interface PortEntry {
   key: string
@@ -149,6 +150,7 @@ export class WebSerialDriver implements SerialDriver {
 
   private _addEntry(port: SerialPort, key: string): void {
     const onDisconnect = () => {
+      logger.warn('webserial', `device disconnected: ${key}`)
       // 如果断开的是当前活动端口，触发清理
       if (this._port === port) {
         this._isOpen = false

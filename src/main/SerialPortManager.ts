@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { SerialPort } from 'serialport'
+import { mainLogger } from './logger'
 
 /**
  * macOS 系统伪终端 —— IOKit 将其报告为串口设备，但并非用户可连接的真实串口。
@@ -87,7 +88,7 @@ export class SerialPortManager {
           productId: i.productId
         }))
     } catch (e) {
-      console.error('[serialport] listPorts failed:', e)
+      mainLogger.error('serialport', `listPorts failed: ${e instanceof Error ? e.message : String(e)}`)
       return []
     }
   }
@@ -131,16 +132,18 @@ export class SerialPortManager {
           reject(new Error(`打开串口 ${path} 失败: ${err.message}`))
         } else {
           // 运行阶段错误 —— 推送并关闭
+          mainLogger.error('serialport', `runtime error on ${path}: ${err.message}`)
           this._sendError(`串口错误: ${err.message}`)
           this.close()
         }
       })
 
-      // 物理断连
+      // 物理断连（主动 close() 已先把 _isOpen 置 false，不会误报）
       port.on('close', () => {
         if (this._isOpen) {
           this._isOpen = false
           this._port = null
+          mainLogger.warn('serialport', `port closed unexpectedly: ${path}`)
           this._sendError('串口已断开')
         }
       })
