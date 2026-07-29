@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, SerialDriver } from '@/types'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { WebSerialDriver } from '@/serial/WebSerialDriver'
@@ -9,10 +9,15 @@ import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
 import { computeChecksum } from '@/utils/checksum'
 import { isPresetBaud, isValidBaud, loadCustomBaudRates } from '@/utils/baud'
+import { shouldReconnect } from '@/utils/reconnect'
 import type { DataMode, LineEnding } from '@/types'
 import { useMessagesStore } from './messages'
+import { useSettingsStore } from './settings'
 import { storage } from '@/composables/useStorage'
 import { logger } from '@/utils/logger'
+
+// 自动重连：固定 2s 间隔，不限次数；用户断开或关闭开关则停止。
+const RECONNECT_INTERVAL_MS = 2000
 
 const DEFAULT_OPTS: PortOptions = {
   baudRate: 115200,
@@ -27,6 +32,7 @@ export const useSerialStore = defineStore('serial', () => {
   const driverType = ref<DriverType>(getDriverType())
   const unsupportedReason = ref(getUnsupportedReason())
   const messages = useMessagesStore()
+  const settings = useSettingsStore()
 
   const ports = ref<string[]>([])
   const selectedPort = ref<string | null>(null)
@@ -41,6 +47,14 @@ export const useSerialStore = defineStore('serial', () => {
   const txBytes = ref(0)
   const sessionStartedAt = ref<number | null>(null)
 
+  // ── 自动重连状态 ──
+  // reconnecting=true 表示正在间隔等待中。曾意外掉线（非用户主动断开）且
+  // 设置开启自动重连时启动；连接成功、用户手动断开、或关闭开关即清除。
+  const reconnecting = ref(false)
+  const reconnectAttempts = ref(0)
+  // 下次重连的时间戳（Date.now()），UI 据此显示倒计时；null 表示未在重连。
+  const reconnectNextAt = ref<number | null>(null)
+
   // 用户自定义波特率（可带标注，持久化）。预设档位不在此列、不可删除。
   // 读取时兼容旧版 number[] 格式（见 loadCustomBaudRates）。
   const customBaudRates = ref<CustomBaudRate[]>(
@@ -49,6 +63,10 @@ export const useSerialStore = defineStore('serial', () => {
 
   let unsubscribe: (() => void) | null = null
   let signalTimer: ReturnType<typeof setInterval> | null = null
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  // 标记下一次 disconnect 的触发原因：true=用户主动断开，重连应跳过。
+  // 跨函数传递一次性原因，避免 disconnect() 需要新加参数签名。
+  let userInitiatedDisconnect = false
 
   // 额外的原始字节消费者（如波形 store）。与 messages store 的帧切分互不干扰：
   // 同一份字节流被两个独立消费者处理。订阅早于 connect() 也不会漏数据。
@@ -106,6 +124,14 @@ export const useSerialStore = defineStore('serial', () => {
     }
     logger.info('serial', `connected: ${selectedPort.value} @ ${summary.value} driver=${driverType.value}`)
     storage.set('portOptions', { ...options })
+    // 重连成功（reconnecting 为 true 表示这是自动重连路径）：清状态并通知 UI。
+    const wasReconnecting = reconnecting.value
+    if (wasReconnecting) {
+      stopReconnectTimer()
+      reconnecting.value = false
+      reconnectNextAt.value = null
+      reconnectAttempts.value = 0
+    }
     rxBytes.value = 0
     txBytes.value = 0
     sessionStartedAt.value = Date.now()
@@ -119,20 +145,92 @@ export const useSerialStore = defineStore('serial', () => {
       messages.ingestRx(bytes)
     })
     connected.value = true
+    if (wasReconnecting) {
+      logger.info('serial', `auto-reconnect succeeded: ${selectedPort.value}`)
+    }
     signalTimer = setInterval(() => {
       if (!driver.isOpen) {
-        // 驱动检测到物理断连，触发 full cleanup
+        // 驱动检测到物理断连，触发 full cleanup。
+        // 非用户主动断开 → 标记原因以便 disconnect 启动自动重连。
+        userInitiatedDisconnect = false
         logger.warn('serial', 'device lost (driver reported closed)')
-        disconnect()
+        void disconnect()
         return
       }
       signals.value = driver.getSignals()
     }, 500)
   }
 
+  /** 停止挂起的自动重连定时器（若有）。不重置 visible 状态。 */
+  function stopReconnectTimer() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+  }
+
+  /**
+   * 启动一次自动重连（间隔后调用 connect）。
+   * 判定集中在纯函数 shouldReconnect，便于单测。
+   */
+  function scheduleReconnect() {
+    stopReconnectTimer()
+    const decision = shouldReconnect(
+      settings.settings.autoReconnect,
+      connected.value,
+      selectedPort.value
+    )
+    if (!decision.schedule) {
+      reconnecting.value = false
+      reconnectNextAt.value = null
+      if (decision.reason === 'no-port') {
+        logger.warn('serial', 'auto-reconnect aborted: no last port to reconnect to')
+      }
+      return
+    }
+    reconnecting.value = true
+    reconnectAttempts.value += 1
+    reconnectNextAt.value = Date.now() + RECONNECT_INTERVAL_MS
+    logger.info('serial', `auto-reconnect scheduled (attempt ${reconnectAttempts.value}, next in ${RECONNECT_INTERVAL_MS}ms): ${selectedPort.value}`)
+    reconnectTimer = setTimeout(() => {
+      void attemptReconnect()
+    }, RECONNECT_INTERVAL_MS)
+  }
+
+  /** 单次重连尝试：刷新端口确认设备在位后调用 connect()。失败/未归位则继续排程下一次。 */
+  async function attemptReconnect() {
+    reconnectTimer = null
+    // 期间用户可能已关闭开关或手动重连
+    if (!settings.settings.autoReconnect || connected.value || !selectedPort.value) {
+      reconnecting.value = false
+      reconnectNextAt.value = null
+      return
+    }
+    try {
+      await refreshPorts()
+    } catch {
+      // 列举失败不致命，继续尝试 open
+    }
+    // 设备重新枚举后仍未归位（仍被拔出）→ 跳过本次，排程下一次
+    if (!ports.value.includes(selectedPort.value)) {
+      scheduleReconnect()
+      return
+    }
+    try {
+      // connect() 成功会清重连状态；失败抛错则进入 catch 继续排程
+      await connect()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      logger.warn('serial', `auto-reconnect attempt failed: ${msg}`)
+      if (!connected.value) scheduleReconnect()
+    }
+  }
+
   async function disconnect() {
     if (!connected.value) return
     const started = sessionStartedAt.value
+    const reconnect = !userInitiatedDisconnect
+    userInitiatedDisconnect = false
     unsubscribe?.()
     unsubscribe = null
     if (signalTimer) {
@@ -147,6 +245,25 @@ export const useSerialStore = defineStore('serial', () => {
       ? ` (session ${Math.max(1, Math.round((Date.now() - started) / 1000))}s rx=${rxBytes.value}B tx=${txBytes.value}B)`
       : ''
     logger.info('serial', `disconnected${session}`)
+    // 意外掉线（非用户主动）且开启自动重连 → 排程重连
+    if (reconnect && settings.settings.autoReconnect) {
+      scheduleReconnect()
+    } else {
+      // 用户主动断开或开关已关：确保无残留重连挂起
+      stopReconnectTimer()
+      reconnecting.value = false
+      reconnectNextAt.value = null
+      reconnectAttempts.value = 0
+    }
+  }
+
+  /**
+   * 用户主动断开（连接按钮、驱动切换等）：标记原因后调用 disconnect，
+   * 确保 disconnect 不会反过来启动自动重连，并清掉挂起的重连。
+   */
+  async function userDisconnect() {
+    userInitiatedDisconnect = true
+    await disconnect()
   }
 
   function setScenario(id: MockScenarioId) {
@@ -159,7 +276,12 @@ export const useSerialStore = defineStore('serial', () => {
   /** 切换驱动类型（仅 DEV 模式生效） */
   async function switchDriver(type: DriverType) {
     if (type === driverType.value) return
-    if (connected.value) await disconnect()
+    if (connected.value) await userDisconnect()
+    // 切换驱动期间停止任何挂起的自动重连（端口/驱动都已变化）
+    stopReconnectTimer()
+    reconnecting.value = false
+    reconnectNextAt.value = null
+    reconnectAttempts.value = 0
     const prevDriver = driver
     setDriverType(type)
     driverType.value = getDriverType()
@@ -295,6 +417,19 @@ export const useSerialStore = defineStore('serial', () => {
     storage.set('customBaudRates', [])
   }
 
+  // 用户在重连等待期间关闭「自动重连」开关 → 停止挂起重连、恢复未连接状态。
+  watch(
+    () => settings.settings.autoReconnect,
+    (on) => {
+      if (!on) {
+        stopReconnectTimer()
+        reconnecting.value = false
+        reconnectNextAt.value = null
+        reconnectAttempts.value = 0
+      }
+    }
+  )
+
   return {
     ports,
     selectedPort,
@@ -309,10 +444,14 @@ export const useSerialStore = defineStore('serial', () => {
     summary,
     driverType,
     unsupportedReason,
+    reconnecting,
+    reconnectAttempts,
+    reconnectNextAt,
     refreshPorts,
     requestPort,
     connect,
     disconnect,
+    userDisconnect,
     setScenario,
     switchDriver,
     addCustomBaudRate,

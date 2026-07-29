@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useTransferStore } from '@/stores/transfer'
 import { useRecorderStore } from '@/stores/recorder'
 import { useI18n } from 'vue-i18n'
+import { countdownSecs } from '@/utils/reconnect'
 
 const serial = useSerialStore()
 const messages = useMessagesStore()
@@ -17,10 +18,12 @@ const { t } = useI18n()
 // nowTick 在静态期保持当前秒数，驱动 recordDuration 在静默期也前进
 const nowTick = ref(Date.now())
 let tickTimer: ReturnType<typeof setInterval> | null = null
+// nowTick 在录制活跃或自动重连等待期间保持每秒前进：前者驱动 recordDuration，
+// 后者驱动 reconnectCountdown 倒计时。
 watch(
-  () => recorder.state.status,
-  (status) => {
-    const active = status !== 'idle' && status !== 'stopping'
+  [() => recorder.state.status, () => serial.reconnecting],
+  ([status, reconnecting]) => {
+    const active = (status !== 'idle' && status !== 'stopping') || reconnecting
     if (active && !tickTimer) {
       tickTimer = setInterval(() => {
         nowTick.value = Date.now()
@@ -169,13 +172,25 @@ const signalList = computed(() => [
   { key: 'DSR', on: serial.signals.dsr },
   { key: 'RI', on: serial.signals.ri }
 ])
+
+// 自动重连倒计时显示。nowTick 1s 驱动重算；reconnectNextAt 是下次尝试时刻。
+const reconnectCountdown = computed(() => {
+  void nowTick.value // 1s tick 触发重算
+  if (!serial.reconnecting) return ''
+  if (!serial.reconnectNextAt) return t('status.reconnecting', { n: serial.reconnectAttempts })
+  const secs = countdownSecs(Date.now(), serial.reconnectNextAt)
+  return t('status.reconnectCountdown', { n: secs, m: serial.reconnectAttempts })
+})
 </script>
 
 <template>
   <div class="status">
     <!-- 连接指示 -->
-    <span class="led" :class="{ on: serial.connected }" />
-    <span class="port" :class="{ stale: hasSessionData && !serial.connected }">
+    <span class="led" :class="{ on: serial.connected, reconnecting: serial.reconnecting }" />
+    <span v-if="serial.reconnecting" class="reconnect-indicator">
+      {{ reconnectCountdown }}
+    </span>
+    <span v-else class="port" :class="{ stale: hasSessionData && !serial.connected }">
       {{ serial.connected || hasSessionData ? serial.selectedPort : t('status.notConnected') }}
     </span>
     <span v-if="serial.connected || hasSessionData" class="summary" :class="{ stale: !serial.connected }">
@@ -289,9 +304,31 @@ const signalList = computed(() => [
   background: var(--ok);
   box-shadow: 0 0 5px var(--ok);
 }
+.led.reconnecting {
+  background: #f0a020;
+  animation: led-blink 1s ease-in-out infinite;
+}
+@keyframes led-blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 5px #f0a020; }
+  50%      { opacity: 0.25; box-shadow: 0 0 0 #f0a020; }
+}
 .port {
   color: var(--text);
   font-family: var(--mono-font);
+}
+.reconnect-indicator {
+  color: #f0a020;
+  font-family: var(--mono-font);
+  white-space: nowrap;
+  animation: rec-text-pulse 1.5s ease-in-out infinite;
+}
+@keyframes rec-text-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .led.reconnecting { animation-duration: 2.4s; }
+  .reconnect-indicator { animation: none; }
 }
 .summary {
   font-family: var(--mono-font);

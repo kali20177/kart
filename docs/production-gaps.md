@@ -35,7 +35,7 @@
 14. **单连接，不支持多端口并发** — `serial` store 单例 driver。同时盯多设备做不到。〔依赖驱动〕
 15. **快速命令不支持变量/宏替换** — `QuickCommand.payload` 静态。缺计数器、时间戳、CRC 占位；无每命令独立循环发送。
 16. ✅ **波形缺测量与导出** — 已完成：`WaveformChart` 支持游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看，支持 CSV 导出波形数据。
-17. **自动重连是空开关** — `autoReconnect` 设置存在，无重连逻辑，无掉线提示。〔依赖驱动〕
+17. ✅ **自动重连是空开关** — 已完成。`settings.autoReconnect` 开关在 `SettingsModal` 连接页生效。串口 store（`src/stores/serial.ts`）在驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）时，按固定 2s 间隔无限次重试 `connect()`；用户点击断开/切换驱动走 `userDisconnect()` 标记原因不重连，关闭开关立即停止挂起重连。重连前 `refreshPorts()` 确认设备归位，未归位则继续排程；`WebSerialDriver.listPorts` 现重新拉取 `getPorts()`，让拔插后重新接入的已授权端口自愈列表，支持 Web Serial 下的断插重连。状态：`reconnecting`/`reconnectAttempts`/`reconnectNextAt`，`StatusBar` 显示橙色 LED +「重连中…{n}s后重试 · 第{m}次」倒计时（nowTick 驱动 1s 刷新）；重连成功在 `ConnectionBar` 弹一次 toast。判定逻辑集中在纯函数 `src/utils/reconnect.ts`（`shouldReconnect` / `countdownSecs`，有单测 8 例），避免 store 与组件各算一套。
 18. ✅ **缺少实时日志落盘** — 已完成。原始字节流在帧切分之前通过 `serial.onData`/`onTxData` 双通道捕获，经 500ms/64KB 缓冲批量写入文件。平台抽象 `IFileWriter`（`src/composables/useFileWriter.ts`）：浏览器走 File System Access API（`showSaveFilePicker` + `FileSystemWritableFileStream`），Electron 走 `dialog.showSaveDialog` + `fs.createWriteStream` IPC。录制器 store（`src/stores/recorder.ts`）管理状态机（idle→recording→stopping→idle/error），支持断线自动停止、写入异常进入 error 状态。录制按钮+格式切换在 `ConnectionBar`，录制指示（脉动红点+文件名+文件大小+已录制时长）在 `StatusBar`，菜单项在 `MenuBar`。输出格式可选 `.txt`（带时间戳 HEX 行，含方向标记 RX/TX）或 `.csv`（timestamp,direction,hex,ascii 四列）。浏览器不支持 File System Access API 时按钮自动置灰。
    - **老化/稳定性测试**：设备连续运行 24h+，需要完整记录所有串口输出用于事后异常回溯。内存缓冲远远不够，必须流式写入磁盘。
    - **现场抓日志**：客户现场复现问题，可能需要抓取数小时数据带回实验室分析。

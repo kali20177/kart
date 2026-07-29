@@ -112,9 +112,13 @@ export default {
     editNoteTooltip: '编辑标注',
     requestPort: '选择串口设备',
     connectFailed: '连接失败',
+    reconnected: '串口已重新连接',
   },
   status: {
     notConnected: '未连接',
+    reconnecting: '重连中…第{n}次',
+    reconnectCountdown: '重连中…{n}s后重试 · 第{m}次',
+    reconnected: '串口已重新连接',
     sessionDuration: '会话时长',
     rxFramesTip: 'RX 帧数 / 帧速率',
     txFramesTip: 'TX 帧数 / 帧速率',
@@ -238,7 +242,7 @@ export default {
     maxPoints: '可视窗口点数',
     maxHistoryPoints: '历史缓冲上限',
     // 连接
-    autoReconnect: '掉线自动重连（阶段 2 生效）',
+    autoReconnect: '掉线自动重连',
     // 波特率
     customBaud: '自定义波特率',
     baudEmpty: '在连接栏波特率框输入新数值即可添加；预设档位不可删除。',

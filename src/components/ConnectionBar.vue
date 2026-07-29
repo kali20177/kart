@@ -174,7 +174,7 @@ const parityOptions = [
 const scenarioOptions = SCENARIOS.map((s) => ({ label: s.label, value: s.id }))
 
 async function toggle() {
-  if (serial.connected) await serial.disconnect()
+  if (serial.connected) await serial.userDisconnect()
   else {
     try {
       await serial.connect()
@@ -183,6 +183,17 @@ async function toggle() {
     }
   }
 }
+
+// 自动重连成功提示一次：reconnecting true→false 且此时已连接，即为重连成功。
+// 用户手动连接不走重连路径（reconnecting 一直为 false），不会误触发。
+watch(
+  () => serial.reconnecting,
+  (reconnecting, prev) => {
+    if (prev && !reconnecting && serial.connected) {
+      message.success(t('conn.reconnected'))
+    }
+  }
+)
 
 async function onRequestPort() {
   try {

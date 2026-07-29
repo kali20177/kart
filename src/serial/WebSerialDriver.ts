@@ -30,6 +30,10 @@ export class WebSerialDriver implements SerialDriver {
 
   async listPorts(): Promise<string[]> {
     await this._restorePromise
+    // 重新拉取已授权端口：设备拔出后重新接入，getPorts() 仍会返回同一授权
+    // SerialPort 对象。_addEntry 内部已做去重（按 key），故每次 listPorts 自愈列表，
+    // 让「自动重连」轮询 refreshPorts() 时能重新发现归位设备。
+    await this._restorePorts()
     return this._entries.map((e) => e.key)
   }
 
