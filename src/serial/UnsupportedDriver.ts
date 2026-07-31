@@ -1,4 +1,4 @@
-import type { PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
 
 /**
  * 不兼容占位驱动 -- 浏览器不支持 Web Serial / 非安全上下文时使用。
@@ -17,7 +17,7 @@ export class UnsupportedDriver implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<string[]> {
+  async listPorts(): Promise<PortInfo[]> {
     return []
   }
 

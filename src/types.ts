@@ -59,11 +59,24 @@ export interface SerialSignals {
 }
 
 /**
+ * 串口枚举项。各驱动尽力填充元数据：
+ * - serialport：path/manufacturer/vendorId/productId 均有
+ * - Web Serial：path + vendorId/productId（厂商名按 VID 反查 usb-vendors 表，查不到则无）
+ * - mock：造假的完整元数据用于开发预览
+ */
+export interface PortInfo {
+  path: string
+  manufacturer?: string
+  vendorId?: string
+  productId?: string
+}
+
+/**
  * 串口驱动接口 —— Mock 与未来的 Web Serial 实现共享这一契约。
  * 阶段 2 只需写一个实现该接口的 WebSerialDriver，serial store 不动。
  */
 export interface SerialDriver {
-  listPorts(): Promise<string[]>
+  listPorts(): Promise<PortInfo[]>
   /** 触发浏览器串口选择器（Web Serial 专属），返回新端口标识；用户取消返回 null */
   requestPort?(): Promise<string | null>
   open(path: string, options: PortOptions): Promise<void>

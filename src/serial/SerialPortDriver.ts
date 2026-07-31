@@ -1,4 +1,4 @@
-import type { PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
 
 /**
  * serialport 驱动 —— 通过 IPC 委托主进程的 serialport 库执行串口操作。
@@ -21,12 +21,17 @@ export class SerialPortDriver implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<string[]> {
+  async listPorts(): Promise<PortInfo[]> {
     const api = this._api()
     if (!api) return []
     try {
       const infos = await api.listPorts()
-      return infos.map((i) => i.path)
+      return infos.map((i) => ({
+        path: i.path,
+        manufacturer: i.manufacturer,
+        vendorId: i.vendorId,
+        productId: i.productId
+      }))
     } catch {
       return []
     }
@@ -138,7 +143,7 @@ export class SerialPortDriver implements SerialDriver {
 
 /** 预加载脚本暴露的 serial API 类型 */
 export interface ElectronSerial {
-  listPorts(): Promise<Array<{ path: string; manufacturer?: string; vendorId?: string; productId?: string }>>
+  listPorts(): Promise<PortInfo[]>
   open(portName: string, options: PortOptions): Promise<void>
   close(): Promise<void>
   write(data: Uint8Array): Promise<number>

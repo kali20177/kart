@@ -1,4 +1,5 @@
-import type { PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import { lookupVendorName, toHexId } from '@/utils/usb-vendors'
 import { logger } from '@/utils/logger'
 
 interface PortEntry {
@@ -28,13 +29,13 @@ export class WebSerialDriver implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<string[]> {
+  async listPorts(): Promise<PortInfo[]> {
     await this._restorePromise
     // 重新拉取已授权端口：设备拔出后重新接入，getPorts() 仍会返回同一授权
     // SerialPort 对象。_addEntry 内部已做去重（按 key），故每次 listPorts 自愈列表，
     // 让「自动重连」轮询 refreshPorts() 时能重新发现归位设备。
     await this._restorePorts()
-    return this._entries.map((e) => e.key)
+    return this._entries.map((e) => this._toPortInfo(e.port, e.key))
   }
 
   /** 触发浏览器串口选择器，返回新端口的标识字符串。用户取消返回 null。 */
@@ -138,6 +139,22 @@ export class WebSerialDriver implements SerialDriver {
   }
 
   // ── private ──
+
+  private _toPortInfo(port: SerialPort, key: string): PortInfo {
+    try {
+      const info = port.getInfo()
+      const vendorId = info.usbVendorId ? toHexId(info.usbVendorId) : undefined
+      const productId = info.usbProductId ? toHexId(info.usbProductId) : undefined
+      return {
+        path: key,
+        vendorId,
+        productId,
+        // 浏览器拿不到厂商字符串，按 VID 反查常见厂商表；查不到则留空（UI 显示裸 VID）
+        manufacturer: vendorId ? lookupVendorName(vendorId) : undefined
+      }
+    } catch { /* 旧版 Chrome getInfo 可能抛错 */ }
+    return { path: key }
+  }
 
   private _makeKey(port: SerialPort): string {
     try {

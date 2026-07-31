@@ -1,4 +1,4 @@
-import type { MockScenarioId, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { MockScenarioId, PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
 import {
   atResponse,
   binaryFrame,
@@ -22,8 +22,13 @@ export class MockSerialSource implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<string[]> {
-    return ['COM3', 'COM7', '/dev/ttyUSB0']
+  async listPorts(): Promise<PortInfo[]> {
+    // 造假的完整元数据，用于开发模式预览下拉两行效果
+    return [
+      { path: 'COM3', manufacturer: 'QinHeng Electronics (CH340/CH341)', vendorId: '1a86', productId: '7523' },
+      { path: 'COM7', manufacturer: 'Silicon Labs (CP210x)', vendorId: '10c4', productId: 'ea60' },
+      { path: '/dev/ttyUSB0', manufacturer: 'FTDI (FT232R/FT2232)', vendorId: '0403', productId: '6001' }
+    ]
   }
 
   async open(_path: string, _options: PortOptions): Promise<void> {

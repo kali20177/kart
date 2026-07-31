@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
-import type { MockScenarioId, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, SerialDriver } from '@/types'
+import type { MockScenarioId, PortInfo, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, SerialDriver } from '@/types'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { WebSerialDriver } from '@/serial/WebSerialDriver'
 import { SerialPortDriver } from '@/serial/SerialPortDriver'
@@ -34,7 +34,7 @@ export const useSerialStore = defineStore('serial', () => {
   const messages = useMessagesStore()
   const settings = useSettingsStore()
 
-  const ports = ref<string[]>([])
+  const ports = ref<PortInfo[]>([])
   const selectedPort = ref<string | null>(null)
   const connected = ref(false)
   const options = reactive<PortOptions>({
@@ -96,7 +96,7 @@ export const useSerialStore = defineStore('serial', () => {
   async function refreshPorts() {
     ports.value = await driver.listPorts()
     if (!selectedPort.value && ports.value.length > 0) {
-      selectedPort.value = ports.value[0]
+      selectedPort.value = ports.value[0].path
     }
   }
 
@@ -212,7 +212,7 @@ export const useSerialStore = defineStore('serial', () => {
       // 列举失败不致命，继续尝试 open
     }
     // 设备重新枚举后仍未归位（仍被拔出）→ 跳过本次，排程下一次
-    if (!ports.value.includes(selectedPort.value)) {
+    if (!ports.value.some((p) => p.path === selectedPort.value)) {
       scheduleReconnect()
       return
     }

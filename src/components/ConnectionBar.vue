@@ -7,7 +7,7 @@ import { useRecorderStore } from '@/stores/recorder'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
-import type { MockScenarioId } from '@/types'
+import type { MockScenarioId, PortInfo } from '@/types'
 
 const isDev = import.meta.env.DEV
 
@@ -22,7 +22,37 @@ const serial = useSerialStore()
 const recorder = useRecorderStore()
 const message = useMessage()
 
-const portOptions = computed(() => serial.ports.map((p) => ({ label: p, value: p })))
+const portOptions = computed(() => serial.ports.map((p) => ({ label: p.path, value: p.path })))
+
+/** 端口下拉第二行：厂商名 + VID/PID。触发框（selected）只显示路径，元数据降级到菜单项。 */
+function formatPortMeta(p: PortInfo): string {
+  const id = p.vendorId && p.productId ? `VID:${p.vendorId} PID:${p.productId}` : p.vendorId ? `VID:${p.vendorId}` : ''
+  return [p.manufacturer, id].filter(Boolean).join(' · ')
+}
+
+const renderPortOption: RenderOption = (info) => {
+  const path = (info.option as { value: string }).value as string
+  const meta = serial.ports.find((p) => p.path === path)
+  const metaText = meta ? formatPortMeta(meta) : ''
+  if (!metaText) return info.node
+  // render-option 返回的节点会整体替换原 option，丢失其 onClick/onMouseenter 等处理器
+  //（select 的选中点击就在这些 props 上）。因此保留原 props 重建同一 div，仅把元数据行
+  // 追加为第二行子节点并改为纵向布局 —— 整行（含灰色小字）都在可点击区域内。
+  const base = info.node as VNode
+  const props = base.props as Record<string, unknown> | null
+  const origStyle = props && Array.isArray(props.style) ? props.style : props?.style ? [props.style] : []
+  const children = (base.children ? (Array.isArray(base.children) ? base.children : [base.children]) : []) as VNode[]
+  return h('div', {
+    ...props,
+    style: [...origStyle, 'display:flex;flex-direction:column;align-items:flex-start;']
+  }, [
+    ...children,
+    h('span', {
+      style:
+        'color:var(--text-dim);font-size:11px;line-height:1;margin-top:2px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+    }, metaText)
+  ])
+}
 
 const baudOptions = computed<SelectOption[]>(() => {
   const all = new Set<number>(PRESET_BAUDS)
@@ -259,6 +289,7 @@ onBeforeUnmount(() => {
         <NSelect
           v-model:value="serial.selectedPort"
           :options="portOptions"
+          :render-option="renderPortOption"
           :consistent-menu-width="false"
           size="small"
           :placeholder="t('conn.selectPort')"
