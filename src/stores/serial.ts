@@ -11,10 +11,18 @@ import { computeChecksum } from '@/utils/checksum'
 import { isPresetBaud, isValidBaud, loadCustomBaudRates } from '@/utils/baud'
 import { shouldReconnect } from '@/utils/reconnect'
 import type { DataMode, LineEnding } from '@/types'
-import { useMessagesStore } from './messages'
-import { useSettingsStore } from './settings'
 import { storage } from '@/composables/useStorage'
 import { logger } from '@/utils/logger'
+import { useMessagesStore } from './messages'
+import { useSettingsStore } from './settings'
+
+/** serial store 的外部依赖——RX/TX 帧写入委托给 messages，自动重连开关来自全局设置。
+ *  ingestRx/addTx 由调用方注入；settings 是全局 settings store 的同一 reactive proxy。 */
+export interface SerialDeps {
+  ingestRx: (bytes: Uint8Array) => void
+  addTx: (bytes: Uint8Array, error?: string) => void
+  settings: { autoReconnect: boolean }
+}
 
 // 自动重连：固定 2s 间隔，不限次数；用户断开或关闭开关则停止。
 const RECONNECT_INTERVAL_MS = 2000
@@ -27,12 +35,10 @@ const DEFAULT_OPTS: PortOptions = {
   flowControl: 'none'
 }
 
-export const useSerialStore = defineStore('serial', () => {
+export function createSerialStore(deps: SerialDeps) {
   let driver: SerialDriver = createSerialDriver()
   const driverType = ref<DriverType>(getDriverType())
   const unsupportedReason = ref(getUnsupportedReason())
-  const messages = useMessagesStore()
-  const settings = useSettingsStore()
 
   const ports = ref<PortInfo[]>([])
   const selectedPort = ref<string | null>(null)
@@ -142,7 +148,7 @@ export const useSerialStore = defineStore('serial', () => {
       if (externalDataListeners.size > 0) {
         for (const cb of externalDataListeners) cb(bytes)
       }
-      messages.ingestRx(bytes)
+      deps.ingestRx(bytes)
     })
     connected.value = true
     if (wasReconnecting) {
@@ -176,7 +182,7 @@ export const useSerialStore = defineStore('serial', () => {
   function scheduleReconnect() {
     stopReconnectTimer()
     const decision = shouldReconnect(
-      settings.settings.autoReconnect,
+      deps.settings.autoReconnect,
       connected.value,
       selectedPort.value
     )
@@ -201,7 +207,7 @@ export const useSerialStore = defineStore('serial', () => {
   async function attemptReconnect() {
     reconnectTimer = null
     // 期间用户可能已关闭开关或手动重连
-    if (!settings.settings.autoReconnect || connected.value || !selectedPort.value) {
+    if (!deps.settings.autoReconnect || connected.value || !selectedPort.value) {
       reconnecting.value = false
       reconnectNextAt.value = null
       return
@@ -246,7 +252,7 @@ export const useSerialStore = defineStore('serial', () => {
       : ''
     logger.info('serial', `disconnected${session}`)
     // 意外掉线（非用户主动）且开启自动重连 → 排程重连
-    if (reconnect && settings.settings.autoReconnect) {
+    if (reconnect && deps.settings.autoReconnect) {
       scheduleReconnect()
     } else {
       // 用户主动断开或开关已关：确保无残留重连挂起
@@ -358,12 +364,12 @@ export const useSerialStore = defineStore('serial', () => {
       if (txDataListeners.size > 0) {
         for (const cb of txDataListeners) cb(bytes)
       }
-      messages.addTx(bytes)
+      deps.addTx(bytes)
       return { ok: true }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('serial', `write failed: ${msg}`)
-      messages.addTx(bytes, msg)
+      deps.addTx(bytes, msg)
       return { ok: false, error: msg }
     }
   }
@@ -380,12 +386,12 @@ export const useSerialStore = defineStore('serial', () => {
       if (txDataListeners.size > 0) {
         for (const cb of txDataListeners) cb(bytes)
       }
-      if (record) messages.addTx(bytes)
+      if (record) deps.addTx(bytes)
       return { ok: true }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('serial', `write failed: ${msg}`)
-      if (record) messages.addTx(bytes, msg)
+      if (record) deps.addTx(bytes, msg)
       return { ok: false, error: msg }
     }
   }
@@ -399,12 +405,12 @@ export const useSerialStore = defineStore('serial', () => {
       if (txDataListeners.size > 0) {
         for (const cb of txDataListeners) cb(bytes)
       }
-      messages.addTx(bytes)
+      deps.addTx(bytes)
       return { ok: true }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('serial', `write failed: ${msg}`)
-      messages.addTx(bytes, msg)
+      deps.addTx(bytes, msg)
       return { ok: false, error: msg }
     }
   }
@@ -419,7 +425,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 用户在重连等待期间关闭「自动重连」开关 → 停止挂起重连、恢复未连接状态。
   watch(
-    () => settings.settings.autoReconnect,
+    () => deps.settings.autoReconnect,
     (on) => {
       if (!on) {
         stopReconnectTimer()
@@ -464,4 +470,14 @@ export const useSerialStore = defineStore('serial', () => {
     onData,
     reset
   }
+}
+
+export const useSerialStore = defineStore('serial', () => {
+  const m = useMessagesStore()
+  const s = useSettingsStore()
+  return createSerialStore({
+    ingestRx: (bytes) => m.ingestRx(bytes),
+    addTx: (bytes, error) => m.addTx(bytes, error),
+    settings: s.settings,
+  })
 })

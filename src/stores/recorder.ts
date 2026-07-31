@@ -1,11 +1,21 @@
 import { defineStore } from 'pinia'
 import { shallowRef, triggerRef, watch, computed } from 'vue'
+import type { Ref } from 'vue'
 import type { RecordConfig, RecordFormat, RecordState } from '@/types'
 import { useSerialStore } from './serial'
+import { storeToRefs } from 'pinia'
 import { useSettingsStore } from './settings'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
 import type { IFileWriter } from '@/composables/useFileWriter'
 import { logger } from '@/utils/logger'
+
+/** recorder store 的外部依赖——原始字节流与连接状态来自 serial，录制格式来自全局设置。 */
+export interface RecorderDeps {
+  onData: (cb: (bytes: Uint8Array) => void) => () => void
+  onTxData: (cb: (bytes: Uint8Array) => void) => () => void
+  connected: Ref<boolean>
+  settings: { recordFormat: RecordFormat }
+}
 
 const FLUSH_INTERVAL_MS = 500
 const FLUSH_SIZE_BYTES = 64 * 1024
@@ -13,9 +23,7 @@ const FLUSH_SIZE_BYTES = 64 * 1024
 // 超过则丢弃最旧批次并通过状态向用户示警。
 const BUFFER_HARD_LIMIT_BYTES = 16 * 1024 * 1024
 
-export const useRecorderStore = defineStore('recorder', () => {
-  const serial = useSerialStore()
-  const settings = useSettingsStore()
+export function createRecorderStore(deps: RecorderDeps) {
   const recordDir = useRecordDirectory()
 
   const state = shallowRef<RecordState>({
@@ -73,7 +81,7 @@ export const useRecorderStore = defineStore('recorder', () => {
       throw new Error('请先在设置中配置录制目录')
     }
 
-    const format = _config?.format ?? settings.settings.recordFormat
+    const format = _config?.format ?? deps.settings.recordFormat
     const fileName = generateFileName(format)
     const w = await recordDir.createFile(fileName)
     if (!w) {
@@ -104,8 +112,8 @@ export const useRecorderStore = defineStore('recorder', () => {
 
     logger.info('recorder', `recording started: ${w.getFileName()} format=${format}`)
 
-    unsubRx = serial.onData((bytes) => ingest(bytes, 'rx', format))
-    unsubTx = serial.onTxData((bytes) => ingest(bytes, 'tx', format))
+    unsubRx = deps.onData((bytes) => ingest(bytes, 'rx', format))
+    unsubTx = deps.onTxData((bytes) => ingest(bytes, 'tx', format))
 
     // 监听 Electron 流级异步错误（两次 write 之间的 ENOSPC 等），
     // 立即将状态翻为 error 而非等下次 write-chunk 才检测到。
@@ -238,7 +246,7 @@ export const useRecorderStore = defineStore('recorder', () => {
   }
 
   // 断线自动停止
-  watch(() => serial.connected, (connected) => {
+  watch(deps.connected, (connected) => {
     if (!connected && (state.value.status === 'recording' || state.value.status === 'error')) {
       stop()
     }
@@ -275,4 +283,15 @@ export const useRecorderStore = defineStore('recorder', () => {
     start,
     stop
   }
+}
+
+export const useRecorderStore = defineStore('recorder', () => {
+  const serial = useSerialStore()
+  const settings = useSettingsStore()
+  return createRecorderStore({
+    onData: (cb) => serial.onData(cb),
+    onTxData: (cb) => serial.onTxData(cb),
+    connected: storeToRefs(serial).connected,
+    settings: settings.settings,
+  })
 })

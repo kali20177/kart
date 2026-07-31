@@ -3,6 +3,13 @@ import { ref } from 'vue'
 import { useMessagesStore } from './messages'
 import { useWaveformStore } from './waveform'
 
+/** pause store 的外部依赖——clearAll 需要清空消息列表与波形图。
+ *  两个回调在调用方（defineStore wrapper 或 createSession）注入，本文件不直接引用 peer store。 */
+export interface PauseDeps {
+  clearMessages: () => void
+  clearWaveform: () => void
+}
+
 /**
  * 应用级「暂停采集」状态——消息视图与波形视图共享的单一真相源。
  *
@@ -18,7 +25,7 @@ import { useWaveformStore } from './waveform'
  *
  * 录制（recorder store）不依赖此状态——录制是始终审计的保底线，不受显示暂停影响。
  */
-export const usePauseStore = defineStore('pause', () => {
+export function createPauseStore(deps: PauseDeps) {
   const paused = ref(false)
   const pauseStartTime = ref(0)
 
@@ -31,9 +38,16 @@ export const usePauseStore = defineStore('pause', () => {
    *  原因同暂停：两个视图的数据来自同一字节流，若各自独立清空，会失去对照（波形还在
    *  显示旧数据时消息列表已空，或反之）。录制不受影响，与暂停一致。 */
   function clearAll() {
-    useMessagesStore().clear()
-    useWaveformStore().clear()
+    deps.clearMessages()
+    deps.clearWaveform()
   }
 
   return { paused, pauseStartTime, toggle, clearAll }
-})
+}
+
+export const usePauseStore = defineStore('pause', () =>
+  createPauseStore({
+    clearMessages: () => useMessagesStore().clear(),
+    clearWaveform: () => useWaveformStore().clear(),
+  })
+)

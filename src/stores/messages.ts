@@ -1,18 +1,29 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { Direction, Message } from '@/types'
+import type { Ref } from 'vue'
+import type { ChecksumAlgorithm, Direction, FrameConfig, Message } from '@/types'
 import { FrameSplitter } from '@/composables/useFrameSplitter'
 import { useSettingsStore } from './settings'
 import { usePauseStore } from './pause'
 import { verifyChecksum, checksumByteLength } from '@/utils/checksum'
 
-export const useMessagesStore = defineStore('messages', () => {
-  const settingsStore = useSettingsStore()
+/** messages store 的外部依赖——帧配置/缓冲上限来自全局设置，暂停状态与清空来自 pause。
+ *  设置对象是全局 settings store 的同一 reactive proxy（窄化为本 store 实际读取的字段）。 */
+export interface MessagesDeps {
+  settings: {
+    frame: FrameConfig
+    bufferLimit: number
+    rxChecksumAlgorithm: ChecksumAlgorithm
+  }
+  paused: Ref<boolean>
+  pauseStartTime: Ref<number>
+  togglePause: () => void
+}
+
+export function createMessagesStore(deps: MessagesDeps) {
   // 应用级全局暂停（与波形视图共享）——见 pause store 说明。
-  const pause = usePauseStore()
-  // storeToRefs 取得保持响应式的 ref（直接访问 pause.paused 会被 Pinia 解包为普通布尔）。
-  const { paused, pauseStartTime } = storeToRefs(pause)
+  const { paused, pauseStartTime } = deps
 
   // 用 shallowRef + 手动 triggerRef，避免逐条 push 触发深度响应式开销
   const messages = shallowRef<Message[]>([])
@@ -21,7 +32,7 @@ export const useMessagesStore = defineStore('messages', () => {
   const rxErrorFrames = ref(0)
 
   let nextId = 1
-  const splitter = new FrameSplitter(settingsStore.settings.frame)
+  const splitter = new FrameSplitter(deps.settings.frame)
 
   // 待刷入的帧队列 + rAF 批处理句柄
   let pending: Message[] = []
@@ -31,7 +42,7 @@ export const useMessagesStore = defineStore('messages', () => {
 
   // 设置里帧策略变化时同步给切分器
   watch(
-    () => settingsStore.settings.frame,
+    () => deps.settings.frame,
     (cfg) => splitter.setConfig({ ...cfg }),
     { deep: true }
   )
@@ -50,7 +61,7 @@ export const useMessagesStore = defineStore('messages', () => {
     rafHandle = raf(() => {
       rafHandle = null
       if (pending.length === 0) return
-      const limit = settingsStore.settings.bufferLimit
+      const limit = deps.settings.bufferLimit
       let next = messages.value.concat(pending)
       pending = []
       if (next.length > limit) next = next.slice(next.length - limit)
@@ -67,7 +78,7 @@ export const useMessagesStore = defineStore('messages', () => {
     // 否则消息时间会系统性偏晚一个 gapMs（与波形差 ~20ms）。
     const arrived = Date.now()
     const frames = splitter.push(bytes, arrived)
-    const s = settingsStore.settings
+    const s = deps.settings
     for (const f of frames) {
       pending.push(makeRxMessage(s, f, arrived))
       rxFrames.value++
@@ -80,7 +91,7 @@ export const useMessagesStore = defineStore('messages', () => {
       if (gapTimer) clearTimeout(gapTimer)
       gapTimer = setTimeout(() => {
         // 读最新设置：用户可能在 ingest 与 flush 之间改了配置
-        const cur = settingsStore.settings
+        const cur = deps.settings
         const tail = splitter.flush()
         for (const f of tail) {
           // 时间戳用本批字节到达时间（arrived），而非定时器触发时刻
@@ -98,7 +109,7 @@ export const useMessagesStore = defineStore('messages', () => {
    * 校验前剔除帧尾的分隔符字节（保留在 frame 校验后补回显示用 bytes 不变——
    * 即：校验只看「真正载荷 + 校验和」），避免 \\r\\n 被当作载荷导致必败。
    */
-  function makeRxMessage(s: typeof settingsStore.settings, f: Uint8Array, timestamp: number): Message {
+  function makeRxMessage(s: MessagesDeps['settings'], f: Uint8Array, timestamp: number): Message {
     const msg = makeMessage('rx', f, undefined, timestamp)
     if (s.rxChecksumAlgorithm === 'none') return msg
     const len = checksumByteLength(s.rxChecksumAlgorithm)
@@ -197,8 +208,20 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   function togglePause() {
-    pause.toggle()
+    deps.togglePause()
   }
 
   return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
+}
+
+export const useMessagesStore = defineStore('messages', () => {
+  const s = useSettingsStore()
+  const p = usePauseStore()
+  const { paused, pauseStartTime } = storeToRefs(p)
+  return createMessagesStore({
+    settings: s.settings,
+    paused,
+    pauseStartTime,
+    togglePause: () => p.toggle(),
+  })
 })

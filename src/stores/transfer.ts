@@ -1,10 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, computed, watch } from 'vue'
+import type { Ref } from 'vue'
 import type { FileTransferConfig, FileTransferState, TransferPresetId, TransferStatus } from '@/types'
 import { useSerialStore } from './serial'
+import { storeToRefs } from 'pinia'
 import { useMessagesStore } from './messages'
 import { crc16modbus } from '@/utils/checksum'
 import { logger } from '@/utils/logger'
+
+/** transfer store 的外部依赖——下发/ACK 数据与连接状态来自 serial，文件气泡入消息列表。 */
+export interface TransferDeps {
+  sendRaw: (bytes: Uint8Array, record?: boolean) => Promise<{ ok: boolean; error?: string }>
+  onData: (cb: (bytes: Uint8Array) => void) => () => void
+  connected: Ref<boolean>
+  addFileTransfer: (transferId: string, filename: string, size: number) => void
+}
 
 /** 预设配置（也供 FileTransferDialog 复用） */
 export const PRESETS: Record<TransferPresetId, Partial<FileTransferConfig>> = {
@@ -87,10 +97,7 @@ function genId(): string {
   return `ft-${nextTransferId++}-${Date.now().toString(36)}`
 }
 
-export const useTransferStore = defineStore('transfer', () => {
-  const serial = useSerialStore()
-  const messages = useMessagesStore()
-
+export function createTransferStore(deps: TransferDeps) {
   // 所有下发的历史 + 活跃列表（浅响应，手动 triggerRef 刷新）
   const transfers = shallowRef<FileTransferState[]>([])
   // 活跃下发 ID（同时只能有一个活跃）
@@ -259,7 +266,7 @@ export const useTransferStore = defineStore('transfer', () => {
     for (let attempt = 0; attempt <= config.retries; attempt++) {
       if (abortFlag) return false
 
-      const r = await serial.sendRaw(wire, config.logEachChunk)
+      const r = await deps.sendRaw(wire, config.logEachChunk)
       if (!r.ok) {
         if (attempt < config.retries) continue
         return false
@@ -293,7 +300,7 @@ export const useTransferStore = defineStore('transfer', () => {
         resolve(false)
       }, config.ackTimeout)
 
-      const unsub = serial.onData((bytes: Uint8Array) => {
+      const unsub = deps.onData((bytes: Uint8Array) => {
         for (const b of bytes) {
           if (config.ackMode === 'any') {
             clearTimeout(timeout)
@@ -346,7 +353,7 @@ export const useTransferStore = defineStore('transfer', () => {
     triggerRef(transfers)
 
     // 添加消息气泡
-    messages.addFileTransfer(id, filename, bytes.length)
+    deps.addFileTransfer(id, filename, bytes.length)
 
     const startTime = Date.now()
     let totalSent = 0
@@ -485,7 +492,7 @@ export const useTransferStore = defineStore('transfer', () => {
     if (activeId.value) {
       await abort(activeId.value)
     }
-    if (!serial.connected) return
+    if (!deps.connected.value) return
 
     const bytes = new Uint8Array(await file.arrayBuffer())
     fileBytes = bytes
@@ -536,7 +543,7 @@ export const useTransferStore = defineStore('transfer', () => {
   async function retry(id: string) {
     const t = transfers.value.find((t) => t.id === id)
     if (!t) return
-    if (!serial.connected) return
+    if (!deps.connected.value) return
 
     // 从历史中移除旧记录
     const list = transfers.value.filter((x) => x.id !== id)
@@ -571,9 +578,7 @@ export const useTransferStore = defineStore('transfer', () => {
   }
 
   // ── 断线自动中止 ──
-  watch(
-    () => serial.connected,
-    (c) => {
+  watch(deps.connected, (c) => {
       if (!c && activeId.value) {
         const id = activeId.value
         updateTransfer(id, { status: 'error', error: '连接断开' })
@@ -605,4 +610,15 @@ export const useTransferStore = defineStore('transfer', () => {
     getTransfer,
     removeTransfer
   }
+}
+
+export const useTransferStore = defineStore('transfer', () => {
+  const serial = useSerialStore()
+  const m = useMessagesStore()
+  return createTransferStore({
+    sendRaw: (bytes, record) => serial.sendRaw(bytes, record),
+    onData: (cb) => serial.onData(cb),
+    connected: storeToRefs(serial).connected,
+    addFileTransfer: (id, filename, size) => m.addFileTransfer(id, filename, size),
+  })
 })

@@ -1,10 +1,27 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import type { Ref } from 'vue'
 import { useSettingsStore } from './settings'
 import { useSerialStore } from './serial'
 import { usePauseStore } from './pause'
 import { TextLineParser, type WaveformParser } from '@/utils/waveform-parser'
+import type { WaveformParseConfig } from '@/types'
+
+/** waveform store 的外部依赖——原始字节流来自 serial.onData，波形配置来自全局设置，暂停与清空来自 pause。 */
+export interface WaveformDeps {
+  onData: (cb: (bytes: Uint8Array) => void) => () => void
+  settings: {
+    waveform: {
+      parse: WaveformParseConfig
+      maxPoints: number
+      maxHistoryPoints: number
+    }
+  }
+  paused: Ref<boolean>
+  pauseStartTime: Ref<number>
+  togglePause: () => void
+}
 
 /**
  * 波形 store：订阅串口原始字节流 → 经 WaveformParser 解析为多通道采样 → 历史/可视两层缓冲。
@@ -37,13 +54,9 @@ import { TextLineParser, type WaveformParser } from '@/utils/waveform-parser'
  * `delay()`，无法假设固定频率——故不用合成时间。
  * 同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
  */
-export const useWaveformStore = defineStore('waveform', () => {
-  const settingsStore = useSettingsStore()
-  const serial = useSerialStore()
+export function createWaveformStore(deps: WaveformDeps) {
   // 应用级全局暂停（与消息视图共享）——见 pause store 说明。
-  const pause = usePauseStore()
-  // storeToRefs 取得保持响应式的 ref（直接访问 pause.paused 会被 Pinia 解包为普通布尔）。
-  const { paused, pauseStartTime } = storeToRefs(pause)
+  const { paused, pauseStartTime } = deps
 
   // 通道标签名（响应式，供组件绑定图例/按钮/tooltip）。
   // 必须在 history/data 初始化之前声明 —— buildEmpty() 参考它。
@@ -62,7 +75,7 @@ export const useWaveformStore = defineStore('waveform', () => {
   const viewOffset = ref(0)
   // 可视窗口跨度（采样数）：默认 = maxPoints；滚轮缩放时独立变化（zoomed=true）。
   // 运行中改它 = 时基缩放（仍跟随最新）；暂停时改它 = 光标锚定放大某段历史。
-  const viewSize = ref(settingsStore.settings.waveform.maxPoints)
+  const viewSize = ref(deps.settings.waveform.maxPoints)
   const zoomed = ref(false)
 
   // 数据版本号：每次 ingest / 配置变更 / 拖拽后自增，作为组件刷新 uPlot 的信号。
@@ -133,7 +146,7 @@ export const useWaveformStore = defineStore('waveform', () => {
    *  上限可配置（设置 ▸ 波形解析 ▸ 历史缓冲上限），默认 200k；
    *  UI min 锁定 maxPoints，故恒 ≥ 可视窗口，回看总有余量。 */
   function trimHistory(cur: number[][]) {
-    const maxHistory = settingsStore.settings.waveform.maxHistoryPoints
+    const maxHistory = deps.settings.waveform.maxHistoryPoints
     if (cur[0].length <= maxHistory) return
     const drop = cur[0].length - maxHistory
     for (let i = 0; i < cur.length; i++) cur[i] = cur[i].slice(drop)
@@ -145,7 +158,7 @@ export const useWaveformStore = defineStore('waveform', () => {
    * viewOffset 越界（history 变短或 viewSize 变大）在此处 clamp，保证调用方安全。
    */
   function recomputeView() {
-    const mp = settingsStore.settings.waveform.maxPoints
+    const mp = deps.settings.waveform.maxPoints
     const size = Math.min(Math.max(viewSize.value, MIN_VIEW), mp)
     if (viewSize.value !== size) viewSize.value = size
     const hist = history.value
@@ -166,7 +179,7 @@ export const useWaveformStore = defineStore('waveform', () => {
     channelCount.value = 1
     resumeBreakX.value = -1
     viewOffset.value = 0
-    viewSize.value = settingsStore.settings.waveform.maxPoints
+    viewSize.value = deps.settings.waveform.maxPoints
     zoomed.value = false
     history.value = buildEmpty()
     data.value = buildEmpty()
@@ -175,7 +188,7 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   function togglePause() {
     const wasPaused = paused.value
-    pause.toggle()
+    deps.togglePause()
     if (wasPaused) {
       // 从暂停 → 运行：回到最新（避免停留在历史里错过新数据），并记录恢复断点。
       // 断点 = history 末尾采样 X（暂停前最后一个真实时刻），从 history 读取而非解析器内部状态。
@@ -208,7 +221,7 @@ export const useWaveformStore = defineStore('waveform', () => {
    *  - newSize 撞 maxPoints → zoomed 归 false（缩放回到默认窗口）；撞 MIN_VIEW 不再变。
    */
   function zoom(factor: number, anchorFraction: number | null) {
-    const mp = settingsStore.settings.waveform.maxPoints
+    const mp = deps.settings.waveform.maxPoints
     const oldSize = Math.min(Math.max(viewSize.value, MIN_VIEW), mp)
     let newSize = Math.round(oldSize * factor)
     newSize = Math.min(Math.max(newSize, MIN_VIEW), mp)
@@ -237,7 +250,7 @@ export const useWaveformStore = defineStore('waveform', () => {
   /** 重置缩放（"重置缩放"按钮用）：viewSize 回到 maxPoints */
   function resetZoom() {
     zoomed.value = false
-    viewSize.value = settingsStore.settings.waveform.maxPoints
+    viewSize.value = deps.settings.waveform.maxPoints
     recomputeView()
   }
 
@@ -246,14 +259,14 @@ export const useWaveformStore = defineStore('waveform', () => {
   // 解析配置变更：旧数据按旧配置解析，无法沿用 → 清空重建（parser.reset()）。
   // 未来新增协议字段时，在此 watch 内按新协议重建 parser 实例（如 parser = createParser(cfg)），
   // 再 clear()；ingest() 函数体无需改动。
-  watch(() => settingsStore.settings.waveform.parse, clear, { deep: true })
+  watch(() => deps.settings.waveform.parse, clear, { deep: true })
 
   // 最大点数变更：现为「可视点数」→ 未缩放时 viewSize 跟随新 maxPoints；
   // 缩放中保持用户倍率，仅 clamp 到新 [MIN_VIEW, maxPoints]。随后重切可视窗口。
   watch(
-    () => settingsStore.settings.waveform.maxPoints,
+    () => deps.settings.waveform.maxPoints,
     () => {
-      const mp = settingsStore.settings.waveform.maxPoints
+      const mp = deps.settings.waveform.maxPoints
       if (!zoomed.value) viewSize.value = mp
       else viewSize.value = Math.min(Math.max(viewSize.value, MIN_VIEW), mp)
       recomputeView()
@@ -262,7 +275,7 @@ export const useWaveformStore = defineStore('waveform', () => {
 
   // 历史缓冲上限变更：改小立即从头裁剪 history（丢弃最旧）；改大无副作用。随后重切可视窗口。
   watch(
-    () => settingsStore.settings.waveform.maxHistoryPoints,
+    () => deps.settings.waveform.maxHistoryPoints,
     () => {
       trimHistory(history.value)
       recomputeView()
@@ -270,7 +283,21 @@ export const useWaveformStore = defineStore('waveform', () => {
   )
 
   // 订阅原始字节流（在 messages store 帧切分之前的同一份字节）
-  serial.onData((bytes) => ingest(bytes))
+  deps.onData((bytes) => ingest(bytes))
 
   return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
+}
+
+export const useWaveformStore = defineStore('waveform', () => {
+  const serial = useSerialStore()
+  const s = useSettingsStore()
+  const p = usePauseStore()
+  const { paused, pauseStartTime } = storeToRefs(p)
+  return createWaveformStore({
+    onData: (cb) => serial.onData(cb),
+    settings: s.settings,
+    paused,
+    pauseStartTime,
+    togglePause: () => p.toggle(),
+  })
 })
