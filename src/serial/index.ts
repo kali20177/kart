@@ -93,21 +93,28 @@ export function setDriverType(type: DriverType): void {
 
 let _driver: SerialDriver | null = null
 
-/** 创建或获取当前驱动实例 */
+/** 按驱动类型创建实例（无缓存）。per-session 路径与测试用。 */
+export function createDriverOfType(type: DriverType): SerialDriver {
+  switch (type) {
+    case 'serialport':
+      return new SerialPortDriver()
+    case 'webserial':
+      return new WebSerialDriver()
+    case 'mock':
+      return new MockSerialSource()
+    default:
+      return new UnsupportedDriver()
+  }
+}
+
+/** 创建当前环境类型的新驱动实例（无缓存）——每个会话一个独立实例。 */
+export function createFreshSerialDriver(): SerialDriver {
+  return createDriverOfType(getDriverType())
+}
+
+/** 创建或获取当前驱动实例（模块级缓存） */
 export function createSerialDriver(): SerialDriver {
   if (_driver) return _driver
-  switch (getDriverType()) {
-    case 'serialport':
-      _driver = new SerialPortDriver()
-      break
-    case 'webserial':
-      _driver = new WebSerialDriver()
-      break
-    case 'mock':
-      _driver = new MockSerialSource()
-      break
-    default:
-      _driver = new UnsupportedDriver()
-  }
+  _driver = createDriverOfType(getDriverType())
   return _driver
 }

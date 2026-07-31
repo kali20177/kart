@@ -1,3 +1,5 @@
+import { effectScope } from 'vue'
+import type { SerialDriver } from '@/types'
 import { createSerialStore } from '@/stores/serial'
 import { createMessagesStore } from '@/stores/messages'
 import { createPauseStore } from '@/stores/pause'
@@ -5,6 +7,12 @@ import { createWaveformStore } from '@/stores/waveform'
 import { createRecorderStore } from '@/stores/recorder'
 import { createTransferStore } from '@/stores/transfer'
 import { useSettingsStore } from '@/stores/settings'
+import { createFreshSerialDriver } from '@/serial'
+
+/** 创建会话时的可覆盖依赖（主要为测试注入 mock 驱动）。 */
+export interface SessionOverrides {
+  createDriver?: () => SerialDriver
+}
 
 /** 一个串口连接会话的全部状态。后续多 tab 时每个 tab 一个 Session 实例。 */
 export interface Session {
@@ -14,6 +22,8 @@ export interface Session {
   waveform: ReturnType<typeof createWaveformStore>
   recorder: ReturnType<typeof createRecorderStore>
   transfer: ReturnType<typeof createTransferStore>
+  /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
+  dispose: () => void
 }
 
 /**
@@ -25,55 +35,67 @@ export interface Session {
  *
  * 循环依赖（pause.clearAll 需要 messages.clear 与 waveform.clear）通过 closure
  * indirection 延迟绑定：先以空回调创建 pause，待目标 store 建好后回填真实引用。
+ *
+ * 整个创建过程包在 detached effectScope 中：scope.stop() 先执行各 store 的
+ * onScopeDispose 清理（interval/timeout/subscription/driver），再停止 scope 内
+ * 全部 watcher/computed。detached 使会话生命周期独立于调用方组件，需显式 dispose()。
  */
-export function createSession(): Session {
-  const s = useSettingsStore().settings
+export function createSession(overrides: SessionOverrides = {}): Session {
+  const scope = effectScope(true)
+  const createDriver = overrides.createDriver ?? (() => createFreshSerialDriver())
 
-  // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
-  let _clearMessages: () => void = () => {}
-  let _clearWaveform: () => void = () => {}
+  const stores = scope.run(() => {
+    const s = useSettingsStore().settings
 
-  const pause = createPauseStore({
-    clearMessages: () => _clearMessages(),
-    clearWaveform: () => _clearWaveform(),
-  })
+    // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
+    let _clearMessages: () => void = () => {}
+    let _clearWaveform: () => void = () => {}
 
-  const messages = createMessagesStore({
-    settings: s,
-    paused: pause.paused,
-    pauseStartTime: pause.pauseStartTime,
-    togglePause: () => pause.toggle(),
-  })
-  _clearMessages = () => messages.clear()
+    const pause = createPauseStore({
+      clearMessages: () => _clearMessages(),
+      clearWaveform: () => _clearWaveform(),
+    })
 
-  const serial = createSerialStore({
-    ingestRx: (bytes) => messages.ingestRx(bytes),
-    addTx: (bytes, error) => messages.addTx(bytes, error),
-    settings: s,
-  })
+    const messages = createMessagesStore({
+      settings: s,
+      paused: pause.paused,
+      pauseStartTime: pause.pauseStartTime,
+      togglePause: () => pause.toggle(),
+    })
+    _clearMessages = () => messages.clear()
 
-  const waveform = createWaveformStore({
-    onData: (cb) => serial.onData(cb),
-    settings: s,
-    paused: pause.paused,
-    pauseStartTime: pause.pauseStartTime,
-    togglePause: () => pause.toggle(),
-  })
-  _clearWaveform = () => waveform.clear()
+    const serial = createSerialStore({
+      ingestRx: (bytes) => messages.ingestRx(bytes),
+      addTx: (bytes, error) => messages.addTx(bytes, error),
+      settings: s,
+      createDriver,
+    })
 
-  const recorder = createRecorderStore({
-    onData: (cb) => serial.onData(cb),
-    onTxData: (cb) => serial.onTxData(cb),
-    connected: serial.connected,
-    settings: s,
-  })
+    const waveform = createWaveformStore({
+      onData: (cb) => serial.onData(cb),
+      settings: s,
+      paused: pause.paused,
+      pauseStartTime: pause.pauseStartTime,
+      togglePause: () => pause.toggle(),
+    })
+    _clearWaveform = () => waveform.clear()
 
-  const transfer = createTransferStore({
-    sendRaw: (bytes, record) => serial.sendRaw(bytes, record),
-    onData: (cb) => serial.onData(cb),
-    connected: serial.connected,
-    addFileTransfer: (id, filename, size) => messages.addFileTransfer(id, filename, size),
-  })
+    const recorder = createRecorderStore({
+      onData: (cb) => serial.onData(cb),
+      onTxData: (cb) => serial.onTxData(cb),
+      connected: serial.connected,
+      settings: s,
+    })
 
-  return { serial, messages, pause, waveform, recorder, transfer }
+    const transfer = createTransferStore({
+      sendRaw: (bytes, record) => serial.sendRaw(bytes, record),
+      onData: (cb) => serial.onData(cb),
+      connected: serial.connected,
+      addFileTransfer: (id, filename, size) => messages.addFileTransfer(id, filename, size),
+    })
+
+    return { serial, messages, pause, waveform, recorder, transfer }
+  })!
+
+  return { ...stores, dispose: () => scope.stop() }
 }

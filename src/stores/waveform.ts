@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef, watch } from 'vue'
+import { ref, shallowRef, watch, onScopeDispose } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
 import { useSettingsStore } from './settings'
@@ -282,8 +282,14 @@ export function createWaveformStore(deps: WaveformDeps) {
     }
   )
 
-  // 订阅原始字节流（在 messages store 帧切分之前的同一份字节）
-  deps.onData((bytes) => ingest(bytes))
+  // 订阅原始字节流（在 messages store 帧切分之前的同一份字节）。
+  // 保存退订函数以便会话销毁时取消订阅。
+  let _unsubData: (() => void) | null = null
+  _unsubData = deps.onData((bytes) => ingest(bytes))
+  onScopeDispose(() => {
+    _unsubData?.()
+    _unsubData = null
+  })
 
   return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
 }

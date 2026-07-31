@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onScopeDispose } from 'vue'
 import type { MockScenarioId, PortInfo, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, SerialDriver } from '@/types'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { WebSerialDriver } from '@/serial/WebSerialDriver'
@@ -17,11 +17,14 @@ import { useMessagesStore } from './messages'
 import { useSettingsStore } from './settings'
 
 /** serial store 的外部依赖——RX/TX 帧写入委托给 messages，自动重连开关来自全局设置。
- *  ingestRx/addTx 由调用方注入；settings 是全局 settings store 的同一 reactive proxy。 */
+ *  ingestRx/addTx 由调用方注入；settings 是全局 settings store 的同一 reactive proxy。
+ *  createDriver 提供驱动实例工厂：全局单例路径注入 createSerialDriver()（模块缓存），
+ *  会话路径注入 createFreshSerialDriver()（每会话独立实例）。 */
 export interface SerialDeps {
   ingestRx: (bytes: Uint8Array) => void
   addTx: (bytes: Uint8Array, error?: string) => void
   settings: { autoReconnect: boolean }
+  createDriver: () => SerialDriver
 }
 
 // 自动重连：固定 2s 间隔，不限次数；用户断开或关闭开关则停止。
@@ -36,7 +39,7 @@ const DEFAULT_OPTS: PortOptions = {
 }
 
 export function createSerialStore(deps: SerialDeps) {
-  let driver: SerialDriver = createSerialDriver()
+  let driver: SerialDriver = deps.createDriver()
   const driverType = ref<DriverType>(getDriverType())
   const unsupportedReason = ref(getUnsupportedReason())
 
@@ -292,7 +295,7 @@ export function createSerialStore(deps: SerialDeps) {
     setDriverType(type)
     driverType.value = getDriverType()
     unsupportedReason.value = getUnsupportedReason()
-    driver = createSerialDriver()
+    driver = deps.createDriver()
     // 销毁旧驱动（serialport/webserial 都持有需要清理的本地资源）
     if (prevDriver instanceof WebSerialDriver || prevDriver instanceof SerialPortDriver) {
       prevDriver.destroy()
@@ -436,6 +439,23 @@ export function createSerialStore(deps: SerialDeps) {
     }
   )
 
+  // 会话销毁清理：停止定时器、退订驱动回调、关闭并销毁驱动。
+  // 只触碰非响应式资源（timer/unsubscribe/driver），不动 ref——响应式状态随 scope 销毁 GC。
+  onScopeDispose(() => {
+    stopReconnectTimer()
+    unsubscribe?.()
+    if (signalTimer) {
+      clearInterval(signalTimer)
+      signalTimer = null
+    }
+    if (driver.isOpen) {
+      driver.close().catch(() => {})
+    }
+    if (driver instanceof WebSerialDriver || driver instanceof SerialPortDriver) {
+      driver.destroy()
+    }
+  })
+
   return {
     ports,
     selectedPort,
@@ -479,5 +499,6 @@ export const useSerialStore = defineStore('serial', () => {
     ingestRx: (bytes) => m.ingestRx(bytes),
     addTx: (bytes, error) => m.addTx(bytes, error),
     settings: s.settings,
+    createDriver: () => createSerialDriver(),
   })
 })

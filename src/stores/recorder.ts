@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { shallowRef, triggerRef, watch, computed } from 'vue'
+import { shallowRef, triggerRef, watch, computed, onScopeDispose } from 'vue'
 import type { Ref } from 'vue'
 import type { RecordConfig, RecordFormat, RecordState } from '@/types'
 import { useSerialStore } from './serial'
@@ -274,6 +274,15 @@ export function createRecorderStore(deps: RecorderDeps) {
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', handlePageHide, { capture: true })
   }
+
+  // 会话销毁清理：移除 pagehide 监听 + 复用 handlePageHide 的订阅/定时器/文件句柄清理。
+  // handlePageHide 幂等（?. 空安全），重复调用安全。
+  onScopeDispose(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pagehide', handlePageHide, { capture: true })
+    }
+    handlePageHide()
+  })
 
   return {
     state,

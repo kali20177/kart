@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef, triggerRef, computed, watch } from 'vue'
+import { ref, shallowRef, triggerRef, computed, watch, onScopeDispose } from 'vue'
 import type { Ref } from 'vue'
 import type { FileTransferConfig, FileTransferState, TransferPresetId, TransferStatus } from '@/types'
 import { useSerialStore } from './serial'
@@ -592,6 +592,15 @@ export function createTransferStore(deps: TransferDeps) {
       }
     }
   )
+
+  // 会话销毁清理：置中止标志停止 pump 循环、释放暂停门，避免在途下发继续向已销毁会话写数据。
+  onScopeDispose(() => {
+    abortFlag = true
+    if (pauseGate) {
+      pauseGate()
+      pauseGate = null
+    }
+  })
 
   return {
     transfers,

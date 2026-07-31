@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef, triggerRef, watch } from 'vue'
+import { ref, shallowRef, triggerRef, watch, onScopeDispose } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
 import type { ChecksumAlgorithm, Direction, FrameConfig, Message } from '@/types'
@@ -210,6 +210,18 @@ export function createMessagesStore(deps: MessagesDeps) {
   function togglePause() {
     deps.togglePause()
   }
+
+  // 会话销毁清理：取消挂起的 rAF 批处理与 gap-timeout 尾帧定时器，避免回调打到已销毁状态。
+  onScopeDispose(() => {
+    if (rafHandle != null) {
+      cancelAnimationFrame(rafHandle)
+      rafHandle = null
+    }
+    if (gapTimer) {
+      clearTimeout(gapTimer)
+      gapTimer = null
+    }
+  })
 
   return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
 }

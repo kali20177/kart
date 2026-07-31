@@ -1,34 +1,50 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { createSession } from '@/session'
-import { setDriverType, createSerialDriver } from '@/serial'
+import { createSession, type Session } from '@/session'
+import { setDriverType } from '@/serial'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// 每个测试创建的会话，afterEach 统一 dispose 清理（定时器/订阅/驱动）
+let sessions: Session[] = []
+
 beforeEach(() => {
   setActivePinia(createPinia())
   setDriverType('mock')
+  sessions = []
 })
 
+afterEach(() => {
+  for (const s of sessions) s.dispose()
+  sessions = []
+})
+
+/** 创建注入指定 mock 驱动的会话，并登记到 sessions 列表 */
+function makeSession(mock: MockSerialSource): Session {
+  const session = createSession({ createDriver: () => mock })
+  sessions.push(session)
+  return session
+}
+
 /** 注入一行波形文本并等待 gap-timeout 帧关闭 + rAF 刷入 */
-async function injectLine(line: string) {
-  const mock = createSerialDriver() as MockSerialSource
+async function injectLine(mock: MockSerialSource, line: string) {
   mock.inject(new TextEncoder().encode(line))
   await sleep(50) // gapMs(20) 帧关闭 + rAF 批处理
 }
 
 describe('createSession · 会话接线', () => {
   it('串口数据流 → 消息列表 + 波形（同一份字节被两个消费者处理）', async () => {
-    const session = createSession()
+    const mock = new MockSerialSource()
+    const session = makeSession(mock)
 
     await session.serial.refreshPorts()
     await session.serial.connect()
     expect(session.serial.connected.value).toBe(true)
 
-    // createSerialDriver() 返回与会话内同一实例（模块级缓存），直接注入数据
-    await injectLine('1,2\n')
-    await injectLine('3,4\n')
+    // 数据注入走注入的 mock 实例
+    await injectLine(mock, '1,2\n')
+    await injectLine(mock, '3,4\n')
 
     // gap-timeout 切分会把行尾 \n 保留在帧里（文档化行为）
     const texts = session.messages.messages.value.map((m) => new TextDecoder().decode(m.bytes))
@@ -39,12 +55,13 @@ describe('createSession · 会话接线', () => {
   })
 
   it('pause.clearAll 同时清空消息与波形（循环依赖通过闭包延迟绑定）', async () => {
-    const session = createSession()
+    const mock = new MockSerialSource()
+    const session = makeSession(mock)
 
     await session.serial.refreshPorts()
     await session.serial.connect()
-    await injectLine('1,2\n')
-    await injectLine('3,4\n')
+    await injectLine(mock, '1,2\n')
+    await injectLine(mock, '3,4\n')
 
     expect(session.messages.messages.value.length).toBe(2)
     expect(session.waveform.history.value[0].length).toBe(2)
@@ -57,12 +74,25 @@ describe('createSession · 会话接线', () => {
   })
 
   it('每个会话的 pause 状态彼此独立（多会话互不干扰）', () => {
-    const a = createSession()
-    const b = createSession()
+    const a = makeSession(new MockSerialSource())
+    const b = makeSession(new MockSerialSource())
     expect(a.pause.paused.value).toBe(false)
     expect(b.pause.paused.value).toBe(false)
     a.pause.toggle()
     expect(a.pause.paused.value).toBe(true)
     expect(b.pause.paused.value).toBe(false)
+  })
+
+  it('dispose 停止 session 内定时器（信号轮询不再触发）', async () => {
+    const mock = new MockSerialSource()
+    const session = makeSession(mock)
+
+    await session.serial.refreshPorts()
+    await session.serial.connect()
+    expect(session.serial.connected.value).toBe(true)
+
+    // dispose 后连接被关闭、驱动被清理
+    session.dispose()
+    expect(mock.isOpen).toBe(false)
   })
 })
