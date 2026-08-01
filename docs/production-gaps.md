@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-07-31。已完成项标注 ✅。
+> 最近更新：2026-08-01。已完成项标注 ✅。
 
 ## 一、生产环境缺失功能
 
@@ -73,3 +73,20 @@
 ### ~~二进制波形 X 轴时间漂移~~（已移除）
 
 - **处置**：二进制解析模式已移除（参见 commit 历史），波形视图现仅支持文本行解析（Arduino Serial.println 风格）。X 轴统一使用真实到达时间 `Date.now()`，不存在漂移问题。未来若重新引入二进制/结构化字节流协议，届时重新评估时间对齐策略。
+
+### 会话接线 spec 隐含时序脆弱性（flaky 风险）
+
+- **位置**：`src/session/session.spec.ts` 的 `injectLine()` 用固定 `await sleep(50)` 等待 `gapMs(20)` 帧关闭 + rAF 批处理刷入（jsdom 下 rAF 被 polyfill 成 `setTimeout(16)`）。
+- **症状**：在 20+ 次连续运行中稳定通过，但本地偶见「1 failed | 3 passed」的一次性失败（未能稳定复现）。CI 机器高负载 / 调度抖动时，固定 50ms 可能不足以覆盖「20ms gap-timeout → flush 尾帧 → rAF 回调」整条链路，导致 `session.messages.messages` / `session.waveform.history` 断言读到的还是上一轮状态。
+- **根因**：用墙钟睡眠作为「帧已就绪」的同步信号，未直接观测真实完成事件。
+- **影响**：不影响生产，仅测试稳定性。
+- **建议**：改用确定性的「就绪」闸口替代固定 sleep——例如暴露一个 `flush()`/`waitForFlush()` 测试钩子、或用 `vi.useFakeTimers()` 推进 rAF+gap 定时器后断言，或等待 `messages.messages.length` 变化的轮询断言（`expect.poll`），避免对宏任务时序做常量阈值假设。
+
+### 录制器 `pagehide` 落盘未真正 close writer（遗留 bug）
+
+- **位置**：`src/stores/recorder.ts` `handlePageHide()` 末尾。
+- **症状**：页面/窗口关闭时缓冲数据「尽力落盘」的目标未达成——`void flushBuffer().then(() => writer?.close())` 紧跟 `writer = null`，而 `flushBuffer()` 是 async，`.then` 回调执行时闭包里的 `writer` 已被置 null，`writer?.close()` 永不执行，writer 句柄在页面销毁前不会被 close。
+- **时序**：`git blame` 确认该行早于会话依赖注入重构（commit `3237e60` / `d7d4422`），**非本次 `a7679ec6..32f00d55` 范围内引入的回归**，原已存在。
+- **影响**：浏览器/Electron 意外关闭（非正常 `stop()`）时，最后一次 flush 之后的已写 chunk 可能未 flush；更关键的是 FileSystem FileWriter 流未显式 close，依赖浏览器进程退出兜底，理论上存在截断或句柄泄漏风险。正常运行 `stop()` 路径 unaffected（走 `await writer?.close(); writer = null`，顺序正确）。
+- **建议**：保留临时局部引用后置空——`const w = writer; writer = null; void flushBuffer().then(() => w?.close())`；或在 pagehide 同步阶段先 close 再置空（已知同步 close 对 `FileSystemWritableFileStream` 可触发实际落盘，而 `.then` 异步链不保证在卸载前完成）。
+- **关联**：本次重构新增的 `onScopeDispose(() => handlePageHide())` 复用了同一函数，故该 bug 同样存在于会话销毁路径；修 `handlePageHide` 即同时覆盖两条退出路径。
