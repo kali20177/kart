@@ -6,6 +6,11 @@ export default {
     waveform: '波形',
     dragResize: '拖动调整宽度',
   },
+  session: {
+    tabLabel: '会话{n}',
+    new: '新建会话',
+    close: '关闭会话',
+  },
   menu: {
     file: '文件',
     help: '帮助',

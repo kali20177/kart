@@ -12,14 +12,16 @@ import {
   useMessage
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { useSession } from '@/composables/useSession'
 import { PRESETS } from '@/stores/transfer'
+import type { Session } from '@/session'
 import type { FileTransferConfig, ChunkFraming, AckMode, LineEnding, TransferPresetId } from '@/types'
 
 const props = defineProps<{
   show: boolean
   /** 拖入的文件（可选） */
   dropFile?: File | null
+  /** 打开那一刻绑定的会话（opener 绑定；会话关闭时降级为空对象避免模板 NPE） */
+  session?: Session
 }>()
 
 const emit = defineEmits<{
@@ -29,12 +31,23 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useMessage()
-const { serial, transfer: transferStore } = useSession()
+const serial = computed(() => props.session?.serial ?? EMPTY_SERIAL)
+const transferStore = computed(() => props.session?.transfer ?? EMPTY_TRANSFER)
+
+// opener 会话已关闭时的降级：读写 no-op，界面可开但发不出
+const EMPTY_SERIAL: Session['serial'] = {
+  options: { baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' },
+  connected: false,
+} as unknown as Session['serial']
+const EMPTY_TRANSFER: Session['transfer'] = {
+  lastConfig: { chunkSize: 0, interChunkDelay: 0, bytesPerSecond: 0, retries: 0, framing: 'raw', chunkSuffix: 'none', waitForAck: false, ackMode: 'any', ackByte: 0x06, ackTimeout: 1000, startOffset: 0, repeat: 0, logEachChunk: false, injectCorruptEveryN: 0, injectSkipAckEveryN: 0 },
+  lastPreset: 'raw',
+} as unknown as Session['transfer']
 
 // ── 波特率 -> 物理层最大字节速率 ──
 // 8N1: 1 起始 + 8 数据 + (parity!=none?1:0) + stopBits bit/字节
 const maxBps = computed(() => {
-  const o = serial.options
+  const o = serial.value.options
   const bitsPerByte = 1 + o.dataBits + (o.parity !== 'none' ? 1 : 0) + o.stopBits
   return Math.floor(o.baudRate / bitsPerByte)
 })
@@ -179,7 +192,7 @@ function setFile(file: File) {
 
 // ── 开始下发 ──
 async function onStart() {
-  if (!serial.connected) {
+  if (!serial.value.connected) {
     toast.warning(t('fileTransfer.needConnect'))
     return
   }
@@ -206,10 +219,10 @@ async function onStart() {
     injectSkipAckEveryN: injectSkipAckEveryN.value
   }
 
-  transferStore.lastConfig = config
-  transferStore.lastPreset = selectedPreset.value
+  transferStore.value.lastConfig = config
+  transferStore.value.lastPreset = selectedPreset.value
 
-  await transferStore.start(fileHandle.value, config)
+  await transferStore.value.start(fileHandle.value, config)
   toast.success(t('fileTransfer.started'))
   emit('started')
   emit('update:show', false)
@@ -224,7 +237,7 @@ watch(
   (v) => {
     if (v) {
       // 恢复上次配置
-      const cfg = transferStore.lastConfig
+      const cfg = transferStore.value.lastConfig
       chunkSize.value = cfg.chunkSize
       interChunkDelay.value = cfg.interChunkDelay
       bytesPerSecond.value = cfg.bytesPerSecond
@@ -242,7 +255,7 @@ watch(
       injectSkipAckEveryN.value = cfg.injectSkipAckEveryN
 
       // 恢复预设
-      selectedPreset.value = transferStore.lastPreset
+      selectedPreset.value = transferStore.value.lastPreset
 
       // 如果有拖入的文件
       if (props.dropFile) {

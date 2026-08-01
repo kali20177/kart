@@ -6,6 +6,11 @@ export default {
     waveform: 'Waveform',
     dragResize: 'Drag to resize width',
   },
+  session: {
+    tabLabel: 'Session {n}',
+    new: 'New Session',
+    close: 'Close Session',
+  },
   menu: {
     file: 'File',
     help: 'Help',

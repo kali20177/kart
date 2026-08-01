@@ -12,7 +12,7 @@ import {
   useMessage
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { useSession } from '@/composables/useSession'
+import { useActiveSession } from '@/composables/useSession'
 import { useCommandsStore } from '@/stores/commands'
 import { useSendHistory } from '@/composables/useSendHistory'
 import type { DataMode, LineEnding, QuickCommand } from '@/types'
@@ -24,7 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useCommandsStore()
-const { serial, settings } = useSession()
+const { serial, settings } = useActiveSession()
 const message = useMessage()
 const { t } = useI18n()
 

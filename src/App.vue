@@ -4,57 +4,82 @@ import { useStorage, useEventListener, useTitle } from '@vueuse/core'
 import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import MenuBar from './components/MenuBar.vue'
-import ConnectionBar from './components/ConnectionBar.vue'
-import MessageList from './components/MessageList.vue'
-import WaveformChart from './components/WaveformChart.vue'
-import InputComposer from './components/InputComposer.vue'
+import SessionPane from './components/SessionPane.vue'
 import QuickCommandsPanel from './components/QuickCommandsPanel.vue'
 import AsciiTable from './components/AsciiTable.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import StatusBar from './components/StatusBar.vue'
 import FileTransferDialog from './components/FileTransferDialog.vue'
 import IncompatibleBrowser from './components/IncompatibleBrowser.vue'
 import { useTheme } from './composables/useTheme'
-import { provideSession } from './composables/useSession'
+import { provideActiveSession } from './composables/useSession'
 import { createSession } from './session'
 import { STORAGE_PREFIX } from './composables/useStorage'
-import type { DataMode } from './types'
+import type { Session } from './session'
 import type { AsciiEntry } from './utils/ascii-table'
+import type { DataMode } from './types'
 
-// 当前应用只有一个串口会话；后续多 tab 时每个 tab 创建自己的 session 并 provide。
-const session = createSession()
-const { serial, settings } = session
-provideSession(session)
-const { t, locale } = useI18n()
-const title = useTitle()
+// 多会话 tab：每个 tab 一个 Session（独立驱动 + 独立 store 六件套）。
+// settings 为全局共享（session/index.ts L57 注入同一 proxy）。
+const sessions = ref<Session[]>([])
+const activeSessionId = ref(0)
+const activeSession = computed(() => sessions.value[activeSessionId.value])
 
-// 主题（替代 useIsDark + 手动 themeOverrides）
-const { naiveTheme, naiveOverrides } = useTheme()
+// 初始建第 1 个会话（单会话默认行为，与改造前一致）
+sessions.value.push(createSession())
+provideActiveSession(activeSession.value)
 
-// 语言切换：同步 settings → vue-i18n + html lang
-watch(
-  () => settings.locale,
-  (l) => {
-    locale.value = l
-    document.documentElement.setAttribute('lang', l === 'zh-CN' ? 'zh-CN' : 'en')
-    title.value = t('app.name')
-  },
-  { immediate: true }
-)
+function onNewSession() {
+  sessions.value.push(createSession())
+  activeSessionId.value = sessions.value.length - 1
+}
 
-// Naive UI 语言包
-const naiveLocale = computed(() => (settings.locale === 'zh-CN' ? zhCN : enUS))
-const naiveDateLocale = computed(() => (settings.locale === 'zh-CN' ? dateZhCN : dateEnUS))
+function onCloseSession(id: number) {
+  if (sessions.value.length <= 1) return // 末 tab 保护：至少保留 1 个会话
+  const s = sessions.value[id]
+  sessions.value.splice(id, 1)
+  s.dispose()
+  if (activeSessionId.value === id) {
+    activeSessionId.value = Math.min(id, sessions.value.length - 1)
+  } else if (activeSessionId.value > id) {
+    activeSessionId.value--
+  }
+}
 
-// 主区域视图：[消息] / [波形]。v-show 切换（不卸载），波形隐藏时仍缓冲数据
-const mainView = ref<'messages' | 'waveform'>('messages')
-
-const viewMode = ref<DataMode>(settings.defaultView)
-const composerText = ref('')
+// —— 对话框 opener 会话绑定 ——
+// 对话框由会话内组件（ConnectionBar/InputComposer）触发但渲染在根层；
+// 打开那一刻记录触发会话 id，之后切 tab 不影响已打开的对话框。
 const showAscii = ref(false)
 const showSettings = ref(false)
 const showFileTransfer = ref(false)
 const fileTransferDropFile = ref<File | null>(null)
+const openerSessionId = ref(0)
+function bindOpener() {
+  openerSessionId.value = activeSessionId.value
+}
+function onOpenAscii() {
+  bindOpener()
+  showAscii.value = true
+}
+function onOpenSettings() {
+  bindOpener()
+  showSettings.value = true
+}
+function onOpenFileTransfer(file?: File) {
+  bindOpener()
+  fileTransferDropFile.value = file ?? null
+  showFileTransfer.value = true
+}
+const openerSession = computed(() => sessions.value[openerSessionId.value] ?? activeSession.value)
+
+// AsciiTable 插入 / 快速命令「调到发送框」转发：落到活动会话对应的 SessionPane
+const sessionPaneRefs = ref<InstanceType<typeof SessionPane>[]>([])
+function onInsertAscii(entry: AsciiEntry) {
+  sessionPaneRefs.value[activeSessionId.value]?.insertAscii(entry)
+}
+function onToComposer(p: { text: string; mode: DataMode }) {
+  sessionPaneRefs.value[activeSessionId.value]?.toComposer(p)
+}
+
 const commandsCollapsed = ref(false)
 
 // —— 快速命令侧边栏宽度拖拽 ——
@@ -113,40 +138,38 @@ onBeforeUnmount(() => {
   stopColMove?.()
 })
 
+// —— i18n / 主题 / 语言 ——
+const { t, locale } = useI18n()
+const title = useTitle()
+const { naiveTheme, naiveOverrides } = useTheme()
+
+// 语言切换：同步 settings → vue-i18n + html lang
 watch(
-  () => settings.fontSize,
-  (px) => document.documentElement.style.setProperty('--bubble-font-size', px + 'px'),
+  () => sessions.value[0]?.settings.locale,
+  (l) => {
+    if (!l) return
+    locale.value = l
+    document.documentElement.setAttribute('lang', l === 'zh-CN' ? 'zh-CN' : 'en')
+    title.value = t('app.name')
+  },
   { immediate: true }
 )
 
-function onResend(bytes: Uint8Array) {
-  serial.resend(bytes)
-}
+// Naive UI 语言包
+const naiveLocale = computed(() => (sessions.value[0]?.settings.locale === 'zh-CN' ? zhCN : enUS))
+const naiveDateLocale = computed(() => (sessions.value[0]?.settings.locale === 'zh-CN' ? dateZhCN : dateEnUS))
 
-function onToComposer(p: { text: string; mode: DataMode }) {
-  composerText.value = p.text
-  viewMode.value = p.mode
-}
-/** 编码器支持的命名转义（与 encodeWithEscapes 的 switch 保持一致） */
-const NAMED_ESCAPES = new Set([0, 9, 10, 13])
-
-function onOpenFileTransfer(file?: File) {
-  fileTransferDropFile.value = file ?? null
-  showFileTransfer.value = true
-}
-
-function onInsertAscii(e: AsciiEntry) {
-  if (viewMode.value === 'hex') {
-    composerText.value += (composerText.value && !composerText.value.endsWith(' ') ? ' ' : '') + e.hex + ' '
-  } else if (e.char != null) {
-    composerText.value += e.char
-  } else if (e.escape && NAMED_ESCAPES.has(e.dec)) {
-    composerText.value += e.escape
-  }
-}
+// 全局字体大小（会话共享设置，任一会话生效即同步全部）
+watch(
+  () => sessions.value[0]?.settings.fontSize,
+  (px) => {
+    if (px) document.documentElement.style.setProperty('--bubble-font-size', px + 'px')
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
-  serial.refreshPorts()
+  activeSession.value?.serial.refreshPorts()
 })
 </script>
 
@@ -155,33 +178,48 @@ onMounted(() => {
     <NMessageProvider>
       <NDialogProvider>
       <div class="app">
-        <IncompatibleBrowser v-if="serial.driverType === 'unsupported'" :reason="serial.unsupportedReason" />
+        <IncompatibleBrowser
+          v-if="sessions.some((s) => s.serial.driverType === 'unsupported')"
+          :reason="sessions.find((s) => s.serial.driverType === 'unsupported')!.serial.unsupportedReason"
+        />
         <MenuBar />
-        <ConnectionBar @open-ascii="showAscii = true" @open-settings="showSettings = true" />
+        <div class="session-tabs">
+          <div
+            v-for="(s, i) in sessions"
+            :key="i"
+            class="session-tab"
+            :class="{ active: i === activeSessionId }"
+            @click="activeSessionId = i"
+          >
+            <span class="session-tab-name">{{ t('session.tabLabel', { n: i + 1 }) }}</span>
+            <span
+              class="session-tab-dot"
+              :class="{ on: s.serial.connected, reconnecting: s.serial.reconnecting }"
+            />
+            <button
+              class="session-tab-close"
+              :disabled="sessions.length <= 1"
+              :title="t('session.close')"
+              @click.stop="onCloseSession(i)"
+            >×</button>
+          </div>
+          <button class="session-tab-new" @click="onNewSession" :title="t('session.new')">＋</button>
+        </div>
 
         <div class="main">
-          <div class="left">
-            <div class="view-tabs">
-              <button
-                class="tab"
-                :class="{ active: mainView === 'messages' }"
-                @click="mainView = 'messages'"
-              >
-                {{ t('app.msg') }}
-              </button>
-              <button
-                class="tab"
-                :class="{ active: mainView === 'waveform' }"
-                @click="mainView = 'waveform'"
-              >
-                {{ t('app.waveform') }}
-              </button>
-            </div>
-
-            <MessageList v-show="mainView === 'messages'" :view-mode="viewMode" @resend="onResend" />
-            <WaveformChart v-show="mainView === 'waveform'" />
-            <InputComposer v-model:text="composerText" v-model:mode="viewMode" @open-file-transfer="onOpenFileTransfer" />
+          <div class="session-panes">
+            <SessionPane
+              v-for="(s, i) in sessions"
+              :key="i"
+              v-show="i === activeSessionId"
+              :ref="(el) => (sessionPaneRefs[i] = el as InstanceType<typeof SessionPane>)"
+              :session="s"
+              @open-ascii="onOpenAscii"
+              @open-settings="onOpenSettings"
+              @open-file-transfer="onOpenFileTransfer"
+            />
           </div>
+
           <div
             class="right"
             :class="{ collapsed: commandsCollapsed, dragging }"
@@ -199,13 +237,16 @@ onMounted(() => {
             <QuickCommandsPanel v-show="!commandsCollapsed" @to-composer="onToComposer" />
           </div>
         </div>
-
-        <StatusBar />
       </div>
 
       <AsciiTable v-model:show="showAscii" @insert="onInsertAscii" />
-      <SettingsModal v-model:show="showSettings" />
-      <FileTransferDialog v-model:show="showFileTransfer" :drop-file="fileTransferDropFile" @started="showFileTransfer = false" />
+      <SettingsModal v-model:show="showSettings" :session="openerSession" />
+      <FileTransferDialog
+        v-model:show="showFileTransfer"
+        :drop-file="fileTransferDropFile"
+        :session="openerSession"
+        @started="showFileTransfer = false"
+      />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>
@@ -217,43 +258,100 @@ onMounted(() => {
   flex-direction: column;
   height: 100%;
 }
-.main {
-  flex: 1;
+.session-tabs {
   display: flex;
-  min-height: 0;
-}
-.left {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-.view-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--glass-border);
+  gap: 4px;
+  align-items: center;
+  padding: 4px 6px;
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur-sm));
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
 }
-.tab {
+.session-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.session-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+.session-tab.active {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  border-color: var(--border);
+}
+.session-tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.session-tab-dot.on {
+  background: #4caf50;
+  opacity: 1;
+}
+.session-tab-dot.reconnecting {
+  background: #ff9800;
+  opacity: 1;
+}
+.session-tab-close {
   appearance: none;
   border: none;
   background: transparent;
   color: var(--text-dim);
   font-size: 13px;
-  padding: 7px 16px;
+  line-height: 1;
+  padding: 0 2px;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
+  border-radius: var(--radius-sm);
 }
-.tab:hover {
+.session-tab-close:hover:not(:disabled) {
+  color: var(--err);
+  background: rgba(255, 0, 0, 0.08);
+}
+.session-tab-close:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.session-tab-new {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.session-tab-new:hover {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text);
 }
-.tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+.main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.session-panes {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 .right {
   flex: none;

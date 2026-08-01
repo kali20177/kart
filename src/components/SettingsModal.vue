@@ -13,19 +13,22 @@ import {
   useMessage,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { useSession } from '@/composables/useSession'
 import { useSettingsStore } from '@/stores/settings'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
 import { listThemes } from '@/themes'
+import type { Session } from '@/session'
+
+const props = defineProps<{ session?: Session }>()
 
 const show = defineModel<boolean>('show', { default: false })
-// settings 为全局共享 store（应用级设置弹窗）；serial 从会话注入
+// settings 为全局共享 store（应用级设置弹窗）；serial 来自 opener 会话（打开那一刻绑定的 tab）
 const settingsStore = useSettingsStore()
-const { serial } = useSession()
 const recordDir = useRecordDirectory()
 const { t } = useI18n()
 const message = useMessage()
 const s = settingsStore.settings
+// 自定义波特率属于会话级端口参数；对话框打开那一刻绑定的会话可能已关闭，此时降级为空列表
+const serial = computed(() => props.session?.serial ?? { customBaudRates: [] })
 
 const activeTab = ref('receive')
 
@@ -312,13 +315,13 @@ const navItems = computed<NavItem[]>(() => [
               size="small"
               :value="item.note ?? ''"
               :placeholder="t('settings.baudNote')"
-              @update:value="(v: string) => serial.updateCustomBaudNote(item.baud, v)"
+              @update:value="(v: string) => props.session?.serial.updateCustomBaudNote(item.baud, v)"
             />
             <NButton
               size="small"
               quaternary
               type="error"
-              @click="serial.removeCustomBaudRate(item.baud)"
+              @click="props.session?.serial.removeCustomBaudRate(item.baud)"
             >
               {{ t('settings.delete') }}
             </NButton>

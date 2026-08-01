@@ -58,9 +58,7 @@ describe('serial store · 自定义波特率', () => {
 })
 
 describe('serial store · reset', () => {
-  const PORT_KEY = STORAGE_PREFIX + 'portOptions'
-
-  it('恢复端口参数与自定义波特率默认值并落盘', () => {
+  it('恢复端口参数与自定义波特率默认值；portOptions 不再落盘（多会话 v1：端口参数仅存会话内存）', () => {
     const s = useSerialStore()
     // 污染：改端口参数 + 加自定义波特率
     s.options.baudRate = 9600
@@ -80,14 +78,8 @@ describe('serial store · reset', () => {
     })
     // 内存：自定义波特率清空
     expect(s.customBaudRates).toEqual([])
-    // 落盘
-    expect(JSON.parse(localStorage.getItem(PORT_KEY)!)).toEqual({
-      baudRate: 115200,
-      dataBits: 8,
-      stopBits: 1,
-      parity: 'none',
-      flowControl: 'none'
-    })
+    // 落盘：仅自定义波特率清空；portOptions 不再写入
     expect(localStorage.getItem(KEY)).toBe('[]')
+    expect(localStorage.getItem(STORAGE_PREFIX + 'portOptions')).toBeNull()
   })
 })

@@ -132,7 +132,6 @@ export function createSerialStore(deps: SerialDeps) {
       throw e
     }
     logger.info('serial', `connected: ${selectedPort.value} @ ${summary.value} driver=${driverType.value}`)
-    storage.set('portOptions', { ...options })
     // 重连成功（reconnecting 为 true 表示这是自动重连路径）：清状态并通知 UI。
     const wasReconnecting = reconnecting.value
     if (wasReconnecting) {
@@ -422,7 +421,6 @@ export function createSerialStore(deps: SerialDeps) {
   function reset() {
     Object.assign(options, DEFAULT_OPTS)
     customBaudRates.value = []
-    storage.set('portOptions', { ...DEFAULT_OPTS })
     storage.set('customBaudRates', [])
   }
 
