@@ -14,8 +14,6 @@ import type { AsciiEntry } from '@/utils/ascii-table'
 const props = defineProps<{ session: Session }>()
 
 const emit = defineEmits<{
-  (e: 'open-ascii'): void
-  (e: 'open-settings'): void
   (e: 'open-file-transfer', file?: File): void
 }>()
 
@@ -59,10 +57,7 @@ defineExpose({ insertAscii, toComposer: onToComposer })
 
 <template>
   <div class="session-pane">
-    <ConnectionBar
-      @open-ascii="emit('open-ascii')"
-      @open-settings="emit('open-settings')"
-    />
+    <ConnectionBar />
     <div class="main">
       <div class="left">
         <div class="view-tabs">

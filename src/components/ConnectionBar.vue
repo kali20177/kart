@@ -12,11 +12,6 @@ const isDev = import.meta.env.DEV
 
 const { t } = useI18n()
 
-const emit = defineEmits<{
-  (e: 'open-ascii'): void
-  (e: 'open-settings'): void
-}>()
-
 const { serial, recorder } = useSession()
 const message = useMessage()
 
@@ -399,9 +394,6 @@ onBeforeUnmount(() => {
     </template>
 
     <div class="spacer" />
-
-    <NButton size="small" quaternary @click="emit('open-ascii')">{{ t('conn.asciiTable') }}</NButton>
-    <NButton size="small" quaternary @click="emit('open-settings')">{{ t('conn.settings') }}</NButton>
   </div>
 
   <NModal v-model:show="showNoteModal" preset="card" :title="t('conn.editNoteTitle')" style="width: 360px">

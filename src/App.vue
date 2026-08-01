@@ -204,6 +204,11 @@ onMounted(() => {
             >×</button>
           </div>
           <button class="session-tab-new" @click="onNewSession" :title="t('session.new')">＋</button>
+
+          <!-- 全局功能按钮：作用于当前活动会话，不随会话 tab 重复 -->
+          <div class="session-tabs-spacer" />
+          <button class="global-btn" @click="onOpenAscii" :title="t('conn.asciiTable')">{{ t('conn.asciiTable') }}</button>
+          <button class="global-btn" @click="onOpenSettings" :title="t('conn.settings')">{{ t('conn.settings') }}</button>
         </div>
 
         <div class="main">
@@ -214,8 +219,6 @@ onMounted(() => {
               v-show="i === activeSessionId"
               :ref="(el) => (sessionPaneRefs[i] = el as InstanceType<typeof SessionPane>)"
               :session="s"
-              @open-ascii="onOpenAscii"
-              @open-settings="onOpenSettings"
               @open-file-transfer="onOpenFileTransfer"
             />
           </div>
@@ -340,6 +343,24 @@ onMounted(() => {
 .session-tab-new:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
+}
+.session-tabs-spacer {
+  flex: 1;
+}
+.global-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+.global-btn:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
 }
 .main {
   flex: 1;
