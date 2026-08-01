@@ -26,11 +26,15 @@ const activeSession = computed(() => sessions.value[activeSessionId.value])
 
 // 初始建第 1 个会话（单会话默认行为，与改造前一致）
 sessions.value.push(createSession())
-provideActiveSession(activeSession.value)
+// 传 ref/computed 本身（非 .value）：provide 只执行一次，传解包值会固定为会话 0
+provideActiveSession(activeSession)
 
 function onNewSession() {
-  sessions.value.push(createSession())
+  const s = createSession()
+  sessions.value.push(s)
   activeSessionId.value = sessions.value.length - 1
+  // 新会话独立驱动，端口列表为空，需主动拉取一次（初始会话在 onMounted 拉取）
+  s.serial.refreshPorts()
 }
 
 function onCloseSession(id: number) {
@@ -186,7 +190,7 @@ onMounted(() => {
         <div class="session-tabs">
           <div
             v-for="(s, i) in sessions"
-            :key="i"
+            :key="s.id"
             class="session-tab"
             :class="{ active: i === activeSessionId }"
             @click="activeSessionId = i"
@@ -215,7 +219,7 @@ onMounted(() => {
           <div class="session-panes">
             <SessionPane
               v-for="(s, i) in sessions"
-              :key="i"
+              :key="s.id"
               v-show="i === activeSessionId"
               :ref="(el) => (sessionPaneRefs[i] = el as InstanceType<typeof SessionPane>)"
               :session="s"

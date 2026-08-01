@@ -19,6 +19,8 @@ export interface SessionOverrides {
  * 各 store 经 reactive() 包装：顶层 ref 已解包（与 Pinia 用法一致，无 .value）。
  */
 export interface Session {
+  /** 会话稳定唯一标识（自增），用于 v-for :key，避免用数组下标导致关 tab 后实例错位 */
+  id: number
   serial: UnwrapNestedRefs<ReturnType<typeof createSerialStore>>
   messages: UnwrapNestedRefs<ReturnType<typeof createMessagesStore>>
   pause: UnwrapNestedRefs<ReturnType<typeof createPauseStore>>
@@ -30,6 +32,9 @@ export interface Session {
   /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
   dispose: () => void
 }
+
+/** 会话自增 id：跨 createSession 调用单调递增，保证每个会话有稳定唯一标识。 */
+let _nextSessionId = 0
 
 /**
  * 创建一个自包含的串口会话：serial/messages/pause/waveform/recorder/transfer
@@ -106,5 +111,6 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     return reactive({ serial, messages, pause, waveform, recorder, transfer, settings: s })
   })!
 
-  return { ...stores, dispose: () => scope.stop() }
+  const id = _nextSessionId++
+  return { id, ...stores, dispose: () => scope.stop() }
 }

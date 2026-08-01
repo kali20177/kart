@@ -10,10 +10,13 @@ import { useI18n } from 'vue-i18n'
 import { logger } from '@/utils/logger'
 
 const { t } = useI18n()
-// settings/commands 为全局共享 store（会话间统一），serial/recorder 指向当前活动会话
+// settings/commands 为全局共享 store（会话间统一），serial/recorder 指向当前活动会话。
+// useActiveSession 返回活动会话 ref，用 computed 派生 serial/recorder：切 tab 时自动跟随。
 const settingsStore = useSettingsStore()
 const commandsStore = useCommandsStore()
-const { serial: serialStore, recorder } = useActiveSession()
+const activeSession = useActiveSession()
+const serialStore = computed(() => activeSession.value.serial)
+const recorder = computed(() => activeSession.value.recorder)
 const message = useMessage()
 const dialog = useDialog()
 
@@ -78,9 +81,9 @@ const fileMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.exportLog'), key: 'export-log' },
   { type: 'divider', key: 'd2' },
   {
-    label: recorder.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording'),
+    label: recorder.value.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording'),
     key: 'toggle-recording',
-    disabled: !recorder.supported || recorder.state.status === 'stopping'
+    disabled: !recorder.value.supported || recorder.value.state.status === 'stopping'
   },
   { type: 'divider', key: 'd3' },
   { label: t('menu.resetDefaults'), key: 'reset-defaults' }
@@ -112,12 +115,12 @@ function handleSelect(key: string) {
         })
       break
     case 'toggle-recording':
-      if (recorder.state.status === 'idle') {
-        recorder.start().catch((e) => {
+      if (recorder.value.state.status === 'idle') {
+        recorder.value.start().catch((e) => {
           message.error(e instanceof Error ? e.message : String(e))
         })
       } else {
-        recorder.stop()
+        recorder.value.stop()
       }
       break
     case 'reset-defaults':
@@ -133,7 +136,7 @@ function handleSelect(key: string) {
           // 2. autoSave 开关本身也恢复默认 true（若原为 false，其 watch 会补落盘 settings）
           settingsStore.autoSave = true
           // 3. 串口参数 + 自定义波特率 -> 默认
-          serialStore.reset()
+          serialStore.value.reset()
           // 4. 快捷命令 -> 内置预设（watch 自动落盘）
           commandsStore.resetToPresets()
           // 5. 导出偏好 -> 清除（下次打开对话框用 DEFAULT_PREFS fallback）

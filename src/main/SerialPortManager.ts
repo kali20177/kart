@@ -137,14 +137,16 @@ export class SerialPortManager {
         }
       })
 
-      // 物理断连（主动 close(path) 已先删除 entry，不会误报）
+      // 物理断连：主动 close(path) 已先删除 entry，此处查不到 -> 不误报；
+      // 真正的物理断连 entry 仍在 -> 必须先发通知再删除（_sendError 依赖 entry 存在，
+      // 否则其 has(path) 守卫会吞掉通知，渲染端永远收不到断连事件 -> 自动重连失效）
       port.on('close', () => {
         const entry = this._ports.get(path)
         if (entry?.isOpen) {
           entry.isOpen = false
-          this._ports.delete(path)
           mainLogger.warn('serialport', `port closed unexpectedly: ${path}`)
           this._sendError(path, '串口已断开')
+          this._ports.delete(path)
         }
       })
 
