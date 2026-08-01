@@ -21,17 +21,17 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
-    "@vueuse/core": "^11.3.0",
-    "naive-ui": "^2.38.2",
-    "pinia": "^2.1.7",
-    "serialport": "^12.0.0",
-    "uplot": "^1.6.32",
-    "vue": "^3.4.21",
-    "vue-i18n": "^9.14.4",
-    "vue-virtual-scroller": "2.0.0-beta.8"
+    "serialport": "^12.0.0"
   },
   "devDependencies": {
     "@intlify/unplugin-vue-i18n": "^4.0.0",
+    "@vueuse/core": "^11.3.0",
+    "naive-ui": "^2.38.2",
+    "pinia": "^2.1.7",
+    "uplot": "^1.6.32",
+    "vue": "^3.4.21",
+    "vue-i18n": "^9.14.4",
+    "vue-virtual-scroller": "2.0.0-beta.8",
     "@types/node": "^20.12.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "@vue/test-utils": "^2.4.5",
