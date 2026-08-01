@@ -189,4 +189,22 @@ describe('recorder store', () => {
     rxCallbacks.forEach(cb => cb(chunk))
     expect(vi.mocked(mockWriter.write).mock.calls.length).toBe(writeCountBefore)
   })
+
+  it('handlePageHide flushes remaining buffer and closes writer', async () => {
+    const { recorder, rxCallbacks } = await setupStores()
+    await recorder.start()
+
+    // 注入数据（不足 64KB 阈值，不会提前触发 flush——数据留在缓冲区）
+    const chunk = new Uint8Array(1024)
+    rxCallbacks.forEach(cb => cb(chunk))
+
+    // 派发 pagehide：应把残留缓冲 flush 到文件并真正 close writer
+    window.dispatchEvent(new Event('pagehide'))
+
+    // flushBuffer 是异步的，等待其链收敛
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(mockWriter.write).toHaveBeenCalled()
+    expect(mockWriter.close).toHaveBeenCalled()
+  })
 })

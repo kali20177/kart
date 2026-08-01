@@ -92,6 +92,7 @@ export function createRecorderStore(deps: RecorderDeps) {
     buffer = []
     bufferSize = 0
     stopping = false
+    // 仅在 idle 时可达（stop/pagehide 已 await 收敛旧链），重置为已解决即可
     pendingFlush = Promise.resolve()
 
     // CSV 格式写入表头
@@ -152,7 +153,7 @@ export function createRecorderStore(deps: RecorderDeps) {
 
     // 等待在途 flush 完成，避免它对已关闭流写入抛错并翻状态为 error。
     await pendingFlush
-    await flushBuffer()
+    await flushBuffer(writer)
     await writer?.close()
     writer = null
 
@@ -218,18 +219,20 @@ export function createRecorderStore(deps: RecorderDeps) {
     }
   }
 
-  async function flushBuffer(): Promise<void> {
-    if (buffer.length === 0 || !writer) return
+  async function flushBuffer(w: IFileWriter | null = writer): Promise<void> {
+    if (buffer.length === 0 || !w) return
 
     const chunks = buffer
     const total = bufferSize
     buffer = []
     bufferSize = 0
 
+    // 立即启动写入（保持「ingest 同步触发 flush」的时序语义）；
+    // 返回的 pendingFlush 供 stop/pagehide await 本次写完成。
     pendingFlush = (async () => {
       try {
         for (const chunk of chunks) {
-          await writer!.write(chunk)
+          await w.write(chunk)
         }
         patchState({ fileSize: state.value.fileSize + total })
       } catch (e) {
@@ -241,7 +244,6 @@ export function createRecorderStore(deps: RecorderDeps) {
         }
       }
     })()
-
     return pendingFlush
   }
 
@@ -267,8 +269,11 @@ export function createRecorderStore(deps: RecorderDeps) {
       clearInterval(flushTimer)
       flushTimer = null
     }
-    void flushBuffer().then(() => writer?.close())
+    // 捕获局部 writer 引用再置空：flushBuffer 内部已不再读模块级 writer，
+    // 拿到的引用闭包捕获后在置空后仍有效，close 一定能执行到。
+    const w = writer
     writer = null
+    void flushBuffer(w).then(() => w?.close())
   }
 
   if (typeof window !== 'undefined') {
