@@ -12,9 +12,8 @@ import {
   useMessage
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { useSession } from '@/composables/useSession'
 import { useCommandsStore } from '@/stores/commands'
-import { useSerialStore } from '@/stores/serial'
-import { useSettingsStore } from '@/stores/settings'
 import { useSendHistory } from '@/composables/useSendHistory'
 import type { DataMode, LineEnding, QuickCommand } from '@/types'
 
@@ -25,8 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useCommandsStore()
-const serial = useSerialStore()
-const settings = useSettingsStore()
+const { serial, settings } = useSession()
 const message = useMessage()
 const { t } = useI18n()
 
@@ -86,7 +84,7 @@ function saveEdit() {
 
 async function sendCmd(c: QuickCommand) {
   const ending: LineEnding = c.appendNewline === 'inherit' ? 'crlf' : c.appendNewline
-  const cs = !c.checksum || c.checksum === 'inherit' ? settings.settings.sendChecksum : c.checksum
+  const cs = !c.checksum || c.checksum === 'inherit' ? settings.sendChecksum : c.checksum
   const r = await serial.send(c.payload, c.mode, ending, 'utf-8', cs)
   if (!r.ok) message.error(r.error ?? t('commands.sendFailed'))
   else sendHistory.add(c.payload)

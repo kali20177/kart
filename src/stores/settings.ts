@@ -29,6 +29,7 @@ const DEFAULTS: AppSettings = {
   rxChecksumAlgorithm: 'none'
 }
 
+/** 全局共享 store：应用设置跨会话统一（组件经 session.settings 或单例均可读同一 proxy）。 */
 export const useSettingsStore = defineStore('settings', () => {
   // 从存储读取持久化数据
   // 注：rxVerifyChecksum 为已废弃旧字段（迁移后删除），仅读取时保留以做迁移

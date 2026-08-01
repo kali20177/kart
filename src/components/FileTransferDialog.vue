@@ -12,8 +12,8 @@ import {
   useMessage
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { useSerialStore } from '@/stores/serial'
-import { useTransferStore, PRESETS } from '@/stores/transfer'
+import { useSession } from '@/composables/useSession'
+import { PRESETS } from '@/stores/transfer'
 import type { FileTransferConfig, ChunkFraming, AckMode, LineEnding, TransferPresetId } from '@/types'
 
 const props = defineProps<{
@@ -29,8 +29,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useMessage()
-const serial = useSerialStore()
-const transferStore = useTransferStore()
+const { serial, transfer: transferStore } = useSession()
 
 // ── 波特率 -> 物理层最大字节速率 ──
 // 8N1: 1 起始 + 8 数据 + (parity!=none?1:0) + stopBits bit/字节

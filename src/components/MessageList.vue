@@ -6,9 +6,7 @@ import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, NDropdown, NModal, useDialog, useMessage } from 'naive-ui'
 import type { DropdownOption, DropdownDividerOption } from 'naive-ui'
 import MessageBubble from './MessageBubble.vue'
-import { useMessagesStore } from '@/stores/messages'
-import { useSettingsStore } from '@/stores/settings'
-import { usePauseStore } from '@/stores/pause'
+import { useSession } from '@/composables/useSession'
 import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
 import type { DataMode, Direction, Message } from '@/types'
@@ -20,9 +18,7 @@ const emit = defineEmits<{
   (e: 'resend', bytes: Uint8Array): void
 }>()
 
-const messagesStore = useMessagesStore()
-const settingsStore = useSettingsStore()
-const pauseStore = usePauseStore()
+const { messages: messagesStore, settings: settingsStore, pause: pauseStore } = useSession()
 const dialog = useDialog()
 const toast = useMessage()
 const { copy } = useClipboard()
@@ -56,7 +52,7 @@ const timeEnd = computed(() => parseTimeInput(timeInputEnd.value))
 const timeStartInvalid = computed(() => timeInputStart.value.trim() !== '' && timeStart.value === null)
 const timeEndInvalid = computed(() => timeInputEnd.value.trim() !== '' && timeEnd.value === null)
 
-const encoding = computed(() => settingsStore.settings.encoding)
+const encoding = computed(() => settingsStore.encoding)
 
 /** 每帧的 Δt + elapsed（基于全量物理时间线，不受过滤影响） */
 const deltaMap = computed(() => computeDeltas(messagesStore.messages))
@@ -265,7 +261,7 @@ function copySelected() {
     .map((m) =>
       formatMessageLine(m, {
         viewMode: props.viewMode,
-        encoding: settingsStore.settings.encoding,
+        encoding: settingsStore.encoding,
         timeStyle: 'short'
       })
     )
@@ -300,7 +296,7 @@ function deleteSelected() {
 watch(
   () => messagesStore.paused,
   (p, wasPaused) => {
-    if (wasPaused && !p && settingsStore.settings.showPauseNotification) {
+    if (wasPaused && !p && settingsStore.showPauseNotification) {
       const start = messagesStore.pauseStartTime
       const dur = Math.max(1, Math.round((Date.now() - start) / 1000))
       toast.warning(
@@ -405,7 +401,7 @@ watch(
             <MessageBubble
               :message="item"
               :view-mode="props.viewMode"
-              :encoding="settingsStore.settings.encoding"
+              :encoding="settingsStore.encoding"
               :selectable="multiSelect"
               :selected="selected.has(item.id)"
               :keyword="debouncedKeyword"

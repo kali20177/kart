@@ -2,19 +2,18 @@
 import { computed, h, ref } from 'vue'
 import { NDropdown, NButton, NModal, useMessage, useDialog } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
+import { useSession } from '@/composables/useSession'
 import { useSettingsStore } from '@/stores/settings'
-import { useSerialStore } from '@/stores/serial'
 import { useCommandsStore } from '@/stores/commands'
-import { useRecorderStore } from '@/stores/recorder'
 import { storage } from '@/composables/useStorage'
 import { useI18n } from 'vue-i18n'
 import { logger } from '@/utils/logger'
 
 const { t } = useI18n()
+// settings/commands 为全局共享 store（会话间统一），serial/recorder 从会话注入
 const settingsStore = useSettingsStore()
-const serialStore = useSerialStore()
 const commandsStore = useCommandsStore()
-const recorder = useRecorderStore()
+const { serial: serialStore, recorder } = useSession()
 const message = useMessage()
 const dialog = useDialog()
 

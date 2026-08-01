@@ -2,8 +2,7 @@
 import { computed, h, nextTick, onBeforeUnmount, ref, watch, type VNode, type VNodeChild } from 'vue'
 import { NSelect, NButton, NTooltip, NModal, NInput, useMessage } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
-import { useSerialStore } from '@/stores/serial'
-import { useRecorderStore } from '@/stores/recorder'
+import { useSession } from '@/composables/useSession'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
@@ -18,8 +17,7 @@ const emit = defineEmits<{
   (e: 'open-settings'): void
 }>()
 
-const serial = useSerialStore()
-const recorder = useRecorderStore()
+const { serial, recorder } = useSession()
 const message = useMessage()
 
 const portOptions = computed(() => serial.ports.map((p) => ({ label: p.path, value: p.path })))

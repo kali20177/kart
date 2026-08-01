@@ -13,14 +13,15 @@ import {
   useMessage,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { useSession } from '@/composables/useSession'
 import { useSettingsStore } from '@/stores/settings'
-import { useSerialStore } from '@/stores/serial'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
 import { listThemes } from '@/themes'
 
 const show = defineModel<boolean>('show', { default: false })
+// settings 为全局共享 store（应用级设置弹窗）；serial 从会话注入
 const settingsStore = useSettingsStore()
-const serial = useSerialStore()
+const { serial } = useSession()
 const recordDir = useRecordDirectory()
 const { t } = useI18n()
 const message = useMessage()

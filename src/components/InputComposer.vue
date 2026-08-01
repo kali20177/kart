@@ -3,8 +3,7 @@ import { computed, ref, watch, onBeforeUnmount, onMounted, nextTick } from 'vue'
 import { useStorage, useEventListener } from '@vueuse/core'
 import { NInput, NButton, NButtonGroup, NSelect, NInputNumber, NSwitch, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { useSerialStore } from '@/stores/serial'
-import { useSettingsStore } from '@/stores/settings'
+import { useSession } from '@/composables/useSession'
 import { useSendHistory } from '@/composables/useSendHistory'
 import SendHistoryPopover from './SendHistoryPopover.vue'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
@@ -19,8 +18,7 @@ const emit = defineEmits<{
   (e: 'open-file-transfer', file?: File): void
 }>()
 
-const serial = useSerialStore()
-const settings = useSettingsStore()
+const { serial, settings } = useSession()
 const message = useMessage()
 const { t } = useI18n()
 const history = useSendHistory()
@@ -61,7 +59,7 @@ async function sendOnce(): Promise<boolean> {
     message.warning(t('composer.needConnect'))
     return false
   }
-  const r = await serial.send(text.value, mode.value, lineEnding.value, settings.settings.encoding, settings.settings.sendChecksum)
+  const r = await serial.send(text.value, mode.value, lineEnding.value, settings.encoding, settings.sendChecksum)
   if (!r.ok) {
     message.error(r.error ?? t('composer.sendFailed'))
     return false

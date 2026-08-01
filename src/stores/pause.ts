@@ -45,6 +45,7 @@ export function createPauseStore(deps: PauseDeps) {
   return { paused, pauseStartTime, toggle, clearAll }
 }
 
+/** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */
 export const usePauseStore = defineStore('pause', () =>
   createPauseStore({
     clearMessages: () => useMessagesStore().clear(),

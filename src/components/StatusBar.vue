@@ -1,18 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
-import { useSerialStore } from '@/stores/serial'
-import { useMessagesStore } from '@/stores/messages'
-import { useSettingsStore } from '@/stores/settings'
-import { useTransferStore } from '@/stores/transfer'
-import { useRecorderStore } from '@/stores/recorder'
+import { useSession } from '@/composables/useSession'
 import { useI18n } from 'vue-i18n'
 import { countdownSecs } from '@/utils/reconnect'
 
-const serial = useSerialStore()
-const messages = useMessagesStore()
-const settings = useSettingsStore()
-const transferStore = useTransferStore()
-const recorder = useRecorderStore()
+const { serial, messages, settings, transfer: transferStore, recorder } = useSession()
 const { t } = useI18n()
 
 // nowTick 在静态期保持当前秒数，驱动 recordDuration 在静默期也前进
@@ -145,7 +137,7 @@ onBeforeUnmount(() => stopTimers())
 
 // ── 缓冲使用率 ──
 const bufferPct = computed(() => {
-  const limit = settings.settings.bufferLimit
+  const limit = settings.bufferLimit
   if (limit <= 0) return 0
   return Math.round((messages.messages.length / limit) * 100)
 })
@@ -239,7 +231,7 @@ const reconnectCountdown = computed(() => {
       <span
         class="stat-group buffer"
         :class="{ warn: serial.connected && bufferWarning, stale: !serial.connected }"
-        :title="t('status.bufferTip', { used: messages.messages.length, limit: settings.settings.bufferLimit })"
+        :title="t('status.bufferTip', { used: messages.messages.length, limit: settings.bufferLimit })"
       >
         <span class="dir-label">buf</span>
         <span class="val">{{ bufferPct }}%</span>

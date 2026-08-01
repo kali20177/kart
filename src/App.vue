@@ -14,15 +14,17 @@ import SettingsModal from './components/SettingsModal.vue'
 import StatusBar from './components/StatusBar.vue'
 import FileTransferDialog from './components/FileTransferDialog.vue'
 import IncompatibleBrowser from './components/IncompatibleBrowser.vue'
-import { useSerialStore } from './stores/serial'
-import { useSettingsStore } from './stores/settings'
 import { useTheme } from './composables/useTheme'
+import { provideSession } from './composables/useSession'
+import { createSession } from './session'
 import { STORAGE_PREFIX } from './composables/useStorage'
 import type { DataMode } from './types'
 import type { AsciiEntry } from './utils/ascii-table'
 
-const serial = useSerialStore()
-const settingsStore = useSettingsStore()
+// 当前应用只有一个串口会话；后续多 tab 时每个 tab 创建自己的 session 并 provide。
+const session = createSession()
+const { serial, settings } = session
+provideSession(session)
 const { t, locale } = useI18n()
 const title = useTitle()
 
@@ -31,7 +33,7 @@ const { naiveTheme, naiveOverrides } = useTheme()
 
 // 语言切换：同步 settings → vue-i18n + html lang
 watch(
-  () => settingsStore.settings.locale,
+  () => settings.locale,
   (l) => {
     locale.value = l
     document.documentElement.setAttribute('lang', l === 'zh-CN' ? 'zh-CN' : 'en')
@@ -41,13 +43,13 @@ watch(
 )
 
 // Naive UI 语言包
-const naiveLocale = computed(() => (settingsStore.settings.locale === 'zh-CN' ? zhCN : enUS))
-const naiveDateLocale = computed(() => (settingsStore.settings.locale === 'zh-CN' ? dateZhCN : dateEnUS))
+const naiveLocale = computed(() => (settings.locale === 'zh-CN' ? zhCN : enUS))
+const naiveDateLocale = computed(() => (settings.locale === 'zh-CN' ? dateZhCN : dateEnUS))
 
 // 主区域视图：[消息] / [波形]。v-show 切换（不卸载），波形隐藏时仍缓冲数据
 const mainView = ref<'messages' | 'waveform'>('messages')
 
-const viewMode = ref<DataMode>(settingsStore.settings.defaultView)
+const viewMode = ref<DataMode>(settings.defaultView)
 const composerText = ref('')
 const showAscii = ref(false)
 const showSettings = ref(false)
@@ -112,7 +114,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => settingsStore.settings.fontSize,
+  () => settings.fontSize,
   (px) => document.documentElement.style.setProperty('--bubble-font-size', px + 'px'),
   { immediate: true }
 )
@@ -125,7 +127,6 @@ function onToComposer(p: { text: string; mode: DataMode }) {
   composerText.value = p.text
   viewMode.value = p.mode
 }
-
 /** 编码器支持的命名转义（与 encodeWithEscapes 的 switch 保持一致） */
 const NAMED_ESCAPES = new Set([0, 9, 10, 13])
 

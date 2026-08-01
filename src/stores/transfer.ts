@@ -621,6 +621,7 @@ export function createTransferStore(deps: TransferDeps) {
   }
 }
 
+/** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */
 export const useTransferStore = defineStore('transfer', () => {
   const serial = useSerialStore()
   const m = useMessagesStore()

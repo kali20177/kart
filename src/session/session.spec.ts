@@ -40,16 +40,16 @@ describe('createSession · 会话接线', () => {
 
     await session.serial.refreshPorts()
     await session.serial.connect()
-    expect(session.serial.connected.value).toBe(true)
+    expect(session.serial.connected).toBe(true)
 
     // 数据注入走注入的 mock 实例
     await injectLine(mock, '1,2\n')
     await injectLine(mock, '3,4\n')
 
     // gap-timeout 切分会把行尾 \n 保留在帧里（文档化行为）
-    const texts = session.messages.messages.value.map((m) => new TextDecoder().decode(m.bytes))
+    const texts = session.messages.messages.map((m) => new TextDecoder().decode(m.bytes))
     expect(texts).toEqual(['1,2\n', '3,4\n'])
-    expect(session.waveform.history.value[0].length).toBe(2)
+    expect(session.waveform.history[0].length).toBe(2)
 
     await session.serial.disconnect()
   })
@@ -63,12 +63,12 @@ describe('createSession · 会话接线', () => {
     await injectLine(mock, '1,2\n')
     await injectLine(mock, '3,4\n')
 
-    expect(session.messages.messages.value.length).toBe(2)
-    expect(session.waveform.history.value[0].length).toBe(2)
+    expect(session.messages.messages.length).toBe(2)
+    expect(session.waveform.history[0].length).toBe(2)
 
     session.pause.clearAll()
-    expect(session.messages.messages.value.length).toBe(0)
-    expect(session.waveform.history.value[0].length).toBe(0)
+    expect(session.messages.messages.length).toBe(0)
+    expect(session.waveform.history[0].length).toBe(0)
 
     await session.serial.disconnect()
   })
@@ -76,11 +76,11 @@ describe('createSession · 会话接线', () => {
   it('每个会话的 pause 状态彼此独立（多会话互不干扰）', () => {
     const a = makeSession(new MockSerialSource())
     const b = makeSession(new MockSerialSource())
-    expect(a.pause.paused.value).toBe(false)
-    expect(b.pause.paused.value).toBe(false)
+    expect(a.pause.paused).toBe(false)
+    expect(b.pause.paused).toBe(false)
     a.pause.toggle()
-    expect(a.pause.paused.value).toBe(true)
-    expect(b.pause.paused.value).toBe(false)
+    expect(a.pause.paused).toBe(true)
+    expect(b.pause.paused).toBe(false)
   })
 
   it('dispose 停止 session 内定时器（信号轮询不再触发）', async () => {
@@ -89,7 +89,7 @@ describe('createSession · 会话接线', () => {
 
     await session.serial.refreshPorts()
     await session.serial.connect()
-    expect(session.serial.connected.value).toBe(true)
+    expect(session.serial.connected).toBe(true)
 
     // dispose 后连接被关闭、驱动被清理
     session.dispose()

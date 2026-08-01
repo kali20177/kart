@@ -1,5 +1,5 @@
-import { effectScope } from 'vue'
-import type { SerialDriver } from '@/types'
+import { effectScope, reactive, type UnwrapNestedRefs } from 'vue'
+import type { AppSettings, SerialDriver } from '@/types'
 import { createSerialStore } from '@/stores/serial'
 import { createMessagesStore } from '@/stores/messages'
 import { createPauseStore } from '@/stores/pause'
@@ -14,14 +14,19 @@ export interface SessionOverrides {
   createDriver?: () => SerialDriver
 }
 
-/** 一个串口连接会话的全部状态。后续多 tab 时每个 tab 一个 Session 实例。 */
+/**
+ * 一个串口连接会话的全部状态。后续多 tab 时每个 tab 一个 Session 实例。
+ * 各 store 经 reactive() 包装：顶层 ref 已解包（与 Pinia 用法一致，无 .value）。
+ */
 export interface Session {
-  serial: ReturnType<typeof createSerialStore>
-  messages: ReturnType<typeof createMessagesStore>
-  pause: ReturnType<typeof createPauseStore>
-  waveform: ReturnType<typeof createWaveformStore>
-  recorder: ReturnType<typeof createRecorderStore>
-  transfer: ReturnType<typeof createTransferStore>
+  serial: UnwrapNestedRefs<ReturnType<typeof createSerialStore>>
+  messages: UnwrapNestedRefs<ReturnType<typeof createMessagesStore>>
+  pause: UnwrapNestedRefs<ReturnType<typeof createPauseStore>>
+  waveform: UnwrapNestedRefs<ReturnType<typeof createWaveformStore>>
+  recorder: UnwrapNestedRefs<ReturnType<typeof createRecorderStore>>
+  transfer: UnwrapNestedRefs<ReturnType<typeof createTransferStore>>
+  /** 全局设置（settings store 的同一 reactive proxy，跨会话共享） */
+  settings: AppSettings
   /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
   dispose: () => void
 }
@@ -39,6 +44,10 @@ export interface Session {
  * 整个创建过程包在 detached effectScope 中：scope.stop() 先执行各 store 的
  * onScopeDispose 清理（interval/timeout/subscription/driver），再停止 scope 内
  * 全部 watcher/computed。detached 使会话生命周期独立于调用方组件，需显式 dispose()。
+ *
+ * 返回的 session 用 reactive() 包装：store 顶层 ref（messages/shallowRef 等）被
+ * 解包为直接可读写的属性，组件里与 Pinia 用法一致（无需 .value）。对 shallowRef
+ * 的深层变更仍沿用 shallow 语义（替换才触发，与 store 内部行为一致）。
  */
 export function createSession(overrides: SessionOverrides = {}): Session {
   const scope = effectScope(true)
@@ -94,7 +103,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       addFileTransfer: (id, filename, size) => messages.addFileTransfer(id, filename, size),
     })
 
-    return { serial, messages, pause, waveform, recorder, transfer }
+    return reactive({ serial, messages, pause, waveform, recorder, transfer, settings: s })
   })!
 
   return { ...stores, dispose: () => scope.stop() }

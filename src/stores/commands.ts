@@ -17,6 +17,7 @@ function genId(): string {
   return `c${Date.now().toString(36)}${idCounter++}`
 }
 
+/** 全局共享 store：快速命令列表跨会话统一（增删改查直接操作，无需经 session）。 */
 export const useCommandsStore = defineStore('commands', () => {
   const commands = ref<QuickCommand[]>(storage.get('commands', PRESETS))
 

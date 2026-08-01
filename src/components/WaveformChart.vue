@@ -5,18 +5,14 @@ import type { DropdownOption } from 'naive-ui'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useI18n } from 'vue-i18n'
-import { useWaveformStore } from '@/stores/waveform'
-import { useSettingsStore } from '@/stores/settings'
-import { usePauseStore } from '@/stores/pause'
+import { useSession } from '@/composables/useSession'
 import { useTheme } from '@/composables/useTheme'
 import { formatTimestamp } from '@/utils/message-format'
 import { exportWaveformAsCsv } from '@/utils/export-waveform-csv'
 import { downloadTextFile } from '@/utils/download'
 import type { WaveformParseConfig } from '@/types'
 
-const waveform = useWaveformStore()
-const settings = useSettingsStore()
-const pauseStore = usePauseStore()
+const { waveform, settings, pause: pauseStore } = useSession()
 const { isDark } = useTheme()
 const { t } = useI18n()
 
@@ -147,7 +143,7 @@ function onSetCursor(u: uPlot) {
     if (v != null) {
       vals.push({
         label: channelLabel(i),
-        value: formatSampleValue(v as number, settings.settings.waveform.parse),
+        value: formatSampleValue(v as number, settings.waveform.parse),
         color: channelColor(i, ch)
       })
     }
@@ -467,7 +463,7 @@ const backSeconds = computed(() => {
 
 // 缩放倍率 = maxPoints / viewSize（放大后 >1），用于工具栏提示
 const zoomLevel = computed(() => {
-  const mp = settings.settings.waveform.maxPoints
+  const mp = settings.waveform.maxPoints
   return mp / Math.max(1, waveform.viewSize)
 })
 

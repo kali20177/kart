@@ -16,9 +16,7 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import type { Message, ExportPreferences } from '@/types'
-import { useSerialStore } from '@/stores/serial'
-import { useMessagesStore } from '@/stores/messages'
-import { useSettingsStore } from '@/stores/settings'
+import { useSession } from '@/composables/useSession'
 import { storage } from '@/composables/useStorage'
 import { formatMessageLine, computeDeltas } from '@/utils/message-format'
 import { exportMessagesAsCsv } from '@/utils/export-csv'
@@ -37,9 +35,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const serialStore = useSerialStore()
-const messagesStore = useMessagesStore()
-const settingsStore = useSettingsStore()
+const { serial: serialStore, messages: messagesStore, settings: settingsStore } = useSession()
 const toast = useMessage()
 
 type ExportFormat = 'txt' | 'csv' | 'json' | 'binary'
@@ -152,7 +148,7 @@ const previewLines = computed(() => {
     return list.map((m, i) =>
       formatMessageLine(m, {
         viewMode: dataMode.value,
-        encoding: settingsStore.settings.encoding,
+        encoding: settingsStore.encoding,
         timeStyle: timeStyle.value,
         withFrameNumber: showFrameNum.value,
         withByteCount: showByteCount.value,
@@ -167,7 +163,7 @@ const previewLines = computed(() => {
   }
 
   if (isCsv.value) {
-    const lines = exportMessagesAsCsv(list, { encoding: settingsStore.settings.encoding, dataMode: dataMode.value }).split('\n')
+    const lines = exportMessagesAsCsv(list, { encoding: settingsStore.encoding, dataMode: dataMode.value }).split('\n')
     return lines.filter((l) => l.trim()).slice(0, 4) // header + 3 rows
   }
 
@@ -176,7 +172,7 @@ const previewLines = computed(() => {
       port: serialStore.selectedPort,
       baudRate: serialStore.options.baudRate,
       connectedAt: serialStore.sessionStartedAt,
-      encoding: settingsStore.settings.encoding,
+      encoding: settingsStore.encoding,
       dataMode: dataMode.value,
       totalRxBytes: serialStore.rxBytes,
       totalTxBytes: serialStore.txBytes,
@@ -240,7 +236,7 @@ function doExport() {
         .map((m, i) =>
           formatMessageLine(m, {
             viewMode: dataMode.value,
-            encoding: settingsStore.settings.encoding,
+            encoding: settingsStore.encoding,
             timeStyle: timeStyle.value,
             withFrameNumber: showFrameNum.value,
             withByteCount: showByteCount.value,
@@ -255,14 +251,14 @@ function doExport() {
         .join('\n') + '\n'
     downloadTextFile(filename.value, lines)
   } else if (isCsv.value) {
-    const csv = exportMessagesAsCsv(list, { encoding: settingsStore.settings.encoding, dataMode: dataMode.value })
+    const csv = exportMessagesAsCsv(list, { encoding: settingsStore.encoding, dataMode: dataMode.value })
     downloadTextFile(filename.value, csv)
   } else if (isJson.value) {
     const meta: SessionMeta = {
       port: serialStore.selectedPort,
       baudRate: serialStore.options.baudRate,
       connectedAt: serialStore.sessionStartedAt,
-      encoding: settingsStore.settings.encoding,
+      encoding: settingsStore.encoding,
       dataMode: dataMode.value,
       totalRxBytes: serialStore.rxBytes,
       totalTxBytes: serialStore.txBytes,

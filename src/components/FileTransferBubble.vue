@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import type { FileTransferState, TransferStatus } from '@/types'
-import { useTransferStore } from '@/stores/transfer'
+import { useSession } from '@/composables/useSession'
 import { formatTimestamp } from '@/utils/message-format'
 
 const props = defineProps<{
@@ -13,7 +13,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useMessage()
-const transferStore = useTransferStore()
+const { transfer: transferStore } = useSession()
 
 /** 实时从 transfer store 读取状态 */
 const state = computed<FileTransferState | null>(() => {

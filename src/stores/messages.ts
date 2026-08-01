@@ -226,6 +226,7 @@ export function createMessagesStore(deps: MessagesDeps) {
   return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
 }
 
+/** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */
 export const useMessagesStore = defineStore('messages', () => {
   const s = useSettingsStore()
   const p = usePauseStore()
