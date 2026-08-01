@@ -7,14 +7,17 @@ ipcRenderer.on('recorder:write-error', (_e, msg: string) => {
 })
 
 // ── serialport 数据事件 ──
-// 主进程通过 webContents.send('serial:data', Uint8Array) 推送，此处转发给渲染进程
-let serialDataHandler: ((data: Uint8Array) => void) | null = null
-ipcRenderer.on('serial:data', (_e, data: Uint8Array) => {
-  serialDataHandler?.(data)
+// 主进程通过 webContents.send('serial:data', { path, data }) 推送，
+// 此处按 Set 转发给各驱动实例的 handler（多实例互不覆盖）。
+type SerialDataHandler = (data: Uint8Array, path: string) => void
+type SerialErrorHandler = (msg: string, path: string) => void
+const serialDataHandlers = new Set<SerialDataHandler>()
+const serialErrorHandlers = new Set<SerialErrorHandler>()
+ipcRenderer.on('serial:data', (_e, payload: { path: string; data: Uint8Array }) => {
+  for (const h of serialDataHandlers) h(payload.data, payload.path)
 })
-let serialErrorHandler: ((msg: string) => void) | null = null
-ipcRenderer.on('serial:error', (_e, msg: string) => {
-  serialErrorHandler?.(msg)
+ipcRenderer.on('serial:error', (_e, payload: { path: string; msg: string }) => {
+  for (const h of serialErrorHandlers) h(payload.msg, payload.path)
 })
 
 contextBridge.exposeInMainWorld('electron', {
@@ -43,37 +46,30 @@ contextBridge.exposeInMainWorld('electron', {
     }) => ipcRenderer.invoke('serial:open', portName, options),
 
     /** 关闭串口 */
-    close: () => ipcRenderer.invoke('serial:close'),
+    close: (portName: string) => ipcRenderer.invoke('serial:close', portName),
 
     /** 写入数据，返回实际写入字节数 */
-    write: (data: Uint8Array) =>
-      ipcRenderer.invoke('serial:write', data) as Promise<number>,
+    write: (portName: string, data: Uint8Array) =>
+      ipcRenderer.invoke('serial:write', portName, data) as Promise<number>,
 
     /** 获取信号状态 */
-    getSignals: () => ipcRenderer.invoke('serial:get-signals') as Promise<{
+    getSignals: (portName: string) => ipcRenderer.invoke('serial:get-signals', portName) as Promise<{
       dcd: boolean
       cts: boolean
       dsr: boolean
       ri: boolean
     }>,
 
-    /** 串口是否已打开 */
-    isOpen: () => ipcRenderer.invoke('serial:is-open') as Promise<boolean>,
-
-    /** 注册数据接收回调 */
-    onData: (handler: (data: Uint8Array) => void) => {
-      serialDataHandler = handler
+    /** 注册数据接收回调，返回取消订阅函数 */
+    onData: (handler: SerialDataHandler) => {
+      serialDataHandlers.add(handler)
+      return () => { serialDataHandlers.delete(handler) }
     },
 
-    /** 注册错误/断连回调 */
-    onError: (handler: (msg: string) => void) => {
-      serialErrorHandler = handler
-    },
-
-    /** 移除数据/错误回调 */
-    removeListeners: () => {
-      serialDataHandler = null
-      serialErrorHandler = null
+    /** 注册错误/断连回调，返回取消订阅函数 */
+    onError: (handler: SerialErrorHandler) => {
+      serialErrorHandlers.add(handler)
+      return () => { serialErrorHandlers.delete(handler) }
     }
   },
 

@@ -217,32 +217,25 @@ function registerSerialPortIpc(): void {
   })
 
   // 关闭串口
-  ipcMain.handle('serial:close', (event) => {
+  ipcMain.handle('serial:close', (event, portName: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const mgr = win ? _serialManagers.get(win.id) : null
-    mgr?.close()
+    mgr?.close(portName)
   })
 
   // 写入数据
-  ipcMain.handle('serial:write', async (event, data: Uint8Array) => {
+  ipcMain.handle('serial:write', async (event, portName: string, data: Uint8Array) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const mgr = win ? _serialManagers.get(win.id) : null
-    if (!mgr?.isOpen) throw new Error('串口未打开')
-    return await mgr.write(Buffer.from(data))
+    if (!mgr) throw new Error('串口管理器不可用')
+    return await mgr.write(portName, Buffer.from(data))
   })
 
   // 获取信号状态
-  ipcMain.handle('serial:get-signals', async (event) => {
+  ipcMain.handle('serial:get-signals', async (event, portName: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const mgr = win ? _serialManagers.get(win.id) : null
-    return await mgr?.getSignals() ?? { dcd: false, cts: false, dsr: false, ri: false }
-  })
-
-  // 检查串口是否已打开
-  ipcMain.handle('serial:is-open', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const mgr = win ? _serialManagers.get(win.id) : null
-    return mgr?.isOpen === true
+    return await mgr?.getSignals(portName) ?? { dcd: false, cts: false, dsr: false, ri: false }
   })
 }
 

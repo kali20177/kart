@@ -39,11 +39,18 @@ export interface SerialPortInfo {
   productId?: string
 }
 
+/** 单端口运行状态（port 实例 + 是否打开） */
+interface PortEntry {
+  port: SerialPort
+  isOpen: boolean
+}
+
 /**
  * 主进程串口管理器 —— 封装 serialport (npm) 库。
  *
- * - 主进程持有一个 SerialPort 实例，串口操作均在此进程执行
- * - 读取事件驱动（SerialPort 'data' 事件），数据通过 webContents.send 推送到渲染进程
+ * - 主进程按端口路径持有多个 SerialPort 实例，串口操作均在此进程执行
+ * - 读取事件驱动（SerialPort 'data' 事件），数据经 webContents.send 推送到渲染进程，
+ *   payload 携带端口路径，渲染端按路径过滤分发
  * - 渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型
  *
  * 相比手写 CSerialPort addon：
@@ -52,17 +59,11 @@ export interface SerialPortInfo {
  *   - 读取事件驱动而非主进程轮询，高波特率不丢字节、不卡 UI 线程
  */
 export class SerialPortManager {
-  private _port: SerialPort | null = null
-  private _isOpen = false
+  private _ports = new Map<string, PortEntry>()
   private _win: BrowserWindow
 
   constructor(win: BrowserWindow) {
     this._win = win
-  }
-
-  /** 串口是否已打开 */
-  get isOpen(): boolean {
-    return this._isOpen
   }
 
   // ── 公共方法 ──
@@ -93,11 +94,6 @@ export class SerialPortManager {
     }
   }
 
-  /**
-   * 打开串口
-   * @param path 如 "COM5"
-   * @param options 波特率等参数，与 types.ts PortOptions 一致
-   */
   open(path: string, options: {
     baudRate: number
     dataBits: 7 | 8
@@ -105,7 +101,10 @@ export class SerialPortManager {
     parity: 'none' | 'even' | 'odd'
     flowControl: 'none' | 'hardware'
   }): Promise<void> {
-    if (this._isOpen) this.close()
+    // 同一端口只允许一个打开者（物理设备不可共享），复用会掩盖多会话冲突
+    if (this._ports.has(path)) {
+      return Promise.reject(new Error(`串口已被占用: ${path}`))
+    }
 
     return new Promise<void>((resolve, reject) => {
       const port = new SerialPort({
@@ -120,31 +119,32 @@ export class SerialPortManager {
       })
 
       port.on('open', () => {
-        this._port = port
-        this._isOpen = true
-        this._attachData(port)
+        this._ports.set(path, { port, isOpen: true })
+        this._attachData(port, path)
         resolve()
       })
 
       port.on('error', (err: Error) => {
-        if (!this._isOpen) {
+        const entry = this._ports.get(path)
+        if (!entry || !entry.isOpen) {
           // 打开阶段错误
           reject(new Error(`打开串口 ${path} 失败: ${err.message}`))
         } else {
           // 运行阶段错误 —— 推送并关闭
           mainLogger.error('serialport', `runtime error on ${path}: ${err.message}`)
-          this._sendError(`串口错误: ${err.message}`)
-          this.close()
+          this._sendError(path, `串口错误: ${err.message}`)
+          this.close(path)
         }
       })
 
-      // 物理断连（主动 close() 已先把 _isOpen 置 false，不会误报）
+      // 物理断连（主动 close(path) 已先删除 entry，不会误报）
       port.on('close', () => {
-        if (this._isOpen) {
-          this._isOpen = false
-          this._port = null
+        const entry = this._ports.get(path)
+        if (entry?.isOpen) {
+          entry.isOpen = false
+          this._ports.delete(path)
           mainLogger.warn('serialport', `port closed unexpectedly: ${path}`)
-          this._sendError('串口已断开')
+          this._sendError(path, '串口已断开')
         }
       })
 
@@ -157,36 +157,37 @@ export class SerialPortManager {
     })
   }
 
-  /** 关闭串口 */
-  close(): void {
-    if (this._port) {
-      try {
-        this._port.close()
-      } catch {
-        /* 端口可能已断连，忽略 */
-      }
-      this._port = null
+  /** 关闭指定串口 */
+  close(path: string): void {
+    const entry = this._ports.get(path)
+    if (!entry) return
+    // 先删 entry 再触发 close——'close' 事件回调查不到 entry，不会误报「已断开」
+    this._ports.delete(path)
+    try {
+      entry.port.close()
+    } catch {
+      /* 端口可能已断连，忽略 */
     }
-    this._isOpen = false
   }
 
   /**
    * 写入数据
    * @returns 实际写入的字节数
    */
-  write(data: Buffer): Promise<number> {
+  write(path: string, data: Buffer): Promise<number> {
     return new Promise<number>((resolve, reject) => {
-      if (!this._isOpen || !this._port) {
+      const entry = this._ports.get(path)
+      if (!entry?.isOpen) {
         reject(new Error('串口未打开'))
         return
       }
-      this._port.write(data, (err) => {
+      entry.port.write(data, (err) => {
         if (err) {
           reject(err)
           return
         }
         // 暂存写入 flush，确保送出后回调（不阻塞等待 drain 长时间）
-        this._port?.drain((derr) => {
+        entry.port.drain((derr) => {
           if (derr) reject(derr)
           else resolve(data.length)
         })
@@ -199,13 +200,14 @@ export class SerialPortManager {
    * serialport.get() 为回调式（类型签名只有 callback 重载），
    * 这里包装成 Promise；返回 { cts, dsr, dcd, ri }。
    */
-  getSignals(): Promise<{ dcd: boolean; cts: boolean; dsr: boolean; ri: boolean }> {
-    if (!this._isOpen || !this._port) {
+  getSignals(path: string): Promise<{ dcd: boolean; cts: boolean; dsr: boolean; ri: boolean }> {
+    const entry = this._ports.get(path)
+    if (!entry?.isOpen) {
       return Promise.resolve({ dcd: false, cts: false, dsr: false, ri: false })
     }
     return new Promise((resolve) => {
       try {
-        this._port?.get((err: Error | null, s?: { cts: boolean; dsr: boolean; dcd: boolean }) => {
+        entry.port.get((err: Error | null, s?: { cts: boolean; dsr: boolean; dcd: boolean }) => {
           if (err || !s) {
             resolve({ dcd: false, cts: false, dsr: false, ri: false })
             return
@@ -224,27 +226,32 @@ export class SerialPortManager {
     })
   }
 
-  /** 销毁管理器 */
+  /** 销毁管理器：关闭全部端口 */
   destroy(): void {
-    this.close()
+    for (const path of [...this._ports.keys()]) {
+      this.close(path)
+    }
   }
 
   // ── 私有方法 ──
 
   /** 挂载数据事件，每帧转发为 Uint8Array（确定性类型，不依赖 Buffer 跨进程语义） */
-  private _attachData(port: SerialPort): void {
+  private _attachData(port: SerialPort, path: string): void {
     port.on('data', (buf: Buffer) => {
+      // 端口已关闭后丢弃残留事件
+      if (!this._ports.get(path)?.isOpen) return
       const data = Uint8Array.from(buf)
       if (!this._win.isDestroyed()) {
-        this._win.webContents.send('serial:data', data)
+        this._win.webContents.send('serial:data', { path, data })
       }
     })
   }
 
   /** 推送错误 + 断连事件到渲染进程 */
-  private _sendError(msg: string): void {
+  private _sendError(path: string, msg: string): void {
+    if (!this._ports.has(path)) return
     if (!this._win.isDestroyed()) {
-      this._win.webContents.send('serial:error', msg)
+      this._win.webContents.send('serial:error', { path, msg })
     }
   }
 }
