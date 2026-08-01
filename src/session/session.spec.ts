@@ -4,8 +4,6 @@ import { createSession, type Session } from '@/session'
 import { setDriverType } from '@/serial'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
 // 每个测试创建的会话，afterEach 统一 dispose 清理（定时器/订阅/驱动）
 let sessions: Session[] = []
 
@@ -27,10 +25,23 @@ function makeSession(mock: MockSerialSource): Session {
   return session
 }
 
-/** 注入一行波形文本并等待 gap-timeout 帧关闭 + rAF 刷入 */
-async function injectLine(mock: MockSerialSource, line: string) {
+/** 轮询等待消息列表刷入到指定累计条数。gap-timeout 尾帧 + rAF 批处理是真实完成
+ *  事件，轮询它而非固定 sleep，避免对宏任务时序做常量阈值假设（CI 高负载抖动）。
+ *  vitest 1.x 无 expect.poll，手写带超时轮询。 */
+async function waitForMessages(session: Session, count: number) {
+  const deadline = Date.now() + 2000
+  while (session.messages.messages.length < count) {
+    if (Date.now() > deadline) {
+      throw new Error(`超时：消息列表 ${session.messages.messages.length} 条，期望 ${count} 条`)
+    }
+    await new Promise((r) => setTimeout(r, 10))
+  }
+}
+
+/** 注入一行波形文本并等待消息列表刷入到累计 count 条（波形为同步 push，消息列表是慢车道） */
+async function injectLine(session: Session, mock: MockSerialSource, line: string, count: number) {
   mock.inject(new TextEncoder().encode(line))
-  await sleep(50) // gapMs(20) 帧关闭 + rAF 批处理
+  await waitForMessages(session, count)
 }
 
 describe('createSession · 会话接线', () => {
@@ -43,8 +54,8 @@ describe('createSession · 会话接线', () => {
     expect(session.serial.connected).toBe(true)
 
     // 数据注入走注入的 mock 实例
-    await injectLine(mock, '1,2\n')
-    await injectLine(mock, '3,4\n')
+    await injectLine(session, mock, '1,2\n', 1)
+    await injectLine(session, mock, '3,4\n', 2)
 
     // gap-timeout 切分会把行尾 \n 保留在帧里（文档化行为）
     const texts = session.messages.messages.map((m) => new TextDecoder().decode(m.bytes))
@@ -60,8 +71,8 @@ describe('createSession · 会话接线', () => {
 
     await session.serial.refreshPorts()
     await session.serial.connect()
-    await injectLine(mock, '1,2\n')
-    await injectLine(mock, '3,4\n')
+    await injectLine(session, mock, '1,2\n', 1)
+    await injectLine(session, mock, '3,4\n', 2)
 
     expect(session.messages.messages.length).toBe(2)
     expect(session.waveform.history[0].length).toBe(2)
