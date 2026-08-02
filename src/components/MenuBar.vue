@@ -93,8 +93,9 @@ const helpMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.shortcuts'), key: 'shortcuts' },
   { type: 'divider', key: 'd1' },
   { label: t('menu.about'), key: 'about' },
-  { label: t('menu.license'), key: 'license' },
   { type: 'divider', key: 'd2' },
+  { label: t('menu.license'), key: 'license' },
+  { type: 'divider', key: 'd3' },
   { label: t('menu.devtools'), key: 'devtools' }
 ])
 
