@@ -1,4 +1,4 @@
-import { inject, provide, type InjectionKey, type Ref } from 'vue'
+import { inject, provide, ref, type InjectionKey, type Ref } from 'vue'
 import type { Session } from '@/session'
 
 /** 会话注入 key。Symbol 保证跨实例唯一，避免与字符串 key 冲突。 */
@@ -6,6 +6,9 @@ const SESSION_KEY: InjectionKey<Session> = Symbol('session')
 
 /** 当前活动会话注入 key（全局区组件：MenuBar/命令面板）。注入的是 Ref，切 tab 时跟随。 */
 const ACTIVE_SESSION_KEY: InjectionKey<Ref<Session>> = Symbol('active-session')
+
+/** 被其他会话占用的端口集合注入 key（ConnectionBar 端口下拉禁用提示用）。 */
+const OCCUPIED_PORTS_KEY: InjectionKey<Ref<ReadonlySet<string>>> = Symbol('occupied-ports')
 
 /**
  * 提供当前组件子树使用的会话。SessionPane 为每个 tab 调用一次，传入对应会话。
@@ -48,3 +51,19 @@ export function useActiveSession(): Ref<Session> {
   }
   return session
 }
+
+/**
+ * 提供被其他会话占用的端口集合。App.vue 在顶层调用一次，传入 computed；
+ * ConnectionBar 用它禁用并标注被占用的端口。未提供（如单测环境）时为空集合。
+ */
+export function provideOccupiedPorts(ports: Ref<ReadonlySet<string>>): void {
+  provide(OCCUPIED_PORTS_KEY, ports)
+}
+
+/** 获取被其他会话占用的端口集合（端口下拉禁用提示用）。未 provide 时返回空集合。 */
+export function useOccupiedPorts(): Ref<ReadonlySet<string>> {
+  return inject(OCCUPIED_PORTS_KEY, EMPTY_PORTS)
+}
+
+const EMPTY_SET: ReadonlySet<string> = new Set()
+const EMPTY_PORTS: Ref<ReadonlySet<string>> = ref(EMPTY_SET)

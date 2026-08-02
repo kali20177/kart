@@ -121,6 +121,7 @@ export default {
     requestPort: 'Select serial device',
     connectFailed: 'Connection failed',
     reconnected: 'Serial reconnected',
+    portOccupied: 'Already in use by another session',
   },
   status: {
     notConnected: 'Disconnected',

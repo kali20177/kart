@@ -11,7 +11,7 @@ import SettingsModal from './components/SettingsModal.vue'
 import FileTransferDialog from './components/FileTransferDialog.vue'
 import IncompatibleBrowser from './components/IncompatibleBrowser.vue'
 import { useTheme } from './composables/useTheme'
-import { provideActiveSession } from './composables/useSession'
+import { provideActiveSession, provideOccupiedPorts } from './composables/useSession'
 import { createSession } from './session'
 import { STORAGE_PREFIX } from './composables/useStorage'
 import type { Session } from './session'
@@ -28,6 +28,10 @@ const activeSession = computed(() => sessions.value[activeSessionId.value])
 sessions.value.push(createSession())
 // 传 ref/computed 本身（非 .value）：provide 只执行一次，传解包值会固定为会话 0
 provideActiveSession(activeSession)
+// 被其他会话已连接占用的端口集合（各 ConnectionBar 下拉禁用提示）
+provideOccupiedPorts(
+  computed(() => new Set(sessions.value.filter((s) => s.serial.connected).map((s) => s.serial.selectedPort).filter((p): p is string => !!p)))
+)
 
 function onNewSession() {
   const s = createSession()

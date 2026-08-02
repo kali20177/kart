@@ -2,7 +2,7 @@
 import { computed, h, nextTick, onBeforeUnmount, ref, watch, type VNode, type VNodeChild } from 'vue'
 import { NSelect, NButton, NTooltip, NModal, NInput, useMessage } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
-import { useSession } from '@/composables/useSession'
+import { useSession, useOccupiedPorts } from '@/composables/useSession'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
@@ -15,7 +15,17 @@ const { t } = useI18n()
 const { serial, recorder } = useSession()
 const message = useMessage()
 
-const portOptions = computed(() => serial.ports.map((p) => ({ label: p.path, value: p.path })))
+const occupiedPorts = useOccupiedPorts()
+
+const portOptions = computed(() =>
+  serial.ports.map((p) => ({
+    label: p.path,
+    value: p.path,
+    // 被其他会话已连接的端口：禁用 + 下拉内红色提示（含当前选中项，防止新会话
+    // 自动选中被占用端口后静默连错；本会话已连接时整个下拉本就禁用）
+    disabled: occupiedPorts.value.has(p.path)
+  }))
+)
 
 /** 端口下拉第二行：厂商名 + VID/PID。触发框（selected）只显示路径，元数据降级到菜单项。 */
 function formatPortMeta(p: PortInfo): string {
@@ -25,26 +35,31 @@ function formatPortMeta(p: PortInfo): string {
 
 const renderPortOption: RenderOption = (info) => {
   const path = (info.option as { value: string }).value as string
+  const disabled = !!(info.option as { disabled?: boolean }).disabled
   const meta = serial.ports.find((p) => p.path === path)
   const metaText = meta ? formatPortMeta(meta) : ''
-  if (!metaText) return info.node
-  // render-option 返回的节点会整体替换原 option，丢失其 onClick/onMouseenter 等处理器
-  //（select 的选中点击就在这些 props 上）。因此保留原 props 重建同一 div，仅把元数据行
-  // 追加为第二行子节点并改为纵向布局 —— 整行（含灰色小字）都在可点击区域内。
   const base = info.node as VNode
+  const children = (base.children ? (Array.isArray(base.children) ? base.children : [base.children]) : []) as VNode[]
+  const lines = [
+    ...children,
+    ...(disabled
+      ? [h('span', { style: 'color:var(--err);font-size:11px;line-height:1;margin-top:2px' }, t('conn.portOccupied'))]
+      : metaText
+        ? [h('span', {
+            style:
+              'color:var(--text-dim);font-size:11px;line-height:1;margin-top:2px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+          }, metaText)]
+        : [])
+  ]
+  // render-option 返回的节点会整体替换原 option，丢失其 onClick/onMouseenter 等处理器
+  //（select 的选中点击就在这些 props 上）。因此保留原 props 重建同一 div，仅把第二行
+  // 追加为子节点并改为纵向布局 —— 整行（含提示/元数据小字）都在可点击区域内。
   const props = base.props as Record<string, unknown> | null
   const origStyle = props && Array.isArray(props.style) ? props.style : props?.style ? [props.style] : []
-  const children = (base.children ? (Array.isArray(base.children) ? base.children : [base.children]) : []) as VNode[]
   return h('div', {
     ...props,
     style: [...origStyle, 'display:flex;flex-direction:column;align-items:flex-start;']
-  }, [
-    ...children,
-    h('span', {
-      style:
-        'color:var(--text-dim);font-size:11px;line-height:1;margin-top:2px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
-    }, metaText)
-  ])
+  }, lines)
 }
 
 const baudOptions = computed<SelectOption[]>(() => {
