@@ -20,7 +20,7 @@ const DB_NAME = 'kart-record'
 // 单例状态
 const dirName = ref<string | null>(storage.get<string | null>(DIR_STORAGE_KEY, null))
 let dirHandle: FileSystemDirectoryHandle | null = null
-let dirPath: string | null = storage.get<string | null>(DIR_PATH_KEY, null)
+const dirPath = ref<string | null>(storage.get<string | null>(DIR_PATH_KEY, null))
 
 // ─── IndexedDB 句柄持久化（尽力而为，失败不阻塞） ───
 
@@ -90,6 +90,8 @@ restoreDone = tryLoadHandle().then((handle) => {
 
 export function useRecordDirectory() {
   const isConfigured = computed(() => dirName.value !== null)
+  // 展示用路径：Electron 有完整路径；浏览器 File System Access API 仅暴露目录名
+  const displayPath = computed(() => dirPath.value ?? dirName.value)
 
   async function pick(): Promise<void> {
     // 等待 IDB 恢复完成
@@ -99,11 +101,11 @@ export function useRecordDirectory() {
     if (window.electron?.recorder?.showDirectoryPicker) {
       const result = await window.electron.recorder.showDirectoryPicker()
       if (result) {
-        dirPath = result
+        dirPath.value = result
         const parts = result.replace(/\\/g, '/').split('/')
         dirName.value = parts[parts.length - 1] || result
         persistNow(DIR_STORAGE_KEY, dirName.value)
-        persistNow(DIR_PATH_KEY, dirPath)
+        persistNow(DIR_PATH_KEY, dirPath.value)
       }
       return
     }
@@ -132,7 +134,7 @@ export function useRecordDirectory() {
 
   function clear() {
     dirHandle = null
-    dirPath = null
+    dirPath.value = null
     dirName.value = null
     storage.remove(DIR_STORAGE_KEY)
     storage.remove(DIR_PATH_KEY)
@@ -144,8 +146,8 @@ export function useRecordDirectory() {
 
     // Electron 路径
     if (window.electron?.recorder?.createFile) {
-      if (!dirPath) return null
-      const result = await window.electron.recorder.createFile(dirPath, fileName)
+      if (!dirPath.value) return null
+      const result = await window.electron.recorder.createFile(dirPath.value, fileName)
       if (!result) return null
       const rec = window.electron!.recorder!
       return {
@@ -182,5 +184,5 @@ export function useRecordDirectory() {
     return null
   }
 
-  return { dirName, isConfigured, pick, clear, createFile }
+  return { dirName, displayPath, isConfigured, pick, clear, createFile }
 }

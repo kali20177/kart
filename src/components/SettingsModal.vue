@@ -343,7 +343,7 @@ const navItems = computed<NavItem[]>(() => [
             </NFormItem>
             <NFormItem :label="t('record.saveDir')">
               <div class="record-dir-row">
-                <span class="record-dir-name">{{ recordDir.dirName.value ?? ('(' + t('record.notSet') + ')') }}</span>
+                <span class="record-dir-name" :title="recordDir.displayPath.value ?? undefined">{{ recordDir.displayPath.value ?? ('(' + t('record.notSet') + ')') }}</span>
                 <NButton size="small" :disabled="!canPickDir" @click="pickDir">{{ t('record.selectDir') }}</NButton>
               </div>
               <div v-if="!canPickDir" class="record-dir-hint">{{ pickerDisabledHint }}</div>
