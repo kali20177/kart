@@ -277,21 +277,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="bar">
-    <NTooltip :disabled="!serial.selectedPort">
-      <template #trigger>
-        <NSelect
-          v-model:value="serial.selectedPort"
-          :options="portOptions"
-          :render-option="renderPortOption"
-          :consistent-menu-width="false"
-          size="small"
-          :placeholder="t('conn.selectPort')"
-          style="width: 210px"
-          :disabled="serial.connected"
-        />
-      </template>
-      {{ serial.selectedPort }}
-    </NTooltip>
+    <NSelect
+      v-model:value="serial.selectedPort"
+      :options="portOptions"
+      :render-option="renderPortOption"
+      :consistent-menu-width="false"
+      size="small"
+      :placeholder="t('conn.selectPort')"
+      style="width: 210px"
+      :disabled="serial.connected"
+    />
     <NTooltip v-if="serial.driverType === 'webserial'">
       <template #trigger>
         <NButton size="small" :disabled="serial.connected" @click="onRequestPort">+</NButton>
