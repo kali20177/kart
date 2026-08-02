@@ -195,7 +195,7 @@ onMounted(() => {
             :class="{ active: i === activeSessionId }"
             @click="activeSessionId = i"
           >
-            <span class="session-tab-name">{{ t('session.tabLabel', { n: i + 1 }) }}</span>
+            <span class="session-tab-name" :title="s.serial.selectedPort ?? undefined">{{ s.serial.selectedPort ?? t('session.tabLabel', { n: i + 1 }) }}</span>
             <span
               class="session-tab-dot"
               :class="{ on: s.serial.connected, reconnecting: s.serial.reconnecting }"
@@ -298,6 +298,12 @@ onMounted(() => {
   background: var(--bg-elevated);
   color: var(--accent);
   border-color: var(--border);
+}
+.session-tab-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .session-tab-dot {
   width: 8px;
