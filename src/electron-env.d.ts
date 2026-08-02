@@ -21,6 +21,12 @@ declare global {
         /** 读取主进程全部日志文件内容（导出日志用） */
         read(): Promise<string[] | null>
       }
+      persist?: {
+        /** 按 key 保存一个 JSON 值到主进程镜像文件（kart-settings.json） */
+        save(key: string, value: unknown): Promise<boolean>
+        /** 全量快照导出（容量告警时），用户经系统对话框选择保存位置 */
+        exportSnapshot(content: string, fileName: string): Promise<boolean>
+      }
     }
   }
 }

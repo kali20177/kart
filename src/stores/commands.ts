@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { QuickCommand } from '@/types'
 import { storage } from '@/composables/useStorage'
+import { persistNow } from '@/utils/persist'
 
 /** 内置示例命令，便于阶段 1 演示 */
 const PRESETS: QuickCommand[] = [
@@ -21,7 +22,7 @@ function genId(): string {
 export const useCommandsStore = defineStore('commands', () => {
   const commands = ref<QuickCommand[]>(storage.get('commands', PRESETS))
 
-  watch(commands, (val) => storage.set('commands', val), { deep: true })
+  watch(commands, (val) => persistNow('commands', val), { deep: true })
 
   function add(cmd: Omit<QuickCommand, 'id'>) {
     commands.value.push({ ...cmd, id: genId() })

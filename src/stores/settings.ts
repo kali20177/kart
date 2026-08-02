@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
 import type { AppSettings, WaveformSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
+import { persistNow } from '@/utils/persist'
 import { getTheme } from '@/themes'
 
 const DEFAULTS: AppSettings = {
@@ -40,18 +41,18 @@ export const useSettingsStore = defineStore('settings', () => {
     const old = persisted.theme
     persisted.themeId = old === 'light' ? 'glass-industrial-light' : ('glass-industrial-dark' as string)
     delete persisted.theme
-    storage.set('settings', persisted)
+    persistNow('settings', persisted)
   }
   // 二次迁移：上一版 themeMode（已被删除）→ glass-industrial 对应主题
   if ('themeMode' in persisted && !('themeId' in persisted)) {
     persisted.themeId = persisted.themeMode === 'light' ? 'glass-industrial-light' : 'glass-industrial-dark'
     delete persisted.themeMode
-    storage.set('settings', persisted)
+    persistNow('settings', persisted)
   }
   // 三次迁移：上一轮 themeId='glass-industrial'（无 dark/light 后缀）→ 暗色
   if (persisted.themeId && !getTheme(persisted.themeId)) {
     persisted.themeId = 'glass-industrial-dark'
-    storage.set('settings', persisted)
+    persistNow('settings', persisted)
   }
   // 四次迁移：rxVerifyChecksum 开关已废弃，改用 rxChecksumAlgorithm='none' 表示关闭。
   // 旧版以 sendChecksum 兼作 RX 校验算法，故开启校验的用户沿用其 sendChecksum 作为 RX 算法。
@@ -62,7 +63,7 @@ export const useSettingsStore = defineStore('settings', () => {
         : 'none'
     }
     delete persisted.rxVerifyChecksum
-    storage.set('settings', persisted)
+    persistNow('settings', persisted)
   }
   // 五次迁移：waveform 新增 maxHistoryPoints（历史缓冲上限）。浅合并下 persisted.waveform
   // 整体覆盖 DEFAULTS.waveform，旧数据缺该字段需显式补默认，否则 maxHistoryPoints 为 undefined。
@@ -70,7 +71,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const persistedWf = persisted.waveform as Partial<WaveformSettings> | undefined
   if (persistedWf && persistedWf.maxHistoryPoints == null) {
     persistedWf.maxHistoryPoints = DEFAULTS.waveform.maxHistoryPoints
-    storage.set('settings', persisted)
+    persistNow('settings', persisted)
   }
   // 六次迁移：移除二进制解析模式。旧数据可能残留 format/type/littleEndian/
   // byteOffset/sampleRate/channels 字段，清理以保持整洁。
@@ -86,7 +87,7 @@ export const useSettingsStore = defineStore('settings', () => {
       delete (persistedWf as Record<string, unknown>).sampleRate
       dirty = true
     }
-    if (dirty) storage.set('settings', persisted)
+    if (dirty) persistNow('settings', persisted)
   }
 
   const settings = reactive<AppSettings>(
@@ -97,15 +98,15 @@ export const useSettingsStore = defineStore('settings', () => {
   // 开关标志本身始终持久化；它只决定 settings 内容是否自动写入本地存储。
   const autoSave = ref<boolean>(storage.get('autoSave', true))
   watch(autoSave, (on) => {
-    storage.set('autoSave', on)
-    if (on) storage.set('settings', settings) // 开启时立即落盘当前配置
+    persistNow('autoSave', on)
+    if (on) persistNow('settings', settings) // 开启时立即落盘当前配置
   })
 
   // 任何变更落盘（受 autoSave 开关控制）
   watch(
     settings,
     (val) => {
-      if (autoSave.value) storage.set('settings', val)
+      if (autoSave.value) persistNow('settings', val)
     },
     { deep: true }
   )

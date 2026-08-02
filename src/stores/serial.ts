@@ -12,6 +12,7 @@ import { isPresetBaud, isValidBaud, loadCustomBaudRates } from '@/utils/baud'
 import { shouldReconnect } from '@/utils/reconnect'
 import type { DataMode, LineEnding } from '@/types'
 import { storage } from '@/composables/useStorage'
+import { persistNow } from '@/utils/persist'
 import { logger } from '@/utils/logger'
 import { useMessagesStore } from './messages'
 import { useSettingsStore } from './settings'
@@ -313,13 +314,13 @@ export function createSerialStore(deps: SerialDeps) {
     if (isPresetBaud(baud)) return
     if (customBaudRates.value.some((c) => c.baud === baud)) return
     customBaudRates.value = [...customBaudRates.value, { baud }].sort((a, b) => a.baud - b.baud)
-    storage.set('customBaudRates', customBaudRates.value)
+    persistNow('customBaudRates', customBaudRates.value)
   }
 
   /** 删除自定义波特率（预设档位不在 customBaudRates 中，天然不可删） */
   function removeCustomBaudRate(baud: number) {
     customBaudRates.value = customBaudRates.value.filter((c) => c.baud !== baud)
-    storage.set('customBaudRates', customBaudRates.value)
+    persistNow('customBaudRates', customBaudRates.value)
   }
 
   /** 更新自定义波特率的标注（空串清除标注） */
@@ -328,7 +329,7 @@ export function createSerialStore(deps: SerialDeps) {
     customBaudRates.value = customBaudRates.value.map((c) =>
       c.baud === baud ? { ...c, note: trimmed || undefined } : c
     )
-    storage.set('customBaudRates', customBaudRates.value)
+    persistNow('customBaudRates', customBaudRates.value)
   }
 
   /**
@@ -421,7 +422,7 @@ export function createSerialStore(deps: SerialDeps) {
   function reset() {
     Object.assign(options, DEFAULT_OPTS)
     customBaudRates.value = []
-    storage.set('customBaudRates', [])
+    persistNow('customBaudRates', [])
   }
 
   // 用户在重连等待期间关闭「自动重连」开关 → 停止挂起重连、恢复未连接状态。

@@ -50,6 +50,9 @@ export default {
     exported: 'Logs exported',
     exportFailed: 'Failed to export logs',
   },
+  persist: {
+    snapshotExported: 'Configuration backup exported. Clean up when storage is low.',
+  },
   record: {
     start: 'Record',
     stop: 'Stop',

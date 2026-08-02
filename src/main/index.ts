@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { SerialPortManager } from './SerialPortManager'
+import { JsonStore } from './JsonStore'
 import { mainLogger } from './logger'
 
 // ── 全局错误拦截（必须在最前面注册） ──
@@ -249,6 +250,34 @@ function registerLoggerIpc(): void {
   })
 }
 
+/** 注册持久化镜像 IPC handlers（渲染端 localStorage 的权威副本落盘） */
+function registerPersistIpc(store: JsonStore): void {
+  // 渲染端每次 persistNow 调用触发，写入内存 store 并防抖落盘
+  ipcMain.handle('persist:save', (_e, key: string, value: unknown) => {
+    store.save(key, value)
+    return true
+  })
+
+  // 容量告警时的全量快照导出（用户主动保存的文件）
+  ipcMain.handle('persist:export-snapshot', async (event, content: string, fileName: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return false
+    const result = await dialog.showSaveDialog(win, {
+      title: '保存配置快照',
+      defaultPath: fileName,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (result.canceled || !result.filePath) return false
+    try {
+      fs.writeFileSync(result.filePath, content, 'utf-8')
+      return true
+    } catch (e) {
+      mainLogger.error('persist', `snapshot write failed: ${e instanceof Error ? e.message : String(e)}`)
+      return false
+    }
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1100,
@@ -303,9 +332,11 @@ function createWindow(): void {
 app.whenReady().then(() => {
   mainLogger.init()
   mainLogger.info('main', `应用启动: v${app.getVersion()} electron=${process.versions.electron} chrome=${process.versions.chrome} node=${process.versions.node} platform=${process.platform}/${process.arch}`)
+  jsonStore = new JsonStore()
   registerRecorderIpc()
   registerSerialPortIpc()
   registerLoggerIpc()
+  registerPersistIpc(jsonStore)
   configureWebSerial()
 
   Menu.setApplicationMenu(null)
@@ -330,10 +361,12 @@ app.on('window-all-closed', () => {
 // app.exit 本身不再触发 will-quit，flushing flag 仅作防御性兜底；
 // close() 带超时兜底，流卡死也不会阻塞退出流程。
 let flushing = false
+let jsonStore: JsonStore | null = null
 app.on('will-quit', (event) => {
   if (flushing) return
   flushing = true
   event.preventDefault()
+  jsonStore?.flushSync()
   mainLogger.info('main', '应用退出')
   mainLogger.close().finally(() => app.exit(0))
 })

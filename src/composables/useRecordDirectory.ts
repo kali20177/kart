@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import type { IFileWriter } from './useFileWriter'
 import { storage } from './useStorage'
+import { persistNow } from '@/utils/persist'
 
 /**
  * 管理录制保存目录的 composable（单例）。
@@ -101,8 +102,8 @@ export function useRecordDirectory() {
         dirPath = result
         const parts = result.replace(/\\/g, '/').split('/')
         dirName.value = parts[parts.length - 1] || result
-        storage.set(DIR_STORAGE_KEY, dirName.value)
-        storage.set(DIR_PATH_KEY, dirPath)
+        persistNow(DIR_STORAGE_KEY, dirName.value)
+        persistNow(DIR_PATH_KEY, dirPath)
       }
       return
     }
@@ -116,7 +117,7 @@ export function useRecordDirectory() {
         const handle = await picker({ id: PICKER_ID, mode: 'readwrite' } as { id: string; mode: 'readwrite' })
         dirHandle = handle as unknown as FileSystemDirectoryHandle
         dirName.value = handle.name
-        storage.set(DIR_STORAGE_KEY, handle.name)
+        persistNow(DIR_STORAGE_KEY, handle.name)
         // 异步存储句柄到 IDB（尽力）
         trySaveHandle(dirHandle)
       } catch (e) {

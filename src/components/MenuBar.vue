@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { NDropdown, NButton, NModal, useMessage, useDialog } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import { useActiveSession } from '@/composables/useSession'
 import { useSettingsStore } from '@/stores/settings'
 import { useCommandsStore } from '@/stores/commands'
 import { storage } from '@/composables/useStorage'
+import { onSnapshotExport } from '@/utils/persist'
 import { useI18n } from 'vue-i18n'
 import { logger } from '@/utils/logger'
 
@@ -23,6 +24,15 @@ const dialog = useDialog()
 const showAbout = ref(false)
 const showLicense = ref(false)
 const showShortcuts = ref(false)
+
+// 容量告警快照导出成功的提示（persist.ts 通过事件广播，UI 层在此消费）
+onMounted(() => {
+  offSnapshot = onSnapshotExport(() => {
+    message.success(t('persist.snapshotExported'))
+  })
+})
+onUnmounted(() => offSnapshot?.())
+let offSnapshot: (() => void) | null = null
 
 /** 检测是否为 macOS（userAgent + platform 双保险，部分浏览器 platform 已被屏蔽） */
 const isMac = computed(() => {

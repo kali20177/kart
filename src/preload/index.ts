@@ -92,5 +92,14 @@ contextBridge.exposeInMainWorld('electron', {
   // 渲染端任何 console 输出都会经主进程 console-message 事件落到同一批日志文件。
   log: {
     read: () => ipcRenderer.invoke('log:read') as Promise<string[] | null>,
+  },
+
+  // 持久化镜像：渲染端 localStorage 的权威副本（kart-settings.json）。
+  // 渲染端 persistNow 每次调用触发 save；容量告警时经 exportSnapshot 走系统对话框保存。
+  persist: {
+    save: (key: string, value: unknown) =>
+      ipcRenderer.invoke('persist:save', key, value) as Promise<boolean>,
+    exportSnapshot: (content: string, fileName: string) =>
+      ipcRenderer.invoke('persist:export-snapshot', content, fileName) as Promise<boolean>,
   }
 })

@@ -104,7 +104,7 @@ AsciiTable      → ascii-table/utils
 
 ### 存储抽象
 
-`useStorage.ts` 封装 localStorage，暴露 `{ get, set, remove }` 接口。后续切换到 `electron-store` 时，调用方无需修改。
+`useStorage.ts` 封装 localStorage，暴露 `{ get, set, remove }` 接口（同步读源，首次加载零闪烁）。用户数据（设置/命令/波特率/导出偏好/录制目录）经 `src/utils/persist.ts` 的 `persistNow` 直写落盘：同步写 localStorage + 异步镜像（浏览器 → IndexedDB `kart-persist`；Electron → 主进程 `JsonStore` 的 `userData/kart-settings.json`）+ 容量自检（≥1.5MB 快照导出提醒）。布局/临时键（rightWidth/inputHeight/sendHistory）仍走同步 `useStorage`。
 
 ## 功能总览
 
@@ -197,10 +197,9 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 
 ## 待完成事项
 
-1. 将 `useStorage` 从 localStorage 迁移到 electron-store（Electron 环境持久化）
-2. 将 Blob 下载替换为 Electron `dialog` + `fs`
-3. DTR/RTS/Break 控制（`SerialDriver` 目前只有 `getSignals` 只读，无 `setSignals`）
-4. 文件发送引擎内联工具（crc/chunk-framer/rate-limit）拆分为独立 `utils/*.ts` + 单测
+1. 将 Blob 下载替换为 Electron `dialog` + `fs`（快照导出已走 dialog，其余下载路径未接）
+2. DTR/RTS/Break 控制（`SerialDriver` 目前只有 `getSignals` 只读，无 `setSignals`）
+3. 文件发送引擎内联工具（crc/chunk-framer/rate-limit）拆分为独立 `utils/*.ts` + 单测
 
 ## 生产环境缺失功能与已知问题
 
