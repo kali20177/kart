@@ -228,6 +228,43 @@ export class SerialPortManager {
     })
   }
 
+  /**
+   * 设置输出控制线（DTR/RTS）。serialport.set 只更新传入的属性，
+   * 未提供的项保持当前值不变。
+   */
+  setSignals(path: string, signals: { dtr?: boolean; rts?: boolean }): Promise<void> {
+    const entry = this._ports.get(path)
+    if (!entry?.isOpen) {
+      return Promise.reject(new Error('串口未打开'))
+    }
+    return new Promise((resolve, reject) => {
+      const opts: Record<string, boolean> = {}
+      if (signals.dtr !== undefined) opts.dtr = signals.dtr
+      if (signals.rts !== undefined) opts.rts = signals.rts
+      entry.port.set(opts, (err) => {
+        if (err) reject(err)
+        else resolve()
+      })
+    })
+  }
+
+  /**
+   * 置/清 Break 条件（TX 拉低）。serialport.set({ brk }) 的 brk=true 置位、
+   * brk=false 清除；部分虚拟/蓝牙串口可能不支持而报错。
+   */
+  setBreak(path: string, active: boolean): Promise<void> {
+    const entry = this._ports.get(path)
+    if (!entry?.isOpen) {
+      return Promise.reject(new Error('串口未打开'))
+    }
+    return new Promise((resolve, reject) => {
+      entry.port.set({ brk: active }, (err) => {
+        if (err) reject(err)
+        else resolve()
+      })
+    })
+  }
+
   /** 销毁管理器：关闭全部端口 */
   destroy(): void {
     for (const path of [...this._ports.keys()]) {

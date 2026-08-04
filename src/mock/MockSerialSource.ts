@@ -17,6 +17,8 @@ export class MockSerialSource implements SerialDriver {
   private seq = 0
   private _isOpen = false
   private signals: SerialSignals = { dcd: true, cts: true, dsr: true, ri: false }
+  private _outputSignals = { dtr: false, rts: false }
+  private _break = false
 
   get isOpen() {
     return this._isOpen
@@ -54,6 +56,29 @@ export class MockSerialSource implements SerialDriver {
 
   getSignals(): SerialSignals {
     return { ...this.signals }
+  }
+
+  /** 记录 DTR/RTS 输出线状态（mock 无真实硬件，仅保存供 UI 反映与断言） */
+  async setSignals(signals: { dtr?: boolean; rts?: boolean }): Promise<void> {
+    if (!this._isOpen) throw new Error('端口未打开')
+    if (signals.dtr !== undefined) this._outputSignals.dtr = signals.dtr
+    if (signals.rts !== undefined) this._outputSignals.rts = signals.rts
+  }
+
+  /** 记录 Break 状态（mock 无真实硬件，仅保存供断言） */
+  async setBreak(active: boolean): Promise<void> {
+    if (!this._isOpen) throw new Error('端口未打开')
+    this._break = active
+  }
+
+  /** 当前输出的 DTR/RTS 状态（测试断言用） */
+  get outputSignals() {
+    return { ...this._outputSignals }
+  }
+
+  /** 当前 Break 状态（测试断言用） */
+  get breakActive() {
+    return this._break
   }
 
   onData(cb: (bytes: Uint8Array) => void): () => void {

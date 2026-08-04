@@ -23,6 +23,7 @@ const { MockSerialPort, portInstances } = vi.hoisted(() => {
     })
     write = vi.fn((_d: unknown, cb: (e: Error | null) => void) => cb(null))
     drain = vi.fn((cb: (e: Error | null) => void) => cb(null))
+    set = vi.fn((_o: Record<string, boolean>, cb: (e: Error | null) => void) => cb(null))
     get = vi.fn((cb: (e: Error | null, s?: { cts: boolean; dsr: boolean; dcd: boolean }) => void) =>
       cb(null, { cts: false, dsr: false, dcd: false })
     )
@@ -144,5 +145,31 @@ describe('SerialPortManager · 多端口', () => {
 
   it('write 未打开端口抛错', async () => {
     await expect(mgr.write('COM9', Buffer.from([1]))).rejects.toThrow('串口未打开')
+  })
+
+  it('setSignals 调用 port.set 且只传入提供的项', async () => {
+    await mgr.open('COM5', OPTS)
+    const port = portInstances[0]
+    await mgr.setSignals('COM5', { dtr: true })
+    expect(port.set).toHaveBeenCalledWith({ dtr: true }, expect.any(Function))
+    await mgr.setSignals('COM5', { rts: false })
+    expect(port.set).toHaveBeenCalledWith({ rts: false }, expect.any(Function))
+  })
+
+  it('setSignals 未打开端口抛错', async () => {
+    await expect(mgr.setSignals('COM9', { dtr: true })).rejects.toThrow('串口未打开')
+  })
+
+  it('setBreak 通过 port.set({ brk }) 置位/清除', async () => {
+    await mgr.open('COM5', OPTS)
+    const port = portInstances[0]
+    await mgr.setBreak('COM5', true)
+    expect(port.set).toHaveBeenCalledWith({ brk: true }, expect.any(Function))
+    await mgr.setBreak('COM5', false)
+    expect(port.set).toHaveBeenCalledWith({ brk: false }, expect.any(Function))
+  })
+
+  it('setBreak 未打开端口抛错', async () => {
+    await expect(mgr.setBreak('COM9', true)).rejects.toThrow('串口未打开')
   })
 })

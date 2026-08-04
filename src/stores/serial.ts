@@ -31,6 +31,9 @@ export interface SerialDeps {
 // 自动重连：固定 2s 间隔，不限次数；用户断开或关闭开关则停止。
 const RECONNECT_INTERVAL_MS = 2000
 
+/** Break 脉冲宽度：ST 等 MCU ISP 协议常用 250ms 拉低。 */
+const BREAK_PULSE_MS = 250
+
 const DEFAULT_OPTS: PortOptions = {
   baudRate: 115200,
   dataBits: 8,
@@ -53,6 +56,12 @@ export function createSerialStore(deps: SerialDeps) {
   })
   const scenario = ref<MockScenarioId>('at-reply')
   const signals = ref<SerialSignals>({ dcd: false, cts: false, dsr: false, ri: false })
+  // 输出控制线：记录「最后一次请求」的 DTR/RTS 电平（驱动无法读回输出线，UI 据此显示
+  // toggle 状态）。会话生命周期内保持，断线重连后自动重放给驱动。
+  const dtr = ref(false)
+  const rts = ref(false)
+  /** Break 脉冲进行中（UI 据此禁用 BRK 按钮防止连点） */
+  const breakBusy = ref(false)
   const rxBytes = ref(0)
   const txBytes = ref(0)
   const sessionStartedAt = ref<number | null>(null)
@@ -156,6 +165,15 @@ export function createSerialStore(deps: SerialDeps) {
     connected.value = true
     if (wasReconnecting) {
       logger.info('serial', `auto-reconnect succeeded: ${selectedPort.value}`)
+    }
+    // 重放用户此前请求的输出线电平（如 ESP32/STM32 复位组合）。失败静默——
+    // 硬件/虚拟串口可能不支持，下次 toggle 时 UI 会得到真实错误。
+    if (dtr.value || rts.value) {
+      try {
+        await driver.setSignals({ dtr: dtr.value, rts: rts.value })
+      } catch (e) {
+        logger.warn('serial', `re-assert DTR/RTS failed: ${e instanceof Error ? e.message : String(e)}`)
+      }
     }
     signalTimer = setInterval(() => {
       if (!driver.isOpen) {
@@ -418,6 +436,56 @@ export function createSerialStore(deps: SerialDeps) {
     }
   }
 
+  /**
+   * 请求 DTR 电平。未连接时仅记录意图（UI toggle 状态），连接时下发驱动；
+   * 驱动调用失败则回滚 UI 状态（显示不应与实际不符）。
+   */
+  async function setDtr(on: boolean): Promise<void> {
+    const prev = dtr.value
+    dtr.value = on
+    if (!connected.value) return
+    try {
+      await driver.setSignals({ dtr: on })
+    } catch (e) {
+      dtr.value = prev
+      const msg = e instanceof Error ? e.message : String(e)
+      logger.warn('serial', `set DTR=${on} failed: ${msg}`)
+      throw e
+    }
+  }
+
+  /** 请求 RTS 电平。语义同 setDtr。 */
+  async function setRts(on: boolean): Promise<void> {
+    const prev = rts.value
+    rts.value = on
+    if (!connected.value) return
+    try {
+      await driver.setSignals({ rts: on })
+    } catch (e) {
+      rts.value = prev
+      const msg = e instanceof Error ? e.message : String(e)
+      logger.warn('serial', `set RTS=${on} failed: ${msg}`)
+      throw e
+    }
+  }
+
+  /** 发送一次 Break 脉冲（TX 拉低 250ms 后释放）。脉冲期间 breakBusy 阻止重复触发。 */
+  async function pulseBreak(): Promise<void> {
+    if (!connected.value || breakBusy.value) return
+    breakBusy.value = true
+    try {
+      await driver.setBreak(true)
+      await new Promise((r) => setTimeout(r, BREAK_PULSE_MS))
+      await driver.setBreak(false)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      logger.warn('serial', `send break failed: ${msg}`)
+      throw e
+    } finally {
+      breakBusy.value = false
+    }
+  }
+
   /** 恢复串口相关默认配置（端口参数 + 自定义波特率），不影响连接/会话状态 */
   function reset() {
     Object.assign(options, DEFAULT_OPTS)
@@ -462,6 +530,9 @@ export function createSerialStore(deps: SerialDeps) {
     options,
     scenario,
     signals,
+    dtr,
+    rts,
+    breakBusy,
     rxBytes,
     txBytes,
     sessionStartedAt,
@@ -477,6 +548,9 @@ export function createSerialStore(deps: SerialDeps) {
     connect,
     disconnect,
     userDisconnect,
+    setDtr,
+    setRts,
+    pulseBreak,
     setScenario,
     switchDriver,
     addCustomBaudRate,

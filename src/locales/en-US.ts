@@ -139,6 +139,9 @@ export default {
     txBytesTip: 'TX bytes / byte rate',
     rxErrorsTip: 'Checksum errors',
     bufferTip: 'Buffer usage: {used} / {limit}',
+    dtrTip: 'Data Terminal Ready — set/reset DTR line. Used with RTS for ESP32/STM32 reset / ISP',
+    rtsTip: 'Request To Send — set/reset RTS line. Used with DTR for ESP32/STM32 reset / ISP',
+    breakTip: 'Send break signal (pull TX low for 250ms). Used to enter ISP / download mode',
   },
   msgList: {
     all: 'All',

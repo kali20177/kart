@@ -76,6 +76,18 @@ export class SerialPortDriver implements SerialDriver {
     return { ...this._cachedSignals }
   }
 
+  async setSignals(signals: { dtr?: boolean; rts?: boolean }): Promise<void> {
+    const api = this._api()
+    if (!api) throw new Error('serialport 不可用')
+    await api.setSignals(this._openPath ?? '', signals)
+  }
+
+  async setBreak(active: boolean): Promise<void> {
+    const api = this._api()
+    if (!api) throw new Error('serialport 不可用')
+    await api.setBreak(this._openPath ?? '', active)
+  }
+
   onData(cb: (bytes: Uint8Array) => void): () => void {
     this._listeners.add(cb)
     return () => this._listeners.delete(cb)
@@ -158,6 +170,8 @@ export interface ElectronSerial {
   close(portName: string): Promise<void>
   write(portName: string, data: Uint8Array): Promise<number>
   getSignals(portName: string): Promise<{ dcd: boolean; cts: boolean; dsr: boolean; ri: boolean }>
+  setSignals(portName: string, signals: { dtr?: boolean; rts?: boolean }): Promise<void>
+  setBreak(portName: string, active: boolean): Promise<void>
   onData(handler: (data: Uint8Array, path: string) => void): () => void
   onError(handler: (msg: string, path: string) => void): () => void
 }

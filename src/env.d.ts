@@ -47,11 +47,15 @@ interface SerialOptions {
   flowControl?: 'none' | 'hardware'
 }
 
+// setSignals 可写的输出线（getSignals 读不到这些字段，恒为 undefined）
 interface SerialOutputSignals {
   dataCarrierDetect?: boolean
   clearToSend?: boolean
   ringIndicator?: boolean
   dataSetReady?: boolean
+  dataTerminalReady?: boolean
+  requestToSend?: boolean
+  break?: boolean
 }
 
 interface SerialPort {

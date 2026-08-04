@@ -238,6 +238,22 @@ function registerSerialPortIpc(): void {
     const mgr = win ? _serialManagers.get(win.id) : null
     return await mgr?.getSignals(portName) ?? { dcd: false, cts: false, dsr: false, ri: false }
   })
+
+  // 设置输出控制线（DTR/RTS）
+  ipcMain.handle('serial:set-signals', async (event, portName: string, signals: { dtr?: boolean; rts?: boolean }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _serialManagers.get(win.id) : null
+    if (!mgr) throw new Error('串口管理器不可用')
+    await mgr.setSignals(portName, signals)
+  })
+
+  // 置/清 Break 条件
+  ipcMain.handle('serial:set-break', async (event, portName: string, active: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _serialManagers.get(win.id) : null
+    if (!mgr) throw new Error('串口管理器不可用')
+    await mgr.setBreak(portName, active)
+  })
 }
 
 /** 注册主进程日志相关 IPC handlers */

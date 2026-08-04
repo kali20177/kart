@@ -139,6 +139,9 @@ export default {
     txBytesTip: 'TX 字节数 / 字节速率',
     rxErrorsTip: '校验失败帧数',
     bufferTip: '缓冲使用率：已用 {used} / 上限 {limit}',
+    dtrTip: 'Data Terminal Ready — 数据终端就绪。搭配 RTS 用于 ESP32/STM32 复位、进入 ISP',
+    rtsTip: 'Request To Send — 请求发送。搭配 DTR 用于 ESP32/STM32 复位、进入 ISP',
+    breakTip: '发送 Break 信号（TX 拉低 250ms）。用于进入 ISP / 下载模式',
   },
   msgList: {
     all: '全部',

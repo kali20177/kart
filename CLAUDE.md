@@ -113,6 +113,7 @@ AsciiTable      → ascii-table/utils
 - **搜索**：文本/HEX 双模式、命中高亮（原生配对）、上一项/下一项导航、当日时间范围筛选。不支持正则。
 - **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32）。
 - **接收校验**：独立 RX 校验算法（不耦合发送侧），支持收发不对称协议，分隔符前自动校验。
+- **信号控制（DTR/RTS/Break）**：StatusBar 信号区可切换 DTR/RTS 电平、发送 Break 脉冲（250ms，TX 拉低），用于 ESP32/STM32 bootloader / 复位 / ISP。断开时禁用，自动重连后重放上次电平。链路：`SerialDriver.setSignals/setBreak` → Web Serial `port.setSignals` / Electron IPC → 主进程 `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言。
 - **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表，连通 Web Serial 的断插重连）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示「重连中…」，重连成功弹一次 toast。判定集中在纯函数 `src/utils/reconnect.ts`（有单测），store 与组件共用同一套。
 - **快速命令**：增删改、拖拽排序、JSON 导入导出、点击直发、调到发送框；每条命令可独立配置校验和（inherit 全局或覆盖）。
 - **文件发送**：分包切片、三种协议封装（raw/len-prefix/seq-crc）、限速、ACK 流控、循环下发、断点续传、错误注入。`FileTransferDialog` 预设（原始整包/STM32-ISP/ESP32/压测/自定义）+ 拖拽。
@@ -123,16 +124,16 @@ AsciiTable      → ascii-table/utils
 - **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数。
 - **导出**：消息列表 CSV/JSON 导出、波形 CSV 导出、快速命令 JSON 导入导出。
 - **应用日志**：面向用户报障。浏览器端写 IndexedDB；Electron 下主进程按日轮转文件日志（`userData/logs/YYYY-MM-DD.log`，保留 30 天）并汇聚渲染端全部 console（`console-message` 事件转发）。文件菜单「导出日志」一键下载：Electron 优先取主进程文件（权威来源，含主进程事件），浏览器取 IDB，导出文件头自动附带版本/平台/驱动等环境信息。关键生命周期均有埋点：驱动选择、连接/断连（含会话时长与流量）、写入失败、录制、文件传输、全局错误。级别/行格式/level 映射集中在纯函数 `src/utils/log-level.ts`（两端共用、有单测）。
-- **状态栏**：连接态、端口参数概要、RX/TX/帧/ERR 统计、信号线状态（DCD/CTS/DSR/RI）、活跃文件下发紧凑条。
+- **状态栏**：连接态、端口参数概要、RX/TX/帧/ERR 统计、信号线状态（DCD/CTS/DSR/RI）、DTR/RTS/BRK 控制、活跃文件下发紧凑条。
 - **主题**：多主题注册表 + 3 套内置主题（glass-industrial-dark、glass-industrial-light、oled-hud），明暗二元，无"跟随系统"。
 
 ## Electron 集成
 
 桌面打包基于 **vite-plugin-electron**（单 vite 配置，由环境变量 `ELECTRON=true` 开关）。普通 `npm run dev` / `npm run build` 不设该变量，插件完全惰性，浏览器构建产物与无 Electron 时一致。
 
-- `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`；初始化 `SerialPortManager` 并注册 IPC handlers（`serial:list`、`serial:open`、`serial:close`、`serial:write`、`serial:getSignals`）。
-- `src/main/SerialPortManager.ts` — 封装 serialport npm 库：枚举串口（返回真实 COM 口名如 `COM5`、`/dev/tty.usbserial-1420`）、打开/关闭/写入/信号状态。读取事件驱动（`SerialPort 'data'` 事件），通过 `webContents.send` 推送到渲染进程。相比手写 C++ addon：无需本机工具链、prebuilt native bindings、跨平台。
-- `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/onData/onError）、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
+- `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`；初始化 `SerialPortManager` 并注册 IPC handlers（`serial:list-ports`、`serial:open`、`serial:close`、`serial:write`、`serial:get-signals`、`serial:set-signals`、`serial:set-break`）。
+- `src/main/SerialPortManager.ts` — 封装 serialport npm 库：枚举串口（返回真实 COM 口名如 `COM5`、`/dev/tty.usbserial-1420`）、打开/关闭/写入/信号状态（`getSignals` + `setSignals`/`setBreak`）。读取事件驱动（`SerialPort 'data'` 事件），通过 `webContents.send` 推送到渲染进程。相比手写 C++ addon：无需本机工具链、prebuilt native bindings、跨平台。
+- `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/setSignals/setBreak/onData/onError）、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
 - `src/serial/SerialPortDriver.ts` — 渲染端驱动：实现 `SerialDriver` 接口，通过 `window.electron.serial` 与主进程 IPC 通信。信号轮询 500ms。
 - `vite.config.ts` — `base` 在 Electron 目标下设为 `'./'`（file:// 加载需相对路径），浏览器下为 `'/'`。
 - `tsconfig.node.json` — 主/预加载的 Node 上下文类型检查（无 DOM lib），`electron:build` 中以 `tsc -p tsconfig.node.json --noEmit` 作为门禁。
@@ -198,8 +199,7 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 ## 待完成事项
 
 1. 将 Blob 下载替换为 Electron `dialog` + `fs`（快照导出已走 dialog，其余下载路径未接）
-2. DTR/RTS/Break 控制（`SerialDriver` 目前只有 `getSignals` 只读，无 `setSignals`）
-3. 文件发送引擎内联工具（crc/chunk-framer/rate-limit）拆分为独立 `utils/*.ts` + 单测
+2. 文件发送引擎内联工具（crc/chunk-framer/rate-limit）拆分为独立 `utils/*.ts` + 单测
 
 ## 生产环境缺失功能与已知问题
 

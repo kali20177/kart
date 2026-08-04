@@ -37,6 +37,14 @@ export class UnsupportedDriver implements SerialDriver {
     return { dcd: false, cts: false, dsr: false, ri: false }
   }
 
+  async setSignals(_signals: { dtr?: boolean; rts?: boolean }): Promise<void> {
+    throw new Error('当前浏览器不兼容,无法控制串口信号')
+  }
+
+  async setBreak(_active: boolean): Promise<void> {
+    throw new Error('当前浏览器不兼容,无法控制串口信号')
+  }
+
   onData(_cb: (bytes: Uint8Array) => void): () => void {
     return () => {}
   }

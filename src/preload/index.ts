@@ -60,6 +60,14 @@ contextBridge.exposeInMainWorld('electron', {
       ri: boolean
     }>,
 
+    /** 设置输出控制线（DTR/RTS）。未提供的项保持不变 */
+    setSignals: (portName: string, signals: { dtr?: boolean; rts?: boolean }) =>
+      ipcRenderer.invoke('serial:set-signals', portName, signals) as Promise<void>,
+
+    /** 置/清 Break 条件（TX 拉低） */
+    setBreak: (portName: string, active: boolean) =>
+      ipcRenderer.invoke('serial:set-break', portName, active) as Promise<void>,
+
     /** 注册数据接收回调，返回取消订阅函数 */
     onData: (handler: SerialDataHandler) => {
       serialDataHandlers.add(handler)

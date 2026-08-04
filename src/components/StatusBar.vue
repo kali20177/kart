@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { useMessage } from 'naive-ui'
 import { useSession } from '@/composables/useSession'
 import { useI18n } from 'vue-i18n'
 import { countdownSecs } from '@/utils/reconnect'
 
 const { serial, messages, settings, transfer: transferStore, recorder } = useSession()
 const { t } = useI18n()
+const message = useMessage()
 
 // nowTick 在静态期保持当前秒数，驱动 recordDuration 在静默期也前进
 const nowTick = ref(Date.now())
@@ -173,6 +175,29 @@ const reconnectCountdown = computed(() => {
   const secs = countdownSecs(Date.now(), serial.reconnectNextAt)
   return t('status.reconnectCountdown', { n: secs, m: serial.reconnectAttempts })
 })
+
+// ── 输出线控制（DTR/RTS/Break）──
+async function onToggleDtr() {
+  try {
+    await serial.setDtr(!serial.dtr)
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : String(e))
+  }
+}
+async function onToggleRts() {
+  try {
+    await serial.setRts(!serial.rts)
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : String(e))
+  }
+}
+async function onBreak() {
+  try {
+    await serial.pulseBreak()
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : String(e))
+  }
+}
 </script>
 
 <template>
@@ -264,6 +289,36 @@ const reconnectCountdown = computed(() => {
       </span>
       <div class="divider" />
     </template>
+
+    <!-- 输出线控制：DTR/RTS 持久切换 + Break 瞬态脉冲 -->
+    <div class="divider" />
+    <button
+      class="signal-btn"
+      :class="{ active: serial.dtr }"
+      :disabled="!serial.connected"
+      :title="t('status.dtrTip')"
+      @click="onToggleDtr"
+    >
+      DTR
+    </button>
+    <button
+      class="signal-btn"
+      :class="{ active: serial.rts }"
+      :disabled="!serial.connected"
+      :title="t('status.rtsTip')"
+      @click="onToggleRts"
+    >
+      RTS
+    </button>
+    <button
+      class="signal-btn brk"
+      :class="{ busy: serial.breakBusy }"
+      :disabled="!serial.connected"
+      :title="t('status.breakTip')"
+      @click="onBreak"
+    >
+      BRK
+    </button>
 
     <span v-for="s in signalList" :key="s.key" class="signal" :class="{ active: s.on }">
       {{ s.key }}
@@ -424,6 +479,52 @@ const reconnectCountdown = computed(() => {
 .signal.active {
   color: var(--ok);
   border-color: var(--ok);
+}
+
+/* ── 输出线控制按钮（DTR/RTS 切换 + Break 脉冲）── */
+.signal-btn {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, opacity 0.15s;
+}
+.signal-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
+}
+.signal-btn.active:not(:disabled) {
+  color: var(--ok);
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.signal-btn.brk:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.signal-btn.brk:not(:disabled):active {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.signal-btn.brk.busy {
+  animation: brk-pulse 0.25s ease-in-out infinite alternate;
+  color: var(--err, #e06060);
+  border-color: var(--err, #e06060);
+}
+.signal-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+@keyframes brk-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signal-btn.brk.busy { animation: none; }
 }
 .transfer-indicator {
   color: var(--accent);

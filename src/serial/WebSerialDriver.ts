@@ -131,6 +131,20 @@ export class WebSerialDriver implements SerialDriver {
     return { ...this._cachedSignals }
   }
 
+  async setSignals(signals: { dtr?: boolean; rts?: boolean }): Promise<void> {
+    if (!this._isOpen || !this._port) throw new Error('端口未打开')
+    // 未提供的字段保持当前值不变（Web Serial setSignals 只更新传入成员）
+    await this._port.setSignals({
+      dataTerminalReady: signals.dtr,
+      requestToSend: signals.rts
+    })
+  }
+
+  async setBreak(active: boolean): Promise<void> {
+    if (!this._isOpen || !this._port) throw new Error('端口未打开')
+    await this._port.setSignals({ break: active })
+  }
+
   onData(cb: (bytes: Uint8Array) => void): () => void {
     this._listeners.add(cb)
     return () => this._listeners.delete(cb)

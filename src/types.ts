@@ -83,6 +83,10 @@ export interface SerialDriver {
   close(): Promise<void>
   write(bytes: Uint8Array): Promise<void>
   getSignals(): SerialSignals
+  /** 设置输出控制线（DTR/RTS）。未提供的项保持当前值不变；未打开端口抛错。 */
+  setSignals(signals: { dtr?: boolean; rts?: boolean }): Promise<void>
+  /** 置/清 Break 条件（TX 拉低）。未打开端口或硬件不支持时抛错。 */
+  setBreak(active: boolean): Promise<void>
   /** 订阅接收数据，返回取消订阅函数 */
   onData(cb: (bytes: Uint8Array) => void): () => void
   readonly isOpen: boolean
