@@ -47,12 +47,16 @@ interface SerialOptions {
   flowControl?: 'none' | 'hardware'
 }
 
-// setSignals 可写的输出线（getSignals 读不到这些字段，恒为 undefined）
-interface SerialOutputSignals {
+// getSignals 可读的输入线（DCD/CTS/DSR/RI）
+interface SerialInputSignals {
   dataCarrierDetect?: boolean
   clearToSend?: boolean
-  ringIndicator?: boolean
   dataSetReady?: boolean
+  ringIndicator?: boolean
+}
+
+// setSignals 可写的输出线（DTR/RTS/Break）
+interface SerialOutputSignals {
   dataTerminalReady?: boolean
   requestToSend?: boolean
   break?: boolean
@@ -64,7 +68,7 @@ interface SerialPort {
   close(): Promise<void>
   readonly readable: ReadableStream<Uint8Array> | null
   readonly writable: WritableStream<Uint8Array> | null
-  getSignals(): Promise<SerialOutputSignals>
+  getSignals(): Promise<SerialInputSignals>
   setSignals(signals: SerialOutputSignals): Promise<void>
   addEventListener(type: 'disconnect', listener: () => void): void
   removeEventListener(type: 'disconnect', listener: () => void): void

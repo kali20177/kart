@@ -106,4 +106,27 @@ describe('createSession · 会话接线', () => {
     session.dispose()
     expect(mock.isOpen).toBe(false)
   })
+
+  it('DTR/RTS/Break 信号控制经 store 下发到驱动（mock 记录输出线状态供断言）', async () => {
+    const mock = new MockSerialSource()
+    const session = makeSession(mock)
+
+    await session.serial.refreshPorts()
+    await session.serial.connect()
+    expect(mock.outputSignals).toEqual({ dtr: false, rts: false })
+
+    // DTR/RTS 电平切换
+    await session.serial.setDtr(true)
+    expect(mock.outputSignals).toEqual({ dtr: true, rts: false })
+    await session.serial.setRts(true)
+    expect(mock.outputSignals).toEqual({ dtr: true, rts: true })
+
+    // Break 脉冲：250ms 内置位再释放
+    const p = session.serial.pulseBreak()
+    expect(mock.breakActive).toBe(true)
+    await p
+    expect(mock.breakActive).toBe(false)
+
+    await session.serial.disconnect()
+  })
 })
