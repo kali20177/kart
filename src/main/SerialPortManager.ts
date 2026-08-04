@@ -96,8 +96,8 @@ export class SerialPortManager {
 
   open(path: string, options: {
     baudRate: number
-    dataBits: 7 | 8
-    stopBits: 1 | 2
+    dataBits: 5 | 6 | 7 | 8
+    stopBits: 1 | 1.5 | 2
     parity: 'none' | 'even' | 'odd'
     flowControl: 'none' | 'hardware'
   }): Promise<void> {

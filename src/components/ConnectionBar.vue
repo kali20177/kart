@@ -198,10 +198,13 @@ function confirmNote() {
 
 const dataBitsOptions = [
   { label: '8', value: 8 },
-  { label: '7', value: 7 }
+  { label: '7', value: 7 },
+  { label: '6', value: 6 },
+  { label: '5', value: 5 }
 ]
 const stopBitsOptions = [
   { label: '1', value: 1 },
+  { label: '1.5', value: 1.5 },
   { label: '2', value: 2 }
 ]
 const parityOptions = [
@@ -315,42 +318,62 @@ onBeforeUnmount(() => {
       {{ t('conn.refreshPorts') }}
     </NTooltip>
 
-    <NSelect
-      :key="selectKey"
-      :value="serial.options.baudRate"
-      :options="baudOptions"
-      filterable
-      tag
-      :consistent-menu-width="false"
-      :render-label="renderBaudLabel"
-      :render-option="renderBaudOption"
-      size="small"
-      style="width: 120px"
-      :placeholder="t('conn.baudRate')"
-      :disabled="serial.connected"
-      @update:value="onBaudChange"
-    />
-    <NSelect
-      v-model:value="serial.options.dataBits"
-      :options="dataBitsOptions"
-      size="small"
-      style="width: 64px"
-      :disabled="serial.connected"
-    />
-    <NSelect
-      v-model:value="serial.options.parity"
-      :options="parityOptions"
-      size="small"
-      style="width: 86px"
-      :disabled="serial.connected"
-    />
-    <NSelect
-      v-model:value="serial.options.stopBits"
-      :options="stopBitsOptions"
-      size="small"
-      style="width: 64px"
-      :disabled="serial.connected"
-    />
+    <NTooltip>
+      <template #trigger>
+        <NSelect
+          :key="selectKey"
+          :value="serial.options.baudRate"
+          :options="baudOptions"
+          filterable
+          tag
+          :consistent-menu-width="false"
+          :render-label="renderBaudLabel"
+          :render-option="renderBaudOption"
+          size="small"
+          style="width: 120px"
+          :placeholder="t('conn.baudRate')"
+          :disabled="serial.connected"
+          @update:value="onBaudChange"
+        />
+      </template>
+      {{ t('conn.baudTip') }}
+    </NTooltip>
+    <NTooltip>
+      <template #trigger>
+        <NSelect
+          v-model:value="serial.options.dataBits"
+          :options="dataBitsOptions"
+          size="small"
+          style="width: 64px"
+          :disabled="serial.connected"
+        />
+      </template>
+      {{ t('conn.dataBitsTip') }}
+    </NTooltip>
+    <NTooltip>
+      <template #trigger>
+        <NSelect
+          v-model:value="serial.options.parity"
+          :options="parityOptions"
+          size="small"
+          style="width: 86px"
+          :disabled="serial.connected"
+        />
+      </template>
+      {{ t('conn.parityTip') }}
+    </NTooltip>
+    <NTooltip>
+      <template #trigger>
+        <NSelect
+          v-model:value="serial.options.stopBits"
+          :options="stopBitsOptions"
+          size="small"
+          style="width: 64px"
+          :disabled="serial.connected"
+        />
+      </template>
+      {{ t('conn.stopBitsTip') }}
+    </NTooltip>
 
     <NButton
       size="small"

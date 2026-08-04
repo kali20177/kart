@@ -40,8 +40,8 @@ interface SerialPortInfo {
 
 interface SerialOptions {
   baudRate: number
-  dataBits?: 7 | 8
-  stopBits?: 1 | 2
+  dataBits?: 5 | 6 | 7 | 8
+  stopBits?: 1 | 1.5 | 2
   parity?: 'none' | 'even' | 'odd'
   bufferSize?: number
   flowControl?: 'none' | 'hardware'

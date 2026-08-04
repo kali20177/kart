@@ -56,6 +56,14 @@ export class WebSerialDriver implements SerialDriver {
   async open(path: string, options: PortOptions): Promise<void> {
     if (this._isOpen) await this.close()
 
+    // Web Serial API 只支持 7/8 数据位和 1/2 停止位（serialport/Electron 不受限）
+    if (options.dataBits !== 7 && options.dataBits !== 8) {
+      throw new Error(`浏览器 Web Serial 不支持 ${options.dataBits} 数据位，请使用桌面版或选择 7/8`)
+    }
+    if (options.stopBits !== 1 && options.stopBits !== 2) {
+      throw new Error(`浏览器 Web Serial 不支持 ${options.stopBits} 停止位，请使用桌面版或选择 1/2`)
+    }
+
     const entry = this._entries.find((e) => e.key === path)
     if (!entry) throw new Error('未找到该端口，请重新选择')
 
