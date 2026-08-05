@@ -56,19 +56,36 @@ const elapsedLabel = computed(() =>
   props.elapsedMs != null ? formatElapsed(props.elapsedMs) : ''
 )
 
+/** 超过该字节数的帧视为超长帧（触发截断显示）；普通帧不受影响 */
+const TRUNCATE_THRESHOLD = 4096
+/** 截断时展示的前部字节数——保持气泡 DOM 与测量代价有界（接近普通帧量级），
+ *  避免消息列表随帧数增长持续新建巨型 DOM 导致主线程饱和冻结 */
+const PREVIEW_BYTES = 512
+const expanded = ref(false)
+const truncated = computed(() => props.message.bytes.length > TRUNCATE_THRESHOLD)
+const showingFull = computed(() => !truncated.value || expanded.value)
+// HEX 显示字节：截断时只对前部做 hexDump，不为超长帧生成海量行
+const shownBytes = computed(() =>
+  showingFull.value ? props.message.bytes : props.message.bytes.subarray(0, PREVIEW_BYTES)
+)
 const asciiText = computed(() => decodeBytes(props.message.bytes, props.encoding))
-const dumpLines = computed(() => hexDump(props.message.bytes, 16))
+// ASCII 显示文本：截断时按字符切前部（避免切坏多字节字符），展开时用全量
+const asciiShown = computed(() =>
+  showingFull.value ? asciiText.value : asciiText.value.slice(0, PREVIEW_BYTES)
+)
+const dumpLines = computed(() => hexDump(shownBytes.value, 16))
 
 const isSearching = computed(() => !!props.keyword?.trim() && (props.matchRanges?.length ?? 0) > 0)
 
 // 原生配对才内联高亮：text+ascii / hex+hex。
 // 交叉配对（如 hex 搜索 + ascii 视图）字节偏移≠字符偏移，强渲会错位；
 // 此时仍过滤 / 导航 / flash，只是不做逐字高亮（见 plan 取舍说明）。
+// 截断折叠时也不高亮（显示的是部分内容，字符/字节偏移不再与全量匹配）。
 const hlAscii = computed(
-  () => props.viewMode === 'ascii' && props.searchMode === 'text' && isSearching.value
+  () => showingFull.value && props.viewMode === 'ascii' && props.searchMode === 'text' && isSearching.value
 )
 const hlHex = computed(
-  () => props.viewMode === 'hex' && props.searchMode === 'hex' && isSearching.value
+  () => showingFull.value && props.viewMode === 'hex' && props.searchMode === 'hex' && isSearching.value
 )
 
 /** ASCII 高亮片段：按（已合并的）字符区间切分 */
@@ -238,7 +255,7 @@ function onRowContext(e: MouseEvent) {
       </div>
 
       <!-- ASCII 视图：无高亮 -->
-      <pre v-if="viewMode === 'ascii' && !hlAscii" class="body ascii">{{ asciiText }}</pre>
+      <pre v-if="viewMode === 'ascii' && !hlAscii" class="body ascii">{{ asciiShown }}</pre>
       <!-- ASCII 视图：文本高亮 -->
       <pre v-else-if="viewMode === 'ascii'" class="body ascii"
         ><mark
@@ -273,6 +290,13 @@ function onRowContext(e: MouseEvent) {
             <span v-for="(b, bi) in line.bytes" :key="bi" :class="hlClass(b.hl)">{{ b.ascii }}</span>
           </span>
         </div>
+      </div>
+
+      <!-- 超长帧截断条：折叠时提示总长，点击展开/收起（ResizeObserver 自动重测气泡高度） -->
+      <div v-if="truncated" class="trunc-bar">
+        <button type="button" class="trunc-toggle" @click="expanded = !expanded">
+          {{ expanded ? t('bubble.collapse') : t('bubble.truncated', { n: props.message.bytes.length }) }}
+        </button>
       </div>
 
       <!-- 用户标注 -->
@@ -431,6 +455,24 @@ function onRowContext(e: MouseEvent) {
 .asc {
   color: var(--text-dim);
   white-space: pre;
+}
+
+/* 超长帧截断条 */
+.trunc-bar {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--glass-border);
+}
+.trunc-toggle {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.trunc-toggle:hover {
+  text-decoration: underline;
 }
 
 /* 分隔线样式 */

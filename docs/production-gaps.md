@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-08-04。已完成项标注 ✅。
+> 最近更新：2026-08-06。已完成项标注 ✅。
 
 ## 一、生产环境缺失功能
 
@@ -44,8 +44,8 @@
 
 ### 打磨项（低优先级）
 
-19. **清空无确认/无撤销** — `messages.clear` 直接清空，误点丢失。
-20. **缓冲满无感知** — 超 `bufferLimit` 静默裁剪，无"已丢弃 N 帧"提示。
+19. ~~**清空无确认/无撤销**~~ — **已决定不实现**（2026-08 产品决策）：`messages.clear` 直接清空；每次确认反而影响操作体验，保持现状。
+20. ✅ **缓冲满无感知** — 已完成：messages store 环形裁剪时累计 `droppedFrames`，波形 history 裁剪累计 `droppedSamples`，均在 `clear()` 重置。MessageList 列表顶部显示可关闭的「已丢弃 N 帧」提示条，WaveformChart 工具栏显示可关闭的「已丢弃 N 采样」标签；关闭后新一轮丢弃（计数 0→正数）重新出现。新增 mock `buffer-flood` 灌满压测场景（高频数值行，配合「分隔符 \n」帧策略数秒触发），供快速验证。
 21. ✅ **全局快捷键缺失** — 已有快捷键（`Ctrl/Cmd+Enter` 发送、`Alt/Ctrl+↑↓` 翻历史）已在帮助菜单新增「快捷键」面板展示，不额外添加显式 UI 已有操作的快捷键。
 22. **关键字告警** — 收到特定模式无声音/通知。
 23. ✅ **端口元信息缺失（VID/PID/厂商）** — 已完成：`SerialDriver.listPorts()` 返回结构化 `PortInfo[]`（path/manufacturer/vendorId/productId），不再只给字符串数组。serialport 驱动透传主进程 `SerialPortInfo` 富数据；Web Serial 用 `getInfo()` 取 VID/PID，并按 `src/utils/usb-vendors.ts` 常见厂商表反查厂商名（查不到显示裸 ID）；mock 提供造假完整元数据供开发预览。UI 采用渐进披露：端口下拉触发框仍只显示路径，菜单项第二行灰色小字显示「厂商 · VID:xxxx PID:xxxx」。**待补：占用提示** — serialport 的 `list()` 不提供 busy 状态，需额外探测（如尝试独占打开），属驱动能力，未实现。
@@ -60,6 +60,16 @@
 ---
 
 ## 二、已知技术问题
+
+### ✅ 巨型气泡列表冻结：超大帧 + 自动跟随导致主线程饱和（已修复，含后续开发注意事项）
+
+- **症状**：`buffer-flood` 灌满压测在 **gap-timeout** 帧策略下（每 50ms 的 500 行被合并成一帧 → 巨型气泡），消息列表在缓冲占用约 64% 时彻底卡死——数据不刷新、滚动条拖不动；到缓冲满（列表长度恒定）后恢复。
+- **根因**：自动跟随滚动（`watch(messages.length) → scrollToBottom`）在列表增长期每 flush 把新巨型气泡渲染进视口，**持续新建数百行级 DOM 节点 + 布局**；主线程逐帧累积饱和。缓冲满后长度恒定 → 自动跟随 watch 不再触发 → 不再新建巨型 DOM → 恢复。截断上限从无 → 4096 字节，卡死点从 64% → 90%，证实「每气泡 DOM/布局代价」为主因。
+- **修复**（`MessageBubble.vue`）：**两档截断**——超过 `TRUNCATE_THRESHOLD`(4096B) 的帧判定为超长帧，折叠时只渲染前 `PREVIEW_BYTES`(512B)（ASCII 按字符切防切坏多字节、HEX 只对前部 hexDump），提供「展开全部/收起」按钮；气泡 DOM 与测量代价有界。高度变化由 DynamicScroller 的 ResizeObserver 自动重测。折叠时不渲染搜索高亮（偏移不再匹配全量）。
+- **⚠️ 未来开发注意事项**：
+  1. **调大 bufferLimit 不会让上述硬冻结回来**（帧大小已封顶，代价与上限无关）。但**持续收数据时每次刷入仍对全部条目做 O(n) 重算**（DynamicScroller `sizes`/`itemsWithSize` + `filtered` + `computeDeltas`），bufferLimit 调到 5 万～10 万时会从「轻快」变成「渐进卡顿掉帧」——是变慢而非硬冻结，属独立问题。若要支撑超大 bufferLimit，需换虚拟化方案（固定高度的 RecycleScroller）或对条目数封顶。
+  2. **gap-timeout 把帧率锁在 ~1/gapMs**（默认 20ms → 约 20 帧/秒），`buffer-flood` 场景只有在**分隔符 \n** 策略下才能秒级灌满缓冲验证丢弃提示；gap-timeout 下填满需数分钟且全是巨型帧。
+  3. 巨型帧的展开是单次用户操作，展开渲染全量可接受；但若未来有「导出/复制巨帧」之外的批量全量渲染需求，需再次评估截断策略。
 
 ### ✅ `vite.config` 的 `test.environment`「未生效」（已排查并修复）
 

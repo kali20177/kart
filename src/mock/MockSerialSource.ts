@@ -2,6 +2,7 @@ import type { MockScenarioId, PortInfo, PortOptions, SerialSignals, SerialDriver
 import {
   atResponse,
   binaryFrame,
+  bufferFloodChunk,
   gbkSample,
   logLine,
   throughputChunk,
@@ -127,6 +128,10 @@ export class MockSerialSource implements SerialDriver {
       case 'waveform-text-labeled':
         // 每 50ms 一行标签化文本（Sin:xxx,Cos:xxx）-> 20 行/秒，自动检测通道名
         this.timer = setInterval(() => this.emit(waveformTextLabeledChunk(this.seq++)), 50)
+        break
+      case 'buffer-flood':
+        // 每 50ms 吐 500 行数值 -> 分隔符策略下 500 帧/批，数秒灌满缓冲上限触发丢弃提示
+        this.timer = setInterval(() => this.emit(bufferFloodChunk()), 50)
         break
       case 'silent':
       case 'at-reply':

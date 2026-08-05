@@ -346,3 +346,44 @@ describe('waveform store 标签化文本解析', () => {
     expect(wf.data[0].length).toBe(0)
   })
 })
+
+describe('waveform store · 历史缓冲裁剪 droppedSamples', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('history 超 maxHistoryPoints 从头裁剪并累计丢弃采样', async () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 5
+    settings.settings.waveform.maxHistoryPoints = 5
+    await nextTick()
+    const wf = useWaveformStore()
+    for (let i = 0; i < 8; i++) wf.ingest(enc(`${i}\n`))
+    expect(wf.history[0].length).toBe(5)
+    expect(wf.droppedSamples).toBe(3)
+    expect(wf.history[1]).toEqual([3, 4, 5, 6, 7]) // 最旧 3 个采样被丢
+  })
+
+  it('改小 maxHistoryPoints 立即裁剪并累计丢弃数', async () => {
+    const settings = useSettingsStore()
+    const wf = useWaveformStore()
+    for (let i = 0; i < 10; i++) wf.ingest(enc(`${i}\n`))
+    expect(wf.droppedSamples).toBe(0)
+    settings.settings.waveform.maxHistoryPoints = 6
+    await nextTick()
+    expect(wf.history[0].length).toBe(6)
+    expect(wf.droppedSamples).toBe(4)
+  })
+
+  it('clear 重置丢弃计数', async () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.maxPoints = 3
+    settings.settings.waveform.maxHistoryPoints = 3
+    await nextTick()
+    const wf = useWaveformStore()
+    for (let i = 0; i < 5; i++) wf.ingest(enc(`${i}\n`))
+    expect(wf.droppedSamples).toBe(2)
+    wf.clear()
+    expect(wf.droppedSamples).toBe(0)
+  })
+})

@@ -155,6 +155,16 @@ watch(
   }
 )
 
+// 缓冲裁剪丢弃提示条：累计丢弃计数出现（0→正数）时显示，可手动关闭，清空后新一轮丢弃重新出现
+const droppedBarDismissed = ref(false)
+const showDroppedBar = computed(() => messagesStore.droppedFrames > 0 && !droppedBarDismissed.value)
+watch(
+  () => messagesStore.droppedFrames,
+  (n, prev) => {
+    if (prev === 0 && n > 0) droppedBarDismissed.value = false
+  }
+)
+
 function jumpLatest() {
   follow.value = true
   nextTick(scrollToBottom)
@@ -383,6 +393,10 @@ watch(
     </div>
 
     <div class="scroll-area">
+      <div v-if="showDroppedBar" class="dropped-bar">
+        <span>{{ t('msgList.droppedFrames', { n: messagesStore.droppedFrames }) }}</span>
+        <button type="button" class="dropped-dismiss" :title="t('msgList.cancel')" @click="droppedBarDismissed = true">✕</button>
+      </div>
       <DynamicScroller
         ref="scroller"
         :items="filtered"
@@ -558,6 +572,41 @@ watch(
   position: relative;
   flex: 1;
   min-height: 0;
+}
+.dropped-bar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 90%;
+  padding: 4px 6px 4px 12px;
+  border-radius: var(--radius);
+  background: var(--glass-bg);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+}
+.dropped-dismiss {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+.dropped-dismiss:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 .scroller {
   height: 100%;

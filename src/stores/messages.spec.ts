@@ -113,3 +113,55 @@ describe('messages store · 帧时间戳', () => {
     expect(s.messages[0].timestamp).toBe(5000)
   })
 })
+
+describe('messages store · 缓冲裁剪 droppedFrames', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function flush() {
+    vi.advanceTimersByTime(16)
+  }
+
+  it('超 bufferLimit 裁剪最旧帧并累计丢弃数', () => {
+    const settings = useSettingsStore()
+    settings.settings.bufferLimit = 10
+    const s = useMessagesStore()
+    for (let i = 1; i <= 15; i++) s.addTx(new Uint8Array([i]))
+    flush()
+    expect(s.messages.length).toBe(10)
+    expect(s.droppedFrames).toBe(5)
+    // 保留的是最新 10 条（id 6..15），最旧 5 条被丢
+    expect(s.messages.map((m) => m.id)).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+  })
+
+  it('多次刷入持续累计丢弃数', () => {
+    const settings = useSettingsStore()
+    settings.settings.bufferLimit = 5
+    const s = useMessagesStore()
+    for (let i = 1; i <= 6; i++) s.addTx(new Uint8Array([i]))
+    flush()
+    expect(s.droppedFrames).toBe(1) // 6 > 5 → 丢 1
+    expect(s.messages.map((m) => m.id)).toEqual([2, 3, 4, 5, 6])
+    for (let i = 7; i <= 10; i++) s.addTx(new Uint8Array([i]))
+    flush()
+    expect(s.droppedFrames).toBe(5) // 再丢 4，累计 5
+    expect(s.messages.map((m) => m.id)).toEqual([6, 7, 8, 9, 10])
+  })
+
+  it('clear 重置丢弃计数', () => {
+    const settings = useSettingsStore()
+    settings.settings.bufferLimit = 5
+    const s = useMessagesStore()
+    for (let i = 1; i <= 8; i++) s.addTx(new Uint8Array([i]))
+    flush()
+    expect(s.droppedFrames).toBe(3)
+    s.clear()
+    expect(s.droppedFrames).toBe(0)
+  })
+})

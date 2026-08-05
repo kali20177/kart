@@ -77,6 +77,8 @@ export function createWaveformStore(deps: WaveformDeps) {
   // 运行中改它 = 时基缩放（仍跟随最新）；暂停时改它 = 光标锚定放大某段历史。
   const viewSize = ref(deps.settings.waveform.maxPoints)
   const zoomed = ref(false)
+  // 历史缓冲从头裁剪累计丢弃的采样数（超 maxHistoryPoints 静默丢弃的最旧采样）
+  const droppedSamples = ref(0)
 
   // 数据版本号：每次 ingest / 配置变更 / 拖拽后自增，作为组件刷新 uPlot 的信号。
   // 不能依赖 data[0].length：窗口滚满后长度恒为 maxPoints 不再变化，
@@ -149,6 +151,7 @@ export function createWaveformStore(deps: WaveformDeps) {
     const maxHistory = deps.settings.waveform.maxHistoryPoints
     if (cur[0].length <= maxHistory) return
     const drop = cur[0].length - maxHistory
+    droppedSamples.value += drop
     for (let i = 0; i < cur.length; i++) cur[i] = cur[i].slice(drop)
   }
 
@@ -183,6 +186,7 @@ export function createWaveformStore(deps: WaveformDeps) {
     zoomed.value = false
     history.value = buildEmpty()
     data.value = buildEmpty()
+    droppedSamples.value = 0
     version.value++
   }
 
@@ -291,7 +295,7 @@ export function createWaveformStore(deps: WaveformDeps) {
     _unsubData = null
   })
 
-  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
+  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, droppedSamples, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
 }
 
 /** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */

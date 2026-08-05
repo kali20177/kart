@@ -21,6 +21,11 @@ export const SCENARIOS: ScenarioDef[] = [
     id: 'waveform-text-labeled',
     label: 'Arduino 标签化文本',
     description: 'Serial.println 标签化多通道（Sin:0.5, Cos:0.86），自动检测通道名'
+  },
+  {
+    id: 'buffer-flood',
+    label: '缓冲灌满压测',
+    description: '高频数值行灌入，快速触发消息/波形缓冲丢弃；建议配合「分隔符 \\n」帧策略'
   }
 ]
 
@@ -126,4 +131,21 @@ export function waveformTextLabeledChunk(seq: number): Uint8Array {
   return text(
     `Temp:${temp},Hum:${hum},Pres:${pres},Alt:${alt},Bat:${bat},RSSI:${rssiInt}\r\n`
   )
+}
+
+/**
+ * 缓冲灌满压测帧：每 tick 吐出一大段换行分隔的数值行。
+ * 配合「分隔符 \n」帧策略时一 tick 即切出数百帧，几秒内灌满消息缓冲/波形历史，
+ * 触发「已丢弃 N 帧」/「已丢弃 N 采样」提示；数值行同时是合法的波形采样（2 通道）。
+ *
+ * @param linesPerChunk 单批行数（≈帧数），配合 bufferLimit/maxHistoryPoints 调触发速度
+ */
+export function bufferFloodChunk(linesPerChunk = 500): Uint8Array {
+  let s = ''
+  for (let i = 0; i < linesPerChunk; i++) {
+    const a = Math.floor(Math.random() * 1024)
+    const b = Math.floor(Math.random() * 1024)
+    s += `${a},${b}\r\n`
+  }
+  return text(s)
 }

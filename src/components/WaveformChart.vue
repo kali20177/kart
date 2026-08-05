@@ -441,6 +441,16 @@ onBeforeUnmount(() => {
   destroyChart()
 })
 
+// 历史缓冲裁剪丢弃采样标签：累计丢弃出现（0→正数）时显示，可手动关闭，清空后新一轮丢弃重新出现
+const droppedTagDismissed = ref(false)
+const showDroppedTag = computed(() => waveform.droppedSamples > 0 && !droppedTagDismissed.value)
+watch(
+  () => waveform.droppedSamples,
+  (n, prev) => {
+    if (prev === 0 && n > 0) droppedTagDismissed.value = false
+  }
+)
+
 const pointCount = computed(() => {
   // data 是 shallowRef 且原地修改（push/slice 不替换 .value），length 变化不触发响应式。
   // 借 version 作更新信号：每次 ingest / 配置变更都自增，驱动此处重算。
@@ -497,6 +507,16 @@ function handleExport(key: string) {
         </template>
         {{ t('waveform.pointsTip') }}
       </NTooltip>
+      <NTag
+        v-if="showDroppedTag"
+        size="small"
+        closable
+        type="warning"
+        :bordered="false"
+        @close="droppedTagDismissed = true"
+      >
+        {{ t('waveform.droppedSamples', { n: waveform.droppedSamples }) }}
+      </NTag>
       <NButton
         v-for="i in channels()"
         :key="i"

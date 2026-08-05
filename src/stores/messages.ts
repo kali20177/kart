@@ -30,6 +30,8 @@ export function createMessagesStore(deps: MessagesDeps) {
   const rxFrames = ref(0)
   const txFrames = ref(0)
   const rxErrorFrames = ref(0)
+  // 环形缓冲裁剪累计丢弃的帧数（超 bufferLimit 静默丢弃的最旧帧）
+  const droppedFrames = ref(0)
 
   let nextId = 1
   const splitter = new FrameSplitter(deps.settings.frame)
@@ -64,7 +66,10 @@ export function createMessagesStore(deps: MessagesDeps) {
       const limit = deps.settings.bufferLimit
       let next = messages.value.concat(pending)
       pending = []
-      if (next.length > limit) next = next.slice(next.length - limit)
+      if (next.length > limit) {
+        droppedFrames.value += next.length - limit
+        next = next.slice(next.length - limit)
+      }
       messages.value = next
       triggerRef(messages)
     })
@@ -196,6 +201,7 @@ export function createMessagesStore(deps: MessagesDeps) {
     rxFrames.value = 0
     txFrames.value = 0
     rxErrorFrames.value = 0
+    droppedFrames.value = 0
     triggerRef(messages)
   }
 
@@ -223,7 +229,7 @@ export function createMessagesStore(deps: MessagesDeps) {
     }
   })
 
-  return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
+  return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, droppedFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
 }
 
 /** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */
