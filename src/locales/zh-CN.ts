@@ -269,8 +269,7 @@ export default {
   },
   commands: {
     title: '快速命令',
-    new: '+ 新建',
-    empty: '暂无命令，点击「新建」添加',
+    empty: '暂无命令，点击上方加号添加',
     import: '导入',
     export: '导出',
     newCmd: '新建命令',

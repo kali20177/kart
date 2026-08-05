@@ -264,8 +264,7 @@ export default {
   },
   commands: {
     title: 'Quick Commands',
-    new: '+ New',
-    empty: 'No commands. Click "+ New" to add one.',
+    empty: 'No commands. Click the + above to add one.',
     import: 'Import',
     export: 'Export',
     newCmd: 'New Command',
