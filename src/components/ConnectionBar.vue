@@ -15,6 +15,9 @@ const { t } = useI18n()
 const { serial, recorder } = useSession()
 const message = useMessage()
 
+// 悬浮提示统一紧凑样式：更小字体与留白，气泡小一号，避免大块遮挡
+const tipStyle = 'font-size:12px;line-height:1.5;padding:4px 8px;max-width:280px'
+
 const occupiedPorts = useOccupiedPorts()
 
 const portOptions = computed(() =>
@@ -305,20 +308,20 @@ onBeforeUnmount(() => {
       style="width: 210px"
       :disabled="serial.connected"
     />
-    <NTooltip v-if="serial.driverType === 'webserial'">
+    <NTooltip v-if="serial.driverType === 'webserial'" placement="bottom" :style="tipStyle">
       <template #trigger>
         <NButton size="small" :disabled="serial.connected" @click="onRequestPort">+</NButton>
       </template>
       {{ t('conn.requestPort') }}
     </NTooltip>
-    <NTooltip v-if="serial.driverType !== 'webserial'">
+    <NTooltip v-if="serial.driverType !== 'webserial'" placement="bottom" :style="tipStyle">
       <template #trigger>
         <NButton size="small" :disabled="serial.connected" @click="serial.refreshPorts()">⟳</NButton>
       </template>
       {{ t('conn.refreshPorts') }}
     </NTooltip>
 
-    <NTooltip>
+    <NTooltip placement="bottom" :style="tipStyle">
       <template #trigger>
         <NSelect
           :key="selectKey"
@@ -338,7 +341,7 @@ onBeforeUnmount(() => {
       </template>
       {{ t('conn.baudTip') }}
     </NTooltip>
-    <NTooltip>
+    <NTooltip placement="bottom" :style="tipStyle">
       <template #trigger>
         <NSelect
           v-model:value="serial.options.dataBits"
@@ -350,7 +353,7 @@ onBeforeUnmount(() => {
       </template>
       {{ t('conn.dataBitsTip') }}
     </NTooltip>
-    <NTooltip>
+    <NTooltip placement="bottom" :style="tipStyle">
       <template #trigger>
         <NSelect
           v-model:value="serial.options.parity"
@@ -362,7 +365,7 @@ onBeforeUnmount(() => {
       </template>
       {{ t('conn.parityTip') }}
     </NTooltip>
-    <NTooltip>
+    <NTooltip placement="bottom" :style="tipStyle">
       <template #trigger>
         <NSelect
           v-model:value="serial.options.stopBits"
@@ -398,7 +401,7 @@ onBeforeUnmount(() => {
 
     <!-- 录制控制 -->
     <template v-if="recorder.supported">
-      <NTooltip>
+      <NTooltip placement="bottom" :style="tipStyle">
         <template #trigger>
           <NButton
             size="small"
