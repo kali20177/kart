@@ -215,8 +215,14 @@ onMounted(() => {
 
           <!-- 全局功能按钮：作用于当前活动会话，不随会话 tab 重复 -->
           <div class="session-tabs-spacer" />
-          <button class="global-btn" @click="onOpenAscii" :title="t('conn.asciiTable')">{{ t('conn.asciiTable') }}</button>
-          <button class="global-btn" @click="onOpenSettings" :title="t('conn.settings')">{{ t('conn.settings') }}</button>
+          <button class="global-btn ascii-btn" @click="onOpenAscii" :title="t('conn.asciiTable')">ASCII</button>
+          <button class="global-btn icon-btn" @click="onOpenSettings" :title="t('conn.settings')">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="8" r="4.4" />
+              <circle cx="8" cy="8" r="1.6" />
+              <path d="M12.4 9.1L14.4 9.1L14.4 6.9L12.4 6.9ZM10.3 11.9L11.7 13.3L13.3 11.7L11.9 10.3ZM6.9 12.4L6.9 14.4L9.1 14.4L9.1 12.4ZM4.1 10.3L2.7 11.7L4.3 13.3L5.7 11.9ZM3.6 6.9L1.6 6.9L1.6 9.1L3.6 9.1ZM5.7 4.1L4.3 2.7L2.7 4.3L4.1 5.7ZM9.1 3.6L9.1 1.6L6.9 1.6L6.9 3.6ZM11.9 5.7L13.3 4.3L11.7 2.7L10.3 4.1Z" />
+            </svg>
+          </button>
         </div>
 
         <div class="main">
@@ -363,14 +369,32 @@ onMounted(() => {
 }
 .global-btn {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
   color: var(--text-dim);
-  font-size: 12px;
-  padding: 4px 10px;
   cursor: pointer;
   border-radius: var(--radius-sm);
   transition: color 0.15s, background 0.15s;
+}
+.icon-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.ascii-btn {
+  height: 24px;
+  padding: 0 8px;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 .global-btn:hover {
   color: var(--accent);
