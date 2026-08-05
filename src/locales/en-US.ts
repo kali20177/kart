@@ -24,6 +24,7 @@ export default {
     resetDefaults: 'Restore Defaults',
     resetDefaultsConfirm: 'Restores settings, serial options, export preferences, panel layout and quick commands to defaults. Current session messages and send history are kept.',
     resetDefaultsDone: 'Defaults restored',
+    knowBase: 'Knowledge Base',
   },
   common: {
     cancel: 'Cancel',
@@ -37,6 +38,31 @@ export default {
     licenseText: 'This project is for demonstration purposes only (private), not publicly released.',
     ossNotice: 'Open source components used (all MIT licensed):',
     browserDevtools: 'Use F12 / Ctrl+Shift+I to open DevTools in browser',
+  },
+  knowBase: {
+    title: 'Knowledge Base',
+    prev: 'Previous',
+    next: 'Next',
+    entries: {
+      macosTtyCu: {
+        title: 'Why does the macOS port list only show cu, not tty?',
+        summary: 'On macOS every serial device has tty/cu nodes; this app shows only cu, the right choice for everyday debugging.',
+        b0: 'On macOS every serial device appears as two nodes under /dev, both pointing to the same physical port:',
+        b1: 'tty is the "dialin" side: opening it waits for the DCD carrier signal, but most USB-to-serial adapters never assert DCD, so the open can hang or fail.',
+        b2: 'cu is the "callout" side: it opens immediately without waiting for DCD, suitable for actively initiating communication. Arduino IDE, PlatformIO, minicom, screen and other serial tools all use cu.',
+        b3: 'This is why this app only lists cu nodes on macOS — avoiding duplicate entries for the same device and accidental failures from picking tty.',
+        b4: 'See Stack Overflow for details: What is the difference between /dev/tty.* and /dev/cu.*?',
+      },
+      cannotOpenPort: {
+        title: 'Getting an error or cannot open the serial port?',
+        summary: 'Check port usage, device connection, permissions, and parameters in order.',
+        b0: 'When the "Connect" click fails, check in order:',
+        b1: '1. Port in use: another session of this app, or another program (minicom, other serial assistants) may be holding the port. Close the occupant and retry.',
+        b2: '2. Device disconnected: a loose or replugged USB-to-serial adapter disappears briefly. Replug and click "Refresh" to re-enumerate.',
+        b3: '3. OS permissions: on Linux /dev/ttyUSB* requires the dialout group; macOS usually needs no extra permission.',
+        b4: '4. Baud rate/parameters: mismatched parameters usually show as garbled text — check encoding and checksum settings first.',
+      },
+    },
   },
   compat: {
     title: 'Browser Incompatible',

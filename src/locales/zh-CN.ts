@@ -24,6 +24,7 @@ export default {
     resetDefaults: '恢复默认设置',
     resetDefaultsConfirm: '将把设置、串口参数、导出偏好、面板布局与快捷命令恢复为默认值。当前会话消息与发送历史保留。',
     resetDefaultsDone: '已恢复默认设置',
+    knowBase: '常见问题',
   },
   common: {
     cancel: '取消',
@@ -37,6 +38,31 @@ export default {
     licenseText: '本项目为演示用途（private），未对外发布。',
     ossNotice: '使用的开源组件（均为 MIT 许可）：',
     browserDevtools: '浏览器环境请使用 F12 / Ctrl+Shift+I 打开开发者工具',
+  },
+  knowBase: {
+    title: '常见问题',
+    prev: '上一篇',
+    next: '下一篇',
+    entries: {
+      macosTtyCu: {
+        title: 'macOS 端口列表里为什么只显示 cu，没有 tty？',
+        summary: 'macOS 下每个串口设备有 tty/cu 两个节点，本项目只显示 cu（日常调试的正确选择）。',
+        b0: 'macOS 下每个串口设备在 /dev 下都有两个节点，指向同一物理口：',
+        b1: 'tty 是「拨入」（dialin）端：打开时会等待 DCD 载波信号，而多数 USB 转串口模块不会主动拉高 DCD，导致打开卡住或失败。',
+        b2: 'cu 是「拨出」（callout）端：忽略 DCD 立即打开，适合主动发起通信。Arduino IDE、PlatformIO、minicom、screen 等串口工具日常都使用 cu。',
+        b3: '因此本项目在 macOS 下只列出 cu 节点，避免同一设备出现两条选项，也避免误选 tty 后连接失败。',
+        b4: '详细讨论见 Stack Overflow：What is the difference between /dev/tty.* and /dev/cu.*?',
+      },
+      cannotOpenPort: {
+        title: '点击连接后报错或无法打开串口？',
+        summary: '按端口占用、设备掉线、权限、驱动四个方面排查。',
+        b0: '点击「连接」失败时，依次排查：',
+        b1: '1. 端口是否被占用：本应用其他会话或其他程序（如 minicom、串口助手）正在使用该端口时会打开失败。关闭占用方后重试。',
+        b2: '2. 设备是否掉线：USB 转串口模块松脱或重新插拔会短暂消失。重新插好后点「刷新」按钮重新枚举。',
+        b3: '3. 系统权限：Linux 下 /dev/ttyUSB* 需要 dialout 组权限；macOS 一般无需额外授权。',
+        b4: '4. 波特率/参数：对端设备参数不匹配时通常表现为乱码，可先在「设置」中确认编码与校验设置。',
+      },
+    },
   },
   compat: {
     title: '浏览器不兼容',
