@@ -45,6 +45,18 @@ function onNext() {
         <template v-for="(block, i) in entry.blocks" :key="i">
           <p v-if="block.type === 'text'" class="kb-text">{{ t(block.text ?? '') }}</p>
           <pre v-else-if="block.type === 'code'" class="kb-code"><code>{{ (block.lines ?? []).join('\n') }}</code></pre>
+          <table v-else-if="block.type === 'table'" class="kb-table">
+            <thead>
+              <tr>
+                <th v-for="(h, hi) in block.table?.headers ?? []" :key="hi">{{ t(h) }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, ri) in block.table?.rows ?? []" :key="ri">
+                <td v-for="(cell, ci) in row" :key="ci">{{ t(cell) }}</td>
+              </tr>
+            </tbody>
+          </table>
           <a
             v-else
             class="kb-link"
@@ -108,6 +120,34 @@ function onNext() {
   line-height: 1.6;
   overflow-x: auto;
   white-space: pre;
+}
+/* 表格块：长内容按列自动换行，无需横向滚动 */
+.kb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.kb-table th,
+.kb-table td {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.kb-table th {
+  background: var(--bg-elevated);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.kb-table td {
+  color: var(--text);
+  word-break: break-word;
+}
+.kb-table td:nth-child(2) {
+  font-family: var(--mono-font);
+  white-space: nowrap;
 }
 .kb-link {
   color: var(--accent);
