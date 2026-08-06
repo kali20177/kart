@@ -124,7 +124,7 @@ AsciiTable      → ascii-table/utils
 - **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数。
 - **导出**：消息列表 CSV/JSON 导出、波形 CSV 导出、快速命令 JSON 导入导出。
 - **应用日志**：面向用户报障。浏览器端写 IndexedDB；Electron 下主进程按日轮转文件日志（`userData/logs/YYYY-MM-DD.log`，保留 30 天）并汇聚渲染端全部 console（`console-message` 事件转发）。文件菜单「导出日志」一键下载：Electron 优先取主进程文件（权威来源，含主进程事件），浏览器取 IDB，导出文件头自动附带版本/平台/驱动等环境信息。关键生命周期均有埋点：驱动选择、连接/断连（含会话时长与流量）、写入失败、录制、文件传输、全局错误。级别/行格式/level 映射集中在纯函数 `src/utils/log-level.ts`（两端共用、有单测）。
-- **状态栏**：连接态、端口参数概要、RX/TX/帧/ERR 统计、信号线状态（DCD/CTS/DSR/RI）、DTR/RTS/BRK 控制、活跃文件下发紧凑条。
+- **状态栏**：连接态、端口参数概要、RX/TX/帧/ERR 统计、CTS 只读指示（状态圆点，表示对端允许发送）、DTR/RTS/BRK 控制、活跃文件下发紧凑条。
 - **主题**：多主题注册表 + 3 套内置主题（glass-industrial-dark、glass-industrial-light、oled-hud），明暗二元，无"跟随系统"。
 
 ## Electron 集成

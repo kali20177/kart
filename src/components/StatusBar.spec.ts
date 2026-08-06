@@ -60,10 +60,25 @@ afterEach(() => {
 })
 
 describe('StatusBar · 输出线控制（DTR/RTS/Break）', () => {
-  it('渲染 DTR/RTS/BRK 三个控制按钮', () => {
+  it('渲染 DTR/RTS/BRK 控制按钮与只读 CTS 指示', () => {
     const { wrapper } = mountStatusBar(new FakeDriver())
     const btns = wrapper.findAll('.signal-btn')
     expect(btns.map((b) => b.text())).toEqual(['DTR', 'RTS', 'BRK'])
+    expect(wrapper.find('.signal-ro').exists()).toBe(true)
+  })
+
+  it('CTS 为只读指示：span 非按钮，tooltip 注明只读，圆点随信号状态切换', async () => {
+    const { wrapper, session } = mountStatusBar(new FakeDriver())
+    const cts = wrapper.find('.signal-ro')
+    expect(cts.element.tagName).toBe('SPAN') // 非 button，无点击语义
+    expect(cts.classes()).not.toContain('signal-btn')
+    expect(cts.attributes('title')).toContain('只读')
+
+    // 圆点 active 类跟随 serial.signals.cts
+    expect(cts.classes()).not.toContain('active')
+    session.serial.signals.cts = true
+    await nextTick()
+    expect(wrapper.find('.signal-ro').classes()).toContain('active')
   })
 
   it('未连接时控制按钮禁用', () => {

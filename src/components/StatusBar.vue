@@ -160,13 +160,6 @@ const recordDuration = computed(() => {
   return `${sec}s`
 })
 
-const signalList = computed(() => [
-  { key: 'DCD', on: serial.signals.dcd },
-  { key: 'CTS', on: serial.signals.cts },
-  { key: 'DSR', on: serial.signals.dsr },
-  { key: 'RI', on: serial.signals.ri }
-])
-
 // 自动重连倒计时显示。nowTick 1s 驱动重算；reconnectNextAt 是下次尝试时刻。
 const reconnectCountdown = computed(() => {
   void nowTick.value // 1s tick 触发重算
@@ -320,8 +313,12 @@ async function onBreak() {
       BRK
     </button>
 
-    <span v-for="s in signalList" :key="s.key" class="signal" :class="{ active: s.on }">
-      {{ s.key }}
+    <!-- 输入线（只读）：对端允许发送指示。圆点填充绿=对端允许接收，灰=未置位。
+         用状态圆点而非按钮样式，配合 tooltip 明确「只读、不可点击」。 -->
+    <div class="divider" />
+    <span class="signal-ro" :class="{ active: serial.signals.cts }" :title="t('status.ctsTip')">
+      <span class="signal-ro-dot" />
+      CTS
     </span>
   </div>
 </template>
@@ -469,16 +466,34 @@ async function onBreak() {
   color: var(--err, #e06060);
 }
 
-.signal {
+/* ── 输入线只读指示（CTS：对端允许发送）。圆点样式明确「状态而非控件」：
+   无边框、无 hover、无 pointer 手型，hover tooltip 说明只读。 ── */
+.signal-ro {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--mono-font);
   font-size: 11px;
-  padding: 0 4px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--glass-border);
+  line-height: 1.5;
+  color: var(--text-dim);
+  cursor: default;
+  user-select: none;
 }
-.signal.active {
+.signal-ro-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  background: transparent;
+  flex: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.signal-ro.active {
   color: var(--ok);
-  border-color: var(--ok);
+}
+.signal-ro.active .signal-ro-dot {
+  background: var(--ok);
+  box-shadow: 0 0 4px var(--ok);
 }
 
 /* ── 输出线控制按钮（DTR/RTS 切换 + Break 脉冲）── */
