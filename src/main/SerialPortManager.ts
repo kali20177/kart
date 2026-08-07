@@ -17,6 +17,16 @@ function isMacOSPseudoTerminal(path: string): boolean {
 }
 
 /**
+ * macOS 上 serialport 枚举返回 dialin 节点（/dev/tty.*），而串口工具惯例使用
+ * callout 节点（/dev/cu.*，打开不等待 DCD）。同一物理设备的两个 BSD 节点同基名，
+ * 这里把 tty 路径换算成 cu 路径，让 UI 显示规范名。非 darwin / 非 tty 路径原样返回。
+ */
+export function toCalloutPath(path: string, platform: string = process.platform): string {
+  if (platform !== 'darwin' || !path.startsWith('/dev/tty.')) return path
+  return '/dev/cu.' + path.slice('/dev/tty.'.length)
+}
+
+/**
  * native PortInfo（serialport.list() 返回项的子集）
  */
 interface NativePortInfo {
@@ -83,7 +93,7 @@ export class SerialPortManager {
       return infos
         .filter((i) => !isMacOSPseudoTerminal(i.path))
         .map((i) => ({
-          path: i.path,
+          path: toCalloutPath(i.path),
           manufacturer: i.manufacturer,
           vendorId: i.vendorId,
           productId: i.productId

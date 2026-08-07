@@ -42,7 +42,7 @@ vi.mock('./logger', () => ({
 
 vi.mock('serialport', () => ({ SerialPort: MockSerialPort }))
 
-import { SerialPortManager } from './SerialPortManager'
+import { SerialPortManager, toCalloutPath } from './SerialPortManager'
 
 const OPTS = {
   baudRate: 115200,
@@ -60,6 +60,59 @@ function makeWin() {
   const win = { isDestroyed: () => false, webContents: { send } } as unknown as WinArg
   return { win, send }
 }
+
+describe('toCalloutPath · macOS tty → cu 换算', () => {
+  it('darwin 下把 /dev/tty.* 换算成 /dev/cu.*', () => {
+    expect(toCalloutPath('/dev/tty.usbserial-2430', 'darwin')).toBe('/dev/cu.usbserial-2430')
+  })
+
+  it('非 darwin 平台原样返回', () => {
+    expect(toCalloutPath('/dev/ttyUSB0', 'linux')).toBe('/dev/ttyUSB0')
+    expect(toCalloutPath('COM5', 'win32')).toBe('COM5')
+  })
+
+  it('非 tty 前缀的 darwin 路径原样返回', () => {
+    expect(toCalloutPath('/dev/cu.usbserial-2430', 'darwin')).toBe('/dev/cu.usbserial-2430')
+  })
+})
+
+describe('SerialPortManager · listPortsAsync', () => {
+  let mgr: SerialPortManager
+
+  beforeEach(() => {
+    portInstances.length = 0
+    mgr = new SerialPortManager(makeWin().win)
+  })
+
+  afterEach(() => {
+    mgr.destroy()
+  })
+
+  it('过滤伪终端并换算成 callout 路径', async () => {
+    MockSerialPort.list.mockResolvedValue([
+      { path: '/dev/tty.usbserial-2430', vendorId: '1a86', productId: '7523' },
+      { path: '/dev/tty.usbmodem2303', manufacturer: 'STMicroelectronics' },
+      { path: '/dev/tty.debug-console' },
+      { path: '/dev/tty.Bluetooth-Incoming-Port' }
+    ])
+    const list = await mgr.listPortsAsync()
+    expect(list).toHaveLength(2)
+    // 本机平台为 darwin 时换算成 cu；其他平台保持 tty —— 两种断言都成立
+    expect(list.map((i) => i.path)).toEqual(
+      process.platform === 'darwin'
+        ? ['/dev/cu.usbserial-2430', '/dev/cu.usbmodem2303']
+        : ['/dev/tty.usbserial-2430', '/dev/tty.usbmodem2303']
+    )
+    expect(list[0].vendorId).toBe('1a86')
+    expect(list[0].productId).toBe('7523')
+    expect(list[1].manufacturer).toBe('STMicroelectronics')
+  })
+
+  it('枚举异常返回空数组', async () => {
+    MockSerialPort.list.mockRejectedValue(new Error('boom'))
+    await expect(mgr.listPortsAsync()).resolves.toEqual([])
+  })
+})
 
 describe('SerialPortManager · 多端口', () => {
   let mgr: SerialPortManager

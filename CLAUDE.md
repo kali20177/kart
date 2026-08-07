@@ -132,7 +132,7 @@ AsciiTable      → ascii-table/utils
 桌面打包基于 **vite-plugin-electron**（单 vite 配置，由环境变量 `ELECTRON=true` 开关）。普通 `npm run dev` / `npm run build` 不设该变量，插件完全惰性，浏览器构建产物与无 Electron 时一致。
 
 - `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`；初始化 `SerialPortManager` 并注册 IPC handlers（`serial:list-ports`、`serial:open`、`serial:close`、`serial:write`、`serial:get-signals`、`serial:set-signals`、`serial:set-break`）。
-- `src/main/SerialPortManager.ts` — 封装 serialport npm 库：枚举串口（返回真实 COM 口名如 `COM5`、`/dev/tty.usbserial-1420`）、打开/关闭/写入/信号状态（`getSignals` + `setSignals`/`setBreak`）。读取事件驱动（`SerialPort 'data'` 事件），通过 `webContents.send` 推送到渲染进程。相比手写 C++ addon：无需本机工具链、prebuilt native bindings、跨平台。
+- `src/main/SerialPortManager.ts` — 封装 serialport npm 库：枚举串口（返回真实 COM 口名如 `COM5`、`/dev/cu.usbserial-1420`；macOS 上 serialport 枚举的是 dialin 节点 `/dev/tty.*`，已换算为惯例的 callout 节点 `/dev/cu.*`）、打开/关闭/写入/信号状态（`getSignals` + `setSignals`/`setBreak`）。读取事件驱动（`SerialPort 'data'` 事件），通过 `webContents.send` 推送到渲染进程。相比手写 C++ addon：无需本机工具链、prebuilt native bindings、跨平台。
 - `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/setSignals/setBreak/onData/onError）、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
 - `src/serial/SerialPortDriver.ts` — 渲染端驱动：实现 `SerialDriver` 接口，通过 `window.electron.serial` 与主进程 IPC 通信。信号轮询 500ms。
 - `vite.config.ts` — `base` 在 Electron 目标下设为 `'./'`（file:// 加载需相对路径），浏览器下为 `'/'`。
