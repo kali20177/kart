@@ -6,6 +6,7 @@ import { createPauseStore } from '@/stores/pause'
 import { createWaveformStore } from '@/stores/waveform'
 import { createRecorderStore } from '@/stores/recorder'
 import { createTransferStore } from '@/stores/transfer'
+import { createTerminalStore } from '@/stores/terminal'
 import { useSettingsStore } from '@/stores/settings'
 import { createFreshSerialDriver } from '@/serial'
 
@@ -27,6 +28,7 @@ export interface Session {
   waveform: UnwrapNestedRefs<ReturnType<typeof createWaveformStore>>
   recorder: UnwrapNestedRefs<ReturnType<typeof createRecorderStore>>
   transfer: UnwrapNestedRefs<ReturnType<typeof createTransferStore>>
+  terminal: UnwrapNestedRefs<ReturnType<typeof createTerminalStore>>
   /** 全局设置（settings store 的同一 reactive proxy，跨会话共享） */
   settings: AppSettings
   /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
@@ -37,11 +39,11 @@ export interface Session {
 let _nextSessionId = 0
 
 /**
- * 创建一个自包含的串口会话：serial/messages/pause/waveform/recorder/transfer
+ * 创建一个自包含的串口会话：serial/messages/pause/waveform/recorder/transfer/terminal
  * 互相通过注入的 deps 接线，共享同一个全局 settings（编码/主题/波特率等跨会话统一）。
  *
  * 创建顺序严格遵循依赖关系：pause → messages → (回填 clearMessages) → serial →
- * waveform → (回填 clearWaveform) → recorder → transfer。
+ * waveform → (回填 clearWaveform) → recorder → transfer → terminal。
  *
  * 循环依赖（pause.clearAll 需要 messages.clear 与 waveform.clear）通过 closure
  * indirection 延迟绑定：先以空回调创建 pause，待目标 store 建好后回填真实引用。
@@ -108,7 +110,15 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       addFileTransfer: (id, filename, size) => messages.addFileTransfer(id, filename, size),
     })
 
-    return reactive({ serial, messages, pause, waveform, recorder, transfer, settings: s })
+    const terminal = createTerminalStore({
+      onData: (cb) => serial.onData(cb),
+      sendRaw: (bytes, record) => serial.sendRaw(bytes, record),
+      paused: pause.paused,
+      pauseStartTime: pause.pauseStartTime,
+      settings: s,
+    })
+
+    return reactive({ serial, messages, pause, waveform, recorder, transfer, terminal, settings: s })
   })!
 
   const id = _nextSessionId++

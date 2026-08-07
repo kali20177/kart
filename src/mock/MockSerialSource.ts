@@ -7,14 +7,18 @@ import {
   logLine,
   throughputChunk,
   waveformTextChunk,
-  waveformTextLabeledChunk
+  waveformTextLabeledChunk,
+  shellBanner,
+  MockShell
 } from './scenarios'
 
 /** 模拟串口源：用定时器代替真实硬件，提供多种调试场景 */
 export class MockSerialSource implements SerialDriver {
   private listeners = new Set<(bytes: Uint8Array) => void>()
   private timer: ReturnType<typeof setInterval> | null = null
+  private bannerTimer: ReturnType<typeof setTimeout> | null = null
   private scenario: MockScenarioId = 'at-reply'
+  private shell = new MockShell()
   private seq = 0
   private _isOpen = false
   private signals: SerialSignals = { dcd: true, cts: true, dsr: true, ri: false }
@@ -47,6 +51,11 @@ export class MockSerialSource implements SerialDriver {
 
   async write(bytes: Uint8Array): Promise<void> {
     if (!this._isOpen) throw new Error('端口未打开')
+    // Shell 场景：设备侧回显 + 行编辑 + 命令应答（模拟嵌入式 Linux console）
+    if (this.scenario === 'shell') {
+      this.emit(this.shell.process(bytes))
+      return
+    }
     // AT 应答场景：发送后延时回包
     if (this.scenario === 'at-reply') {
       const sent = new TextDecoder().decode(bytes)
@@ -133,6 +142,10 @@ export class MockSerialSource implements SerialDriver {
         // 每 50ms 吐 500 行数值 -> 分隔符策略下 500 帧/批，数秒灌满缓冲上限触发丢弃提示
         this.timer = setInterval(() => this.emit(bufferFloodChunk()), 50)
         break
+      case 'shell':
+        // 事件驱动：连接后打印 banner，之后由 write() 回显+应答
+        this.bannerTimer = setTimeout(() => this.emit(shellBanner()), 150)
+        break
       case 'silent':
       case 'at-reply':
       default:
@@ -145,6 +158,10 @@ export class MockSerialSource implements SerialDriver {
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
+    }
+    if (this.bannerTimer) {
+      clearTimeout(this.bannerTimer)
+      this.bannerTimer = null
     }
   }
 }

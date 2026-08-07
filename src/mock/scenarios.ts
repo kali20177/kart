@@ -26,6 +26,11 @@ export const SCENARIOS: ScenarioDef[] = [
     id: 'buffer-flood',
     label: '缓冲灌满压测',
     description: '高频数值行灌入，快速触发消息/波形缓冲丢弃；建议配合「分隔符 \\n」帧策略'
+  },
+  {
+    id: 'shell',
+    label: 'Shell 交互终端',
+    description: '模拟嵌入式 Linux 串口 console（回显 + 行编辑 + 常用命令），配合终端视图体验'
   }
 ]
 
@@ -148,4 +153,122 @@ export function bufferFloodChunk(linesPerChunk = 500): Uint8Array {
     s += `${a},${b}\r\n`
   }
   return text(s)
+}
+
+// —— Shell 交互终端场景 ——
+// 模拟嵌入式 Linux 串口 console：设备侧回显 + 行编辑 + 常用命令应答（带 ANSI 颜色），
+// 用于无硬件时自测终端视图（char 直通 / line 发送 / 退格 / tab 补全 / Ctrl+C）。
+
+const SHELL_PROMPT = '\x1b[1;32mroot@kart:~# \x1b[0m'
+
+const SHELL_BANNER =
+  '\x1b[1;34mKART 模拟串口终端\x1b[0m\n' +
+  '嵌入式 Linux console 模拟（设备回显 + 行编辑）。命令：help / ls / cat / echo / clear / color / uname / vim\n' +
+  SHELL_PROMPT
+
+const SHELL_FILES: Record<string, string> = {
+  app: '#!/bin/sh\nKART_SHELL=1\nexec /sbin/init',
+  config: 'baud=115200\nlog_level=debug\nterminal=vt100'
+}
+
+const SHELL_HELP =
+  '可用命令：\n' +
+  '  help             显示帮助\n' +
+  '  ls               列出文件\n' +
+  '  cat <file>       查看文件（app / config）\n' +
+  '  echo <text>      输出文本\n' +
+  '  clear            清屏\n' +
+  '  color            显示 ANSI 颜色\n' +
+  '  uname            内核信息\n' +
+  '  vim              提示全屏编辑器支持状态'
+
+const SHELL_COMMANDS = ['help', 'ls', 'cat', 'echo', 'clear', 'color', 'uname', 'vim']
+
+function shellLs(): string {
+  return ['\x1b[1;34mapp\x1b[0m', '\x1b[1;34mconfig\x1b[0m', '\x1b[1;34mlogs\x1b[0m', 'start.sh', 'kernel.bin'].join(
+    '  '
+  )
+}
+
+function shellColorDemo(): string {
+  let out = '前景色：'
+  for (let i = 30; i <= 37; i++) out += `\x1b[${i}m fg${i} \x1b[0m`
+  out += '\n加粗：'
+  for (let i = 30; i <= 37; i++) out += `\x1b[1;${i}mB${i}\x1b[0m `
+  return out
+}
+
+/** 连接时打印的 banner */
+export function shellBanner(): Uint8Array {
+  return text(SHELL_BANNER)
+}
+
+/** 模拟 shell：对写入的字节做设备侧回显 + 行编辑 + 命令应答 */
+export class MockShell {
+  private line = ''
+
+  /** 处理一段输入，返回应回显到终端的全部字节（按键回显 + 命令应答） */
+  process(bytes: Uint8Array): Uint8Array {
+    const decoded = new TextDecoder().decode(bytes)
+    const parts: string[] = []
+    for (const ch of decoded) {
+      const code = ch.codePointAt(0) ?? 0
+      if (ch === '\r' || ch === '\n') {
+        const out = this.exec(this.line)
+        this.line = ''
+        parts.push('\r\n', out)
+      } else if (ch === '\b' || code === 0x7f) {
+        if (this.line.length) {
+          this.line = this.line.slice(0, -1)
+          parts.push('\b \b')
+        }
+      } else if (ch === '\t') {
+        const completed = this.complete()
+        if (completed) {
+          const rest = completed.slice(this.line.length)
+          this.line = completed
+          parts.push(rest)
+        } else {
+          parts.push('\t')
+        }
+      } else if (code === 0x03) {
+        this.line = ''
+        parts.push('^C\r\n', SHELL_PROMPT)
+      } else if (code >= 0x20 && code !== 0x7f) {
+        this.line += ch
+        parts.push(ch)
+      }
+      // 其余控制字符（含方向键转义序列的中间字节）忽略回显
+    }
+    return text(parts.join(''))
+  }
+
+  /** tab 补全：唯一前缀匹配时补全为命令 + 空格 */
+  private complete(): string | null {
+    if (!this.line) return null
+    const hits = SHELL_COMMANDS.filter((c) => c.startsWith(this.line))
+    if (hits.length === 1 && hits[0] !== this.line) return hits[0] + ' '
+    return null
+  }
+
+  private exec(raw: string): string {
+    const cmd = raw.trim()
+    if (!cmd) return SHELL_PROMPT
+    const [name, ...args] = cmd.split(/\s+/)
+    switch (name) {
+      case 'help': return SHELL_HELP + '\r\n' + SHELL_PROMPT
+      case 'ls': return shellLs() + '\r\n' + SHELL_PROMPT
+      case 'cat': {
+        const f = args[0]
+        if (f && f in SHELL_FILES) return SHELL_FILES[f] + '\r\n' + SHELL_PROMPT
+        return `cat: ${f ?? ''}: No such file or directory\r\n` + SHELL_PROMPT
+      }
+      case 'echo': return (args.join(' ') || '') + '\r\n' + SHELL_PROMPT
+      case 'clear': return '\x1b[2J\x1b[H' + SHELL_PROMPT
+      case 'color': return shellColorDemo() + '\r\n' + SHELL_PROMPT
+      case 'uname': return 'Linux kart 5.15.41 armv7l GNU/Linux\r\n' + SHELL_PROMPT
+      case 'vim': return 'vim: 全屏编辑器（alt-screen）在终端模式阶段三支持\r\n' + SHELL_PROMPT
+      default: return `sh: ${name}: command not found\r\n` + SHELL_PROMPT
+    }
+  }
 }

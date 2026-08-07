@@ -5,6 +5,7 @@ import ConnectionBar from './ConnectionBar.vue'
 import MessageList from './MessageList.vue'
 import WaveformChart from './WaveformChart.vue'
 import InputComposer from './InputComposer.vue'
+import TerminalPane from './TerminalPane.vue'
 import StatusBar from './StatusBar.vue'
 import { provideSession } from '@/composables/useSession'
 import type { Session } from '@/session'
@@ -22,7 +23,7 @@ provideSession(props.session)
 const { t } = useI18n()
 
 // 会话态 UI（多会话后随 tab 独立）：视图切换 + 发送框内容
-const mainView = ref<'messages' | 'waveform'>('messages')
+const mainView = ref<'messages' | 'waveform' | 'terminal'>('messages')
 const viewMode = ref<DataMode>(props.session.settings.defaultView)
 const composerText = ref('')
 
@@ -75,11 +76,20 @@ defineExpose({ insertAscii, toComposer: onToComposer })
           >
             {{ t('app.waveform') }}
           </button>
+          <button
+            class="tab"
+            :class="{ active: mainView === 'terminal' }"
+            @click="mainView = 'terminal'"
+          >
+            {{ t('app.terminal') }}
+          </button>
         </div>
 
         <MessageList v-show="mainView === 'messages'" :view-mode="viewMode" @resend="onResend" />
         <WaveformChart v-show="mainView === 'waveform'" />
+        <TerminalPane :active="mainView === 'terminal'" v-show="mainView === 'terminal'" />
         <InputComposer
+          v-show="mainView !== 'terminal'"
           v-model:text="composerText"
           v-model:mode="viewMode"
           @open-file-transfer="onOpenFileTransfer"

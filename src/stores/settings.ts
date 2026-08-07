@@ -23,6 +23,16 @@ const DEFAULTS: AppSettings = {
     maxPoints: 5000,
     maxHistoryPoints: 200_000
   },
+  terminal: {
+    cols: 0,
+    rows: 0,
+    fontScale: 1,
+    transmitMode: 'char' as const,
+    echo: false,
+    backspace: 'del' as const,
+    lineEnding: 'cr' as const,
+    scrollbackLimit: 5000
+  },
   autoReconnect: false,
   showPauseNotification: true,
   recordFormat: 'text' as const,
@@ -93,6 +103,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const settings = reactive<AppSettings>(
     structuredClone({ ...DEFAULTS, ...persisted })
   )
+
+  // terminal 浅合并兜底：persisted 若有旧值会整体覆盖 DEFAULTS.terminal，缺字段时补默认
+  settings.terminal = { ...DEFAULTS.terminal, ...settings.terminal }
 
   // 是否自动把配置落盘（菜单「文件 ▸ 自动保存配置」开关）。
   // 开关标志本身始终持久化；它只决定 settings 内容是否自动写入本地存储。

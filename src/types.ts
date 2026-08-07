@@ -144,6 +144,26 @@ export interface WaveformSettings {
   maxHistoryPoints: number
 }
 
+/** 终端模式设置 */
+export interface TerminalSettings {
+  /** 视口列数；0 = 跟随容器宽度 */
+  cols: number
+  /** 视口行数；0 = 跟随容器高度 */
+  rows: number
+  /** 字号缩放（相对全局 fontSize，默认 1） */
+  fontScale: number
+  /** 传输模式：line=本地行编辑 Enter 发送；char=按键直通（设备侧行编辑+回显） */
+  transmitMode: 'line' | 'char'
+  /** 本地回显（默认关——嵌入式 Linux console / Letter Shell 均设备回显，避免双显） */
+  echo: boolean
+  /** 退格字节：del=0x7F（Linux console 默认），bs=0x08 */
+  backspace: 'del' | 'bs'
+  /** Enter 发送时追加的行尾符 */
+  lineEnding: LineEnding
+  /** 回滚行上限（超限裁剪并累计 droppedLines） */
+  scrollbackLimit: number
+}
+
 /** 导出偏好（持久化到 localStorage） */
 export interface ExportPreferences {
   format: 'txt' | 'csv' | 'json' | 'binary'
@@ -173,6 +193,8 @@ export interface AppSettings {
   locale: 'zh-CN' | 'en-US'
   // 波形
   waveform: WaveformSettings
+  // 终端
+  terminal: TerminalSettings
   // 连接
   autoReconnect: boolean
   // 暂停
@@ -197,6 +219,7 @@ export type MockScenarioId =
   | 'waveform-text'
   | 'waveform-text-labeled'
   | 'buffer-flood'
+  | 'shell'
 
 // ─── 文件下发类型（阶段 1 文件传输 UI） ───
 

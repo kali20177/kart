@@ -130,3 +130,29 @@ describe('createSession · 会话接线', () => {
     await session.serial.disconnect()
   })
 })
+
+describe('createSession · 终端接线（mock shell 场景）', () => {
+  it('mock shell 回显与命令应答 → terminal store 渲染（sendBytes 走 record=false）', async () => {
+    const mock = new MockSerialSource()
+    const session = makeSession(mock)
+    session.serial.scenario = 'shell'
+    await session.serial.refreshPorts()
+    await session.serial.connect()
+
+    // 终端发送路径下发命令：mock 设备侧回显 + 应答
+    await session.terminal.sendBytes(new TextEncoder().encode('ls\r'))
+
+    // 轮询终端回滚文本出现命令输出（banner 定时器 + rAF 批处理为真实完成事件）
+    const deadline = Date.now() + 2000
+    let txt = ''
+    while (true) {
+      txt = session.terminal.scrollbackText()
+      if (txt.includes('app')) break
+      if (Date.now() > deadline) throw new Error(`超时：终端未见 ls 输出。text="${txt}"`)
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    expect(txt).toContain('root@kart:~#')
+    // TX 不污染消息列表（record=false）：消息帧日志只含设备回显/应答，无逐命令 TX 气泡
+    await session.serial.disconnect()
+  })
+})
