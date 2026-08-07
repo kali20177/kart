@@ -28,5 +28,15 @@ declare global {
         exportSnapshot(content: string, fileName: string): Promise<boolean>
       }
     }
+    // Tauri 版原生桥（`window.kart`）在 Electron 分支不存在，声明为可选仅为让
+    // QuickCommandsPanel 的 `window.kart?.saveTextFile` 通过类型检查；实际恒为
+    // undefined，导出走 Blob 回退（Electron 为 Chromium，三平台行为一致）。
+    kart?: {
+      saveTextFile(
+        content: string,
+        fileName: string,
+        filters?: { name: string; extensions: string[] }[]
+      ): Promise<boolean>
+    }
   }
 }
