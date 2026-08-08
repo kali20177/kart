@@ -26,6 +26,24 @@ describe('MockShell · 回显与命令应答', () => {
     expect(dec.decode(sh.process(enc.encode('c\r')))).toContain('sh: ac: command not found')
   })
 
+  it('退格按字符显示宽度擦除——CJK 宽字符需 \b \b 两次', () => {
+    const sh = new MockShell()
+    sh.process(enc.encode('缓'))
+    expect(dec.decode(sh.process(enc.encode('\x7f')))).toBe('\b \b\b \b')
+    // 宽字符删除后再输入 ASCII，行缓冲不受残留影响
+    const out = dec.decode(sh.process(enc.encode('ok\r')))
+    expect(out).toContain('sh: ok: command not found')
+  })
+
+  it('tab 无唯一补全时不回显字面 tab（避免光标被推到制表位）', () => {
+    const sh = new MockShell()
+    sh.process(enc.encode('cd lo'))
+    const out = dec.decode(sh.process(enc.encode('\t')))
+    expect(out).toBe('')
+    // 光标未移动，退格仍能正常擦除最后一个字符
+    expect(dec.decode(sh.process(enc.encode('\x7f')))).toBe('\b \b')
+  })
+
   it('tab 唯一前缀补全为命令 + 空格', () => {
     const sh = new MockShell()
     sh.process(enc.encode('he'))
@@ -62,7 +80,10 @@ describe('MockShell · 回显与命令应答', () => {
     expect(out).toContain('\x1b[2J\x1b[H')
   })
 
-  it('banner 含提示符', () => {
-    expect(dec.decode(shellBanner())).toContain('root@kart:~#')
+  it('banner 含提示符且用 CRLF 换行（裸 LF 会让 xterm 只换行不回列导致错位）', () => {
+    const banner = dec.decode(shellBanner())
+    expect(banner).toContain('root@kart:~#')
+    expect(banner).toContain('\r\n')
+    expect(banner).not.toMatch(/[^\r]\n/)
   })
 })

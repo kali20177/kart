@@ -113,6 +113,10 @@ async function main() {
     check('banner 渲染', bannerTxt !== null ? bannerTxt.includes('KART 模拟串口终端') : false,
       bannerTxt === null ? '(canvas 渲染器，文本不在 DOM)' : `buffer 含 banner`)
 
+    // banner 对齐：裸 LF 会让 xterm 只换行不回列，下一行出现前导空格（回归项）
+    check('banner 对齐（无前导空格）', bannerTxt !== null ? !/\S\s+嵌入式/.test(bannerTxt) : false,
+      bannerTxt === null ? '(canvas 渲染器)' : '每行从列 0 开始')
+
     // 4. char 直通：点击终端聚焦，键入 ls 回车
     await page.locator('.xterm').click()
     await page.keyboard.type('ls\r')
@@ -123,6 +127,29 @@ async function main() {
       lsTxt === null ? '(canvas 渲染器，文本不在 DOM)' : '设备回显 + ls 输出')
 
     await page.screenshot({ path: `${SHOT_DIR}/char-ls.png`, fullPage: false })
+
+    // 4b. 回归：tab 无补全不回显 + Backspace 能擦除文本末尾（不再残留）
+    await page.locator('.xterm').click()
+    await page.keyboard.type('cd lo')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Backspace')
+    await sleep(400)
+    const tabTxt = await termText(page)
+    check('tab+Backspace 擦除干净', tabTxt !== null ? !tabTxt.includes('cd lo') : false,
+      tabTxt === null ? '(canvas 渲染器)' : 'o 已被擦除')
+
+    // 4c. 回归：CJK 宽字符 Backspace 整格擦除（不再残留半字）
+    await page.keyboard.insertText('缓')
+    await sleep(300)
+    await page.keyboard.press('Backspace')
+    await sleep(300)
+    const cjkTxt = await termText(page)
+    check('CJK 宽字符 Backspace 擦除干净', cjkTxt !== null ? !cjkTxt.includes('缓') : false,
+      cjkTxt === null ? '(canvas 渲染器)' : '宽字符已整格擦除')
+
+    // 执行挂起的 "cd l"（mock 行缓冲跨模式保留），清空后再进 line 模式
+    await page.keyboard.press('Enter')
+    await sleep(400)
 
     // 5. line 模式：切「行发送」，输入 help 回车
     await page.locator('button', { hasText: '行发送' }).click()
