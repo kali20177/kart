@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "verify:terminal": "node scripts/verify-terminal.mjs",
     "verify:pty": "node scripts/verify-pty.mjs",
+    "postinstall": "node scripts/check-node-pty.mjs",
     "electron:dev": "cross-env ELECTRON=true vite",
     "electron:build": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit && cross-env ELECTRON=true vite build && electron-builder",
     "electron:preview": "cross-env ELECTRON=true vite build && node scripts/start-electron.mjs",

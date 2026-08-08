@@ -191,7 +191,7 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 - **自动化验证**：`ELECTRON=true vite build && npm run verify:pty`（`scripts/verify-pty.mjs`，Playwright CDP 驱动 Electron，连接 → 终端视图 → `ls` 回显 → `vim` 全屏 → 无 console 错误，截图在 `/tmp/pty-verify/`）。
 - **驱动链路**：主进程 `PtyManager`（node-pty spawn）→ IPC `pty:data` → 预加载 → 渲染端 `PtyDriver`（实现 `SerialDriver`，`setSize` 同步窗口尺寸给 shell 的 stty）→ serial store → terminal store（xterm 薄桥）。
 
-**node-pty 需本地编译**：npm 发布的 prebuilt 与当前 macOS 不兼容，`spawn` 报 `posix_spawnp failed`（无 errno）。解决：`cd node_modules/node-pty && npx node-gyp rebuild`。node-pty 用 N-API，编译产物 Node/Electron 通用（Electron 31 直接可用）。新 clone 后 `npm install` 只会下载损坏的 prebuilt，需手动 rebuild 一次。
+**node-pty 需本地编译**：npm 发布的 prebuilt 与当前 macOS 不兼容，`spawn` 报 `posix_spawnp failed`（无 errno）。解决：`cd node_modules/node-pty && npx node-gyp rebuild`。node-pty 用 N-API，编译产物 Node/Electron 通用（Electron 31 直接可用）。已自动化：`postinstall` 钩子 `scripts/check-node-pty.mjs` 会真实 spawn 探测一次 binding，损坏/缺失时自动 rebuild——新 clone 后 `npm install` 无需手动干预。手动路径仍可用作兜底。
 
 **`ELECTRON_RUN_AS_NODE` 也影响 `verify:pty`**：脚本 spawn Electron 前已 `delete process.env.ELECTRON_RUN_AS_NODE`（同 start-electron.mjs 的防御）。
 
