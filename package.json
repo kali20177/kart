@@ -21,20 +21,16 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "serialport": "^12.0.0"
   },
   "devDependencies": {
     "@intlify/unplugin-vue-i18n": "^4.0.0",
-    "@vueuse/core": "^11.3.0",
-    "naive-ui": "^2.38.2",
-    "pinia": "^2.1.7",
-    "uplot": "^1.6.32",
-    "vue": "^3.4.21",
-    "vue-i18n": "^9.14.4",
-    "vue-virtual-scroller": "2.0.0-beta.8",
     "@types/node": "^20.12.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "@vue/test-utils": "^2.4.5",
+    "@vueuse/core": "^11.3.0",
     "cross-env": "^7.0.3",
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
@@ -42,13 +38,19 @@
     "eslint-plugin-vue": "^10.10.0",
     "jsdom": "^24.0.0",
     "lint-staged": "^17.1.1",
+    "naive-ui": "^2.38.2",
+    "pinia": "^2.1.7",
     "simple-git-hooks": "^2.13.1",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.65.0",
+    "uplot": "^1.6.32",
     "vite": "^5.2.10",
     "vite-plugin-electron": "^0.28.8",
     "vitest": "^1.5.0",
-    "vue-tsc": "^2.0.13"
+    "vue": "^3.4.21",
+    "vue-i18n": "^9.14.4",
+    "vue-tsc": "^2.0.13",
+    "vue-virtual-scroller": "2.0.0-beta.8"
   },
   "allowScripts": {
     "electron@31.7.7": true,

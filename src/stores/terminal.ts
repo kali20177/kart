@@ -1,10 +1,11 @@
-import { ref, shallowRef, triggerRef, onScopeDispose, type Ref } from 'vue'
-import type { AppSettings } from '@/types'
-import { AnsiParser, type TermOp } from '@/terminal/ansi-parser'
-import { ScreenBuffer, snapshotDeep, snapshotShared, type TermLine } from '@/terminal/screen-buffer'
+import { ref, onScopeDispose, watch, markRaw, type Ref } from 'vue'
+import { Terminal } from '@xterm/xterm'
+import type { AppSettings, LineEnding } from '@/types'
+import { lineEndingBytes } from '@/utils/encoding'
 
 /** terminal store 的外部依赖——原始字节来自 serial.onData（帧切分之前），
- *  发送走 serial.sendRaw（不追加校验和/不建 TX 气泡），暂停与消息/波形共享同一 paused。 */
+ *  发送走 serial.sendRaw（不追加校验和/不建 TX 气泡），暂停与消息/波形共享同一 paused。
+ *  渲染与 ANSI 解析由 xterm.js 承担，本 store 只做「字节 ↔ 终端」的薄桥。 */
 export interface TerminalDeps {
   onData: (cb: (bytes: Uint8Array) => void) => () => void
   sendRaw: (bytes: Uint8Array, record?: boolean) => Promise<{ ok: boolean; error?: string }>
@@ -13,162 +14,127 @@ export interface TerminalDeps {
   settings: AppSettings
 }
 
+const enc = (s: string) => new TextEncoder().encode(s)
+
 export function createTerminalStore(deps: TerminalDeps) {
-  const lines = shallowRef<TermLine[]>([])
-  const cursor = ref({ line: 0, col: 0 })
-  const droppedLines = ref(0)
-  const paused = deps.paused
+  const s = deps.settings.terminal
+  const term = new Terminal({
+    scrollback: s.scrollbackLimit,
+    fontSize: Math.round(deps.settings.fontSize * s.fontScale),
+    allowProposedApi: true,
+  })
+
+  // 应用层交互态（TerminalPane 工具栏读写；暂不落盘）
+  const mode = ref<'line' | 'char'>(s.transmitMode)
+  const echo = ref(s.echo)
+  const lineEnding = ref<LineEnding>(s.lineEnding)
+  const backspace = ref<'del' | 'bs'>(s.backspace)
+
   /** 最近接收的原始字节 hex（调试/字节透视；环形保留最近 400 字节） */
   const rawDump = ref('')
-
-  const buffer = new ScreenBuffer(80, 24, deps.settings.terminal.scrollbackLimit)
-  const parser = new AnsiParser()
-  let decoder: TextDecoder | null = null
-  let lastEpoch = 0
-  let rafHandle: number | null = null
+  /** 近似丢弃行数：xterm 静默裁剪回滚，用「已写入行数 − 容量」估算 */
+  const droppedLines = ref(0)
   const rawRing: number[] = []
+  let decoder: TextDecoder | null = null
+  let writtenLines = 0
+  let capacity = s.scrollbackLimit + term.rows
 
   const unsubscribe = deps.onData((bytes) => ingest(bytes))
 
-  /** 把原始字节解码后喂入解析器并应用（受暂停控制；本地回显走 injectLocal 不受限） */
+  /** 串口原始字节 → 流式解码 → xterm 渲染（受暂停控制） */
   function ingest(bytes: Uint8Array) {
-    if (paused.value) return
+    if (deps.paused.value) return
     for (const b of bytes) {
       rawRing.push(b)
       if (rawRing.length > 400) rawRing.shift()
     }
     if (!decoder) decoder = new TextDecoder(deps.settings.encoding, { fatal: false })
     const text = decoder.decode(bytes, { stream: true })
-    applyOps(parser.push(text))
-    scheduleFlush()
-  }
-
-  /** 本地回显 / 注入：始终按 UTF-8 解码（本端自己编码的字节），不受暂停控制 */
-  function injectLocal(bytes: Uint8Array) {
-    const text = new TextDecoder().decode(bytes)
-    applyOps(parser.push(text))
-    scheduleFlush()
-  }
-
-  function applyOps(ops: TermOp[]) {
-    for (const op of ops) applyOp(op)
-  }
-
-  function applyOp(op: TermOp) {
-    switch (op.t) {
-      case 'print': buffer.print(op.text); break
-      case 'cr': buffer.carriageReturn(); break
-      case 'lf': buffer.lineFeed(); break
-      case 'bs': buffer.backspace(); break
-      case 'tab': buffer.tab(); break
-      case 'cursor':
-        if (op.kind === 'up') buffer.cursorUp(op.n)
-        else if (op.kind === 'down') buffer.cursorDown(op.n)
-        else if (op.kind === 'left') buffer.cursorLeft(op.n)
-        else buffer.cursorRight(op.n)
-        break
-      case 'pos': buffer.cursorPos(op.row, op.col); break
-      case 'col': buffer.cursorCol(op.col); break
-      case 'eraseLine': buffer.eraseLine(op.mode); break
-      case 'eraseScreen': buffer.eraseScreen(op.mode); break
-      case 'sgr': buffer.setSgr(op.params); break
-      case 'saveCursor': buffer.saveCursor(); break
-      case 'restoreCursor': buffer.restoreCursor(); break
-      case 'clear': buffer.clear(); break
-      case 'queryCursor': respondCursor(); break
-      case 'queryDa': respondDa(op.secondary); break
-      case 'osc': break
-    }
-  }
-
-  /** CPR 应答：ESC[<row>;<col>R（vim 等全屏程序查询终端尺寸用，见设计 D6） */
-  function respondCursor() {
-    const { row, col } = buffer.getCursorScreen()
-    void deps.sendRaw(new TextEncoder().encode(`\x1b[${row};${col}R`), false)
-  }
-
-  /** DA 应答：DA1=VT102 兼容；DA2（> 前缀）=xterm 版本查询，保守回 0 */
-  function respondDa(secondary: boolean) {
-    const resp = secondary ? '\x1b[>0;0;0c' : '\x1b[?1;2c'
-    void deps.sendRaw(new TextEncoder().encode(resp), false)
-  }
-
-  function scheduleFlush() {
-    if (rafHandle != null) return
-    const raf =
-      typeof requestAnimationFrame === 'function'
-        ? requestAnimationFrame
-        : (cb: FrameRequestCallback) => setTimeout(() => cb(0), 16) as unknown as number
-    rafHandle = raf(() => {
-      rafHandle = null
-      flush()
-    })
-  }
-
-  /** rAF 合并刷入：只对 dirty/新增行做深快照（新对象身份），未变行保留身份不重渲染。
-   *  裁剪/清空（epoch 变化或行数回缩）时整表重建（行号已平移）。 */
-  function flush() {
-    const bufLines = buffer.getLines()
-    const dirty = buffer.consumeDirty()
-    const oldLen = lines.value.length
-    if (buffer.getEpoch() !== lastEpoch || bufLines.length < oldLen) {
-      lastEpoch = buffer.getEpoch()
-      lines.value = bufLines.map(snapshotShared)
-    } else {
-      const arr = lines.value.slice()
-      for (let i = oldLen; i < bufLines.length; i++) arr.push(snapshotShared(bufLines[i]))
-      for (const i of dirty) if (i < oldLen) arr[i] = snapshotDeep(bufLines[i])
-      lines.value = arr
-    }
-    cursor.value = buffer.getCursor()
-    droppedLines.value = buffer.getDropped()
+    term.write(text)
+    for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 0x0a) writtenLines++
+    const cap = s.scrollbackLimit + term.rows
+    if (cap !== capacity) capacity = cap
+    droppedLines.value = Math.max(0, writtenLines - capacity)
     rawDump.value = rawRing.map((b) => b.toString(16).padStart(2, '0')).join(' ')
-    triggerRef(lines)
   }
 
-  /** 更新视口尺寸（容器 resize 时调用；0 = 跟随容器由组件计算实际值传入） */
-  function setSize(cols: number, rows: number) {
-    buffer.setSize(cols, rows)
-  }
+  /** 输入通道：xterm 收到按键 → 字节下发（char 直通；line 模式由组件拦截，此处不处理） */
+  term.onData((data) => {
+    if (mode.value !== 'char') return
+    let bytes: Uint8Array = enc(data)
+    if (data === '\r') bytes = lineEndingBytes(lineEnding.value)
+    else if (data === '\x7f' && backspace.value === 'bs') bytes = new Uint8Array([0x08])
+    if (echo.value) term.write(data)
+    void sendBytes(bytes)
+  })
 
-  function clear() {
-    parser.flush()
-    decoder = null
-    rawRing.length = 0
-    rawDump.value = ''
-    buffer.clear()
-    flush()
-  }
-
-  /** 全量回滚文本（复制全部 / 导出用） */
-  function scrollbackText(): string {
-    return buffer.getText()
-  }
-
-  /** 发送原始字节（终端路径不建 TX 气泡；本地回显策略由组件层决定，经 injectLocal 实现） */
+  /** 裸下发（终端路径不建 TX 气泡；本地回显策略由组件层决定） */
   async function sendBytes(bytes: Uint8Array): Promise<{ ok: boolean; error?: string }> {
     return deps.sendRaw(bytes, false)
   }
 
+  /** 本地回显到视口（line 模式 echo ON 用） */
+  function echoText(text: string) {
+    term.write(text)
+  }
+
+  /** 清空：清屏 + 清回滚 + 重置统计 */
+  function clear() {
+    decoder = null
+    rawRing.length = 0
+    rawDump.value = ''
+    writtenLines = 0
+    droppedLines.value = 0
+    term.write('\x1b[2J\x1b[3J\x1b[H')
+  }
+
+  /** 全量回滚文本（复制全部 / 导出用；xterm 内部换行语义，裁剪预填充的空白行） */
+  function scrollbackText(): string {
+    const buffer = term.buffer.active
+    const parts: string[] = []
+    for (let y = 0; y < buffer.length; y++) {
+      const line = buffer.getLine(y)
+      if (!line) continue
+      if (parts.length > 0 && !line.isWrapped) parts.push('\n')
+      parts.push(line.translateToString(true))
+    }
+    return parts.join('').replace(/^\n+/, '').replace(/\n+$/, '')
+  }
+
+  /** 更新视口尺寸（容器 resize 后调用；FitAddon 通常自动处理） */
+  function setSize(cols: number, rows: number) {
+    term.resize(cols, rows)
+  }
+
+  // 设置变更热更新到 xterm 选项
+  watch(
+    () => deps.settings.terminal.scrollbackLimit,
+    (n) => { term.options.scrollback = n }
+  )
+  watch(
+    () => deps.settings.fontSize * deps.settings.terminal.fontScale,
+    (n) => { term.options.fontSize = Math.round(n) }
+  )
+
   onScopeDispose(() => {
     unsubscribe()
-    if (rafHandle != null) {
-      cancelAnimationFrame(rafHandle)
-      rafHandle = null
-    }
+    term.dispose()
   })
 
   return {
-    lines,
-    cursor,
-    droppedLines,
-    paused,
+    term: markRaw(term),
+    mode,
+    echo,
+    lineEnding,
+    backspace,
     rawDump,
-    setSize,
+    droppedLines,
+    paused: deps.paused,
+    sendBytes,
+    echoText,
     clear,
     scrollbackText,
-    sendBytes,
+    setSize,
     ingest,
-    injectLocal,
   }
 }

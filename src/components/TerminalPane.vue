@@ -1,28 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RecycleScroller } from 'vue-virtual-scroller'
 import { NButton, NButtonGroup, NSelect, useMessage } from 'naive-ui'
 import { useClipboard } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { FitAddon } from '@xterm/addon-fit'
 import TerminalInput from './TerminalInput.vue'
 import { useSession } from '@/composables/useSession'
-import { lineToSegments } from '@/terminal/screen-buffer'
-import type { TermLine, TermSegment } from '@/terminal/screen-buffer'
-import type { LineEnding } from '@/types'
 
-/** 终端视图：视口（虚拟滚动回滚区 + 块状光标）+ 工具栏 + 终端输入 */
+/**
+ * 终端视图：xterm 视口（内置 cell 网格/SGR/回滚/alt-screen）+ 工具栏 + 输入条。
+ * char 模式直接键入 xterm（onData 由 terminal store 下发）；line 模式渲染本地输入条。
+ */
 const props = defineProps<{ active: boolean }>()
 
-const { terminal, settings, pause } = useSession()
+const { terminal, serial, settings, pause } = useSession()
 const { t } = useI18n()
 const toast = useMessage()
 const { copy } = useClipboard()
-
-// 会话内视图态（默认取全局设置，快速切换不落盘——SettingsModal 阶段二统一持久化）
-const mode = ref<'line' | 'char'>(settings.terminal.transmitMode)
-const echo = ref(settings.terminal.echo)
-const lineEnding = ref<LineEnding>(settings.terminal.lineEnding)
-const backspace = settings.terminal.backspace
 
 const endingOptions = [
   { label: '无', value: 'none' },
@@ -31,82 +25,52 @@ const endingOptions = [
   { label: '\\r\\n', value: 'crlf' }
 ]
 
-const fontSize = computed(() => settings.fontSize * settings.terminal.fontScale)
-const lineHeight = computed(() => Math.round(fontSize.value * 1.4))
-// 行高经 CSS 变量透传给光标块：inline span 的背景默认只盖字体 em-box（≈1em），
-// 不撑满行高，导致「块」光标退化成一条偏上的横线——必须显式铺满整行。
-const lineStyle = computed(() => ({
-  height: `${lineHeight.value}px`,
-  lineHeight: `${lineHeight.value}px`,
-  fontSize: `${fontSize.value}px`,
-  '--term-line-height': `${lineHeight.value}px`,
-}))
-
-const scrollerRef = ref<InstanceType<typeof RecycleScroller> | null>(null)
 const viewportRef = ref<HTMLDivElement | null>(null)
+const termHost = ref<HTMLDivElement | null>(null)
 const inputRef = ref<InstanceType<typeof TerminalInput> | null>(null)
-let scrollEl: HTMLElement | null = null
+let fitAddon: FitAddon | null = null
 let ro: ResizeObserver | null = null
+let opened = false
 
 const follow = ref(true)
-
-/** 当前光标所在行对象（item 命中时渲染块状光标；仅跟随底部时可见） */
-const cursorLine = computed(() => terminal.lines[terminal.cursor.line] ?? null)
-
 const droppedBarDismissed = ref(false)
 const showDroppedBar = computed(() => terminal.droppedLines > 0 && !droppedBarDismissed.value)
 /** 调试：原始 RX 字节 hex 视图 */
 const showRaw = ref(false)
 
-function segments(line: TermLine, cursorCol: number | null): TermSegment[] {
-  return lineToSegments(line, cursorCol)
+/** 首次挂载：xterm.open + FitAddon + 跟随滚动监听 */
+function ensureOpen() {
+  if (opened || !termHost.value) return
+  opened = true
+  terminal.term.open(termHost.value)
+  fitAddon = new FitAddon()
+  terminal.term.loadAddon(fitAddon)
+  fit()
+  terminal.term.onScroll(() => {
+    const b = terminal.term.buffer.active
+    follow.value = b.viewportY >= b.baseY
+  })
 }
 
-function segStyle(seg: TermSegment): Record<string, string> {
-  const s: Record<string, string> = {}
-  if (seg.fg) s.color = seg.fg
-  if (seg.bg) s.background = seg.bg
-  if (seg.bold) s.fontWeight = '700'
-  return s
-}
-
-function measureCharWidth(): number {
-  const el = viewportRef.value
-  if (!el) return 0
-  const probe = document.createElement('span')
-  probe.textContent = 'M'.repeat(20)
-  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;pointer-events:none'
-  el.appendChild(probe)
-  const w = probe.getBoundingClientRect().width / 20
-  probe.remove()
-  return w
-}
-
-function updateSize() {
-  const el = viewportRef.value
-  if (!el || el.clientWidth === 0) return
-  const cw = measureCharWidth()
-  if (cw <= 0) return
-  const cols = Math.max(1, Math.floor(el.clientWidth / cw))
-  const rows = Math.max(1, Math.floor(el.clientHeight / lineHeight.value))
-  terminal.setSize(cols, rows)
-}
-
-function onScroll() {
-  if (!scrollEl) return
-  const dist = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight
-  follow.value = dist < 24
+/** 自适应尺寸（隐藏容器宽高为 0 时跳过，切回可见后由 ResizeObserver 补 fit） */
+function fit() {
+  const host = termHost.value
+  if (!host || host.clientWidth === 0) return
+  fitAddon?.fit()
+  // 设置里显式指定行列时覆盖 FitAddon
+  const s = settings.terminal
+  if (s.cols > 0 || s.rows > 0) {
+    terminal.setSize(s.cols || terminal.term.cols, s.rows || terminal.term.rows)
+  }
 }
 
 function scrollToBottom() {
-  ;(scrollerRef.value as unknown as { scrollToItem?: (i: number) => void } | null)?.scrollToItem?.(
-    terminal.lines.length - 1
-  )
+  terminal.term.scrollToBottom()
+  follow.value = true
 }
 
-function jumpLatest() {
-  follow.value = true
-  nextTick(scrollToBottom)
+function focusTerm() {
+  if (terminal.mode === 'char' && opened) terminal.term.focus()
 }
 
 async function onCopy() {
@@ -126,39 +90,45 @@ function onClear() {
 }
 
 onMounted(() => {
-  ro = new ResizeObserver(updateSize)
+  ro = new ResizeObserver(() => {
+    if (opened) fit()
+  })
   if (viewportRef.value) ro.observe(viewportRef.value)
-  scrollEl = (scrollerRef.value as unknown as { $el: HTMLElement } | null)?.$el ?? null
-  scrollEl?.addEventListener('scroll', onScroll, { passive: true })
+  if (props.active) nextTick(ensureOpen)
 })
 
 onBeforeUnmount(() => {
   ro?.disconnect()
   ro = null
-  scrollEl?.removeEventListener('scroll', onScroll)
-  scrollEl = null
+  // xterm 实例生命周期由 terminal store 的 onScopeDispose 统一 dispose（会话关闭时）
 })
 
-// 新数据到达：仅"跟随最新"时滚到底（RecycleScroller 不自动跟随）
-watch(
-  () => terminal.lines.length,
-  () => {
-    if (follow.value) nextTick(scrollToBottom)
-  }
-)
-
-// 视图变为可见时刷新尺寸并聚焦输入（v-show 常驻挂载，切换 tab 时触发）
+// 视图切到终端时挂载 + 自适应 + 聚焦
 watch(
   () => props.active,
   (active) => {
     if (active) {
       nextTick(() => {
-        updateSize()
-        inputRef.value?.focus()
+        ensureOpen()
+        fit()
+        if (terminal.mode === 'char') terminal.term.focus()
+        else inputRef.value?.focus()
       })
     }
   },
   { immediate: true }
+)
+
+// 传输模式切换：char 聚焦 xterm，line 聚焦本地输入条
+watch(
+  () => terminal.mode,
+  (m) => {
+    if (!props.active) return
+    nextTick(() => {
+      if (m === 'char') { if (opened) terminal.term.focus() }
+      else inputRef.value?.focus()
+    })
+  }
 )
 </script>
 
@@ -166,23 +136,23 @@ watch(
   <div class="term-pane">
     <div class="toolbar">
       <NButtonGroup size="tiny">
-        <NButton :type="mode === 'char' ? 'primary' : 'default'" @click="mode = 'char'">
+        <NButton :type="terminal.mode === 'char' ? 'primary' : 'default'" @click="terminal.mode = 'char'">
           {{ t('terminal.charMode') }}
         </NButton>
-        <NButton :type="mode === 'line' ? 'primary' : 'default'" @click="mode = 'line'">
+        <NButton :type="terminal.mode === 'line' ? 'primary' : 'default'" @click="terminal.mode = 'line'">
           {{ t('terminal.lineMode') }}
         </NButton>
       </NButtonGroup>
       <NButton
         size="tiny"
-        :type="echo ? 'primary' : 'default'"
+        :type="terminal.echo ? 'primary' : 'default'"
         :title="t('terminal.echoTitle')"
-        @click="echo = !echo"
+        @click="terminal.echo = !terminal.echo"
       >
         {{ t('terminal.echo') }}
       </NButton>
       <NSelect
-        v-model:value="lineEnding"
+        v-model:value="terminal.lineEnding"
         :options="endingOptions"
         size="tiny"
         style="width: 88px"
@@ -203,46 +173,24 @@ watch(
       >
     </div>
 
-    <div ref="viewportRef" class="viewport" @click="inputRef?.focus()">
+    <div ref="viewportRef" class="viewport" @click="focusTerm">
       <div v-if="showDroppedBar" class="dropped-bar">
         <span>{{ t('terminal.droppedLines', { n: terminal.droppedLines }) }}</span>
         <button type="button" class="dropped-dismiss" :title="t('terminal.cancel')" @click="droppedBarDismissed = true">✕</button>
       </div>
-      <RecycleScroller
-        ref="scrollerRef"
-        :items="terminal.lines"
-        :item-size="lineHeight"
-        key-field="key"
-        class="scroller"
-      >
-        <template #default="{ item }">
-          <div class="term-line" :style="lineStyle">
-            <span
-              v-for="(seg, i) in segments(item, item === cursorLine ? terminal.cursor.col : null)"
-              :key="i"
-              class="seg"
-              :class="{ cursor: seg.cursor }"
-              :style="segStyle(seg)"
-              >{{ seg.text }}</span
-            >
-          </div>
-        </template>
-      </RecycleScroller>
+      <div ref="termHost" class="xterm-host"></div>
       <div v-if="showRaw" class="raw-dump">{{ terminal.rawDump }}</div>
       <Transition name="fade">
-        <NButton v-if="!follow" class="jump-btn" size="small" type="primary" @click="jumpLatest">
+        <NButton v-if="!follow" class="jump-btn" size="small" type="primary" @click="scrollToBottom">
           {{ t('terminal.backToLatest') }}
         </NButton>
       </Transition>
     </div>
 
-    <TerminalInput
-      ref="inputRef"
-      :mode="mode"
-      :echo="echo"
-      :line-ending="lineEnding"
-      :backspace="backspace"
-    />
+    <TerminalInput v-if="terminal.mode === 'line'" ref="inputRef" />
+    <div v-else class="char-hint">
+      {{ serial.connected ? t('terminal.inputCharHint') : t('terminal.needConnect') }}
+    </div>
   </div>
 </template>
 
@@ -273,25 +221,13 @@ watch(
   background: var(--bg-panel);
   overflow: hidden;
 }
-.scroller {
-  height: 100%;
-  padding: 4px 0;
+.xterm-host {
+  position: absolute;
+  inset: 0;
+  padding: 4px 8px;
 }
-.term-line {
-  overflow: hidden;
-  white-space: pre;
-}
-.seg {
-  font-family: inherit;
-  font-size: inherit;
-}
-.seg.cursor {
-  /* 块状光标：撑满整行高度（inline span 背景只盖 em-box，需显式铺满行高） */
-  display: inline-block;
-  height: var(--term-line-height);
-  line-height: var(--term-line-height);
-  background: var(--accent);
-  color: var(--bg-elevated);
+.xterm-host :deep(.xterm-viewport) {
+  background: transparent !important;
 }
 .dropped-bar {
   position: absolute;
@@ -352,6 +288,14 @@ watch(
   word-break: break-all;
   backdrop-filter: blur(var(--glass-blur-sm));
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+}
+.char-hint {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
 }
 .fade-enter-active,
 .fade-leave-active {
