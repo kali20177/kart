@@ -78,6 +78,10 @@ try {
 
   const page = browser.contexts()[0]?.pages()[0]
   if (!page) throw new Error('无窗口页面')
+  // 尽早注册，捕获全流程（挂载/prompt/ls/vim）的渲染进程错误，而非仅尾部
+  const errors = []
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`console.error: ${m.text()}`) })
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 })
 
   // 等端口列表就绪（pty 驱动 listPorts 返回 local-shell）→ 点击连接
@@ -118,10 +122,6 @@ try {
   await page.waitForTimeout(1200)
   await page.screenshot({ path: path.join(SHOT_DIR, '4-exit-vim.png') })
 
-  // 渲染进程 console/pageerror
-  const errors = []
-  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(`console.error: ${m.text()}`) })
   check('无 console/pageerror', errors.length === 0, errors.join('; '))
 } catch (e) {
   console.log('FAIL  脚本异常:', e.message)
