@@ -10,6 +10,14 @@ declare global {
       versions?: Record<string, string | undefined>
       toggleDevTools?: () => void
       serial?: ElectronSerial
+      pty?: {
+        open(id: string, options: { cols: number; rows: number }): Promise<void>
+        write(id: string, data: string): Promise<void>
+        resize(id: string, cols: number, rows: number): Promise<void>
+        close(id: string): Promise<void>
+        onData(handler: (data: string, id: string) => void): () => void
+        onExit(handler: (id: string) => void): () => void
+      }
       recorder?: {
         showDirectoryPicker(): Promise<string | null>
         createFile(dirPath: string, fileName: string): Promise<{ fileName: string } | null>

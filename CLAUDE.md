@@ -183,6 +183,20 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 
 `allowScripts` 配置已写入 `package.json`，未来新 clone 项目时 `npm install` 会自动触发 electron 的 postinstall 下载。
 
+### 本地终端验证（node-pty）
+
+终端模式（xterm）的**无硬件验证途径**：在 Electron 内用 **node-pty** 直接 spawn 本地 shell，把真实 zsh/bash 作为「串口设备」连到终端视图，可验证真实行编辑、ANSI 色彩、**vim/nano 全屏**（这是 mock shell 场景做不到的）。
+
+- **手动体验**：`KART_PTY=1 npm run electron:dev`。主进程给 URL 追加 `?pty`，渲染端 `resolveDriverType` 命中 `pty` 驱动（端口下拉出现「本地终端」，连接即 spawn 本地 shell）。
+- **自动化验证**：`ELECTRON=true vite build && npm run verify:pty`（`scripts/verify-pty.mjs`，Playwright CDP 驱动 Electron，连接 → 终端视图 → `ls` 回显 → `vim` 全屏 → 无 console 错误，截图在 `/tmp/pty-verify/`）。
+- **驱动链路**：主进程 `PtyManager`（node-pty spawn）→ IPC `pty:data` → 预加载 → 渲染端 `PtyDriver`（实现 `SerialDriver`，`setSize` 同步窗口尺寸给 shell 的 stty）→ serial store → terminal store（xterm 薄桥）。
+
+**node-pty 需本地编译**：npm 发布的 prebuilt 与当前 macOS 不兼容，`spawn` 报 `posix_spawnp failed`（无 errno）。解决：`cd node_modules/node-pty && npx node-gyp rebuild`。node-pty 用 N-API，编译产物 Node/Electron 通用（Electron 31 直接可用）。新 clone 后 `npm install` 只会下载损坏的 prebuilt，需手动 rebuild 一次。
+
+**`ELECTRON_RUN_AS_NODE` 也影响 `verify:pty`**：脚本 spawn Electron 前已 `delete process.env.ELECTRON_RUN_AS_NODE`（同 start-electron.mjs 的防御）。
+
+**构建压缩必须用 terser（勿改回 esbuild）**：vite 默认 esbuild 对整个 bundle 压缩时重命名冲突，会破坏 xterm.js 6.0.0 的 `requestMode`——真实终端（zsh/vim）发送 DECRQM/模式序列时抛 `ReferenceError: r is not defined`，vim 全屏无法渲染（dev 模式不压缩不触发，故 mock 测试没暴露）。`vite.config.ts` 已设 `build.minify: 'terser'`（体积 1.3MB，与 esbuild 相当）。改回 esbuild 会重新引入该 bug。
+
 ### 本机环境注意点（Windows）
 - **`ELECTRON_RUN_AS_NODE`**：本机全局设置了该变量为 `1`（疑似 STM32 等工具链所致），会让所有 Electron 退化为纯 Node 运行（`electron --version` 返回 Node 版本，`require('electron')` 只得到可执行文件路径）。Electron 按「变量是否存在」判断，置空/置 0 均无效，必须删除。项目已防御处理：`vite.config.ts` 在 Electron 分支删除它（覆盖 `electron:dev` 插件 spawn），`scripts/start-electron.mjs` 在 `electron:preview` 启动前删除它。根治办法是从系统环境变量中移除该项。
 - **`electron:build` 首次打包的 winCodeSign 解压**：electron-builder 解压 `winCodeSign` 归档时需创建 macOS 符号链接，Windows 非管理员且未开启「开发者模式」会因权限失败（`客户端没有所需的特权`）。该归档里的 darwin 文件仅用于 macOS 签名，与 Windows 打包无关。解决：开启 Windows 开发者模式（或以管理员运行）后重跑；或手动把归档解压到缓存 `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0`（排除 `darwin` 目录）再重跑。未做代码签名，安装包会触发 SmartScreen 警告，属正常。

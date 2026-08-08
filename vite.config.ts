@@ -82,11 +82,11 @@ export default defineConfig({
                   rollupOptions: {
                     input: 'src/main/index.ts',
                     output: { format: 'cjs', entryFileNames: 'index.cjs' },
-                    // serialport / @serialport/* 含运行时动态 require 的原生 .node
-                    // 向量，不能被打进 bundle（路径会失效）。external 后在运行时由
-                    // Node 从打包应用内的 node_modules 解析，配合 electron-builder 的
-                    // asarUnpack 把 .node 解出 asar。
-                    external: ['serialport', /^@serialport\//]
+                    // serialport / @serialport/* / node-pty 含运行时动态 require 的
+                    // 原生 .node 向量，不能被打进 bundle（路径会失效）。external 后
+                    // 在运行时由 Node 从打包应用内的 node_modules 解析，配合
+                    // electron-builder 的 asarUnpack 把 .node 解出 asar。
+                    external: ['serialport', /^@serialport\//, 'node-pty']
                   }
                 }
               }
@@ -113,6 +113,12 @@ export default defineConfig({
   },
   server: {
     port: 5273
+  },
+  build: {
+    // 用 terser 而非默认的 esbuild：esbuild 对整个 bundle 压缩时重命名冲突，
+    // 会破坏 xterm.js 的 requestMode（真实终端发送 DECRQM/模式序列时抛
+    // "ReferenceError: r is not defined"，vim 全屏无法渲染）。terser 作用域感知更稳。
+    minify: 'terser'
   },
   test: {
     environment: 'jsdom',

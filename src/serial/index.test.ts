@@ -2,30 +2,35 @@ import { describe, it, expect } from 'vitest'
 import { resolveDriverType } from '@/serial'
 
 describe('resolveDriverType', () => {
-  it('Electron 环境 -> serialport（优先级最高，压过 ?mock）', () => {
-    expect(resolveDriverType({ isElectron: true, isDevMock: true, isSecureContext: true, hasWebSerial: true }))
+  it('Electron + DEV ?pty -> pty（本地终端，优先级最高，压过 serialport 与 ?mock）', () => {
+    expect(resolveDriverType({ isElectron: true, isDevMock: true, isDevPty: true, isSecureContext: true, hasWebSerial: true }))
+      .toEqual({ type: 'pty', reason: null })
+  })
+
+  it('Electron 环境 -> serialport（优先级次高，压过 ?mock）', () => {
+    expect(resolveDriverType({ isElectron: true, isDevMock: true, isDevPty: false, isSecureContext: true, hasWebSerial: true }))
       .toEqual({ type: 'serialport', reason: null })
   })
 
   it('DEV ?mock -> mock（仅次于 Electron）', () => {
-    expect(resolveDriverType({ isElectron: false, isDevMock: true, isSecureContext: true, hasWebSerial: true }))
+    expect(resolveDriverType({ isElectron: false, isDevMock: true, isDevPty: false, isSecureContext: true, hasWebSerial: true }))
       .toEqual({ type: 'mock', reason: null })
   })
 
   it('非安全上下文 -> unsupported (insecure-context)，即使 hasWebSerial 也优先报 HTTPS', () => {
-    expect(resolveDriverType({ isElectron: false, isDevMock: false, isSecureContext: false, hasWebSerial: true }))
+    expect(resolveDriverType({ isElectron: false, isDevMock: false, isDevPty: false, isSecureContext: false, hasWebSerial: true }))
       .toEqual({ type: 'unsupported', reason: 'insecure-context' })
-    expect(resolveDriverType({ isElectron: false, isDevMock: false, isSecureContext: false, hasWebSerial: false }))
+    expect(resolveDriverType({ isElectron: false, isDevMock: false, isDevPty: false, isSecureContext: false, hasWebSerial: false }))
       .toEqual({ type: 'unsupported', reason: 'insecure-context' })
   })
 
   it('安全上下文 + Web Serial -> webserial', () => {
-    expect(resolveDriverType({ isElectron: false, isDevMock: false, isSecureContext: true, hasWebSerial: true }))
+    expect(resolveDriverType({ isElectron: false, isDevMock: false, isDevPty: false, isSecureContext: true, hasWebSerial: true }))
       .toEqual({ type: 'webserial', reason: null })
   })
 
   it('安全上下文但无 Web Serial -> unsupported (no-web-serial)', () => {
-    expect(resolveDriverType({ isElectron: false, isDevMock: false, isSecureContext: true, hasWebSerial: false }))
+    expect(resolveDriverType({ isElectron: false, isDevMock: false, isDevPty: false, isSecureContext: true, hasWebSerial: false }))
       .toEqual({ type: 'unsupported', reason: 'no-web-serial' })
   })
 })

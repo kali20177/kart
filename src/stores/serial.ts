@@ -100,6 +100,11 @@ export function createSerialStore(deps: SerialDeps) {
     return () => externalDataListeners.delete(cb)
   }
 
+  /** 通知驱动更新终端视口尺寸（pty 等支持 resize 的驱动；serialport/web serial 无此能力则 no-op）。 */
+  function setSize(cols: number, rows: number): void {
+    void driver.setSize?.(cols, rows)
+  }
+
   /** 订阅原始 TX 字节流（driver.write 成功后）。返回取消订阅函数。 */
   function onTxData(cb: (bytes: Uint8Array) => void): () => void {
     txDataListeners.add(cb)
@@ -561,6 +566,7 @@ export function createSerialStore(deps: SerialDeps) {
     resend,
     onTxData,
     onData,
+    setSize,
     reset
   }
 }

@@ -62,6 +62,8 @@ function fit() {
   if (s.cols > 0 || s.rows > 0) {
     terminal.setSize(s.cols || terminal.term.cols, s.rows || terminal.term.rows)
   }
+  // 同步视口尺寸到驱动（pty 本地 shell 的 stty 感知；serialport 等无 setSize 则 no-op）
+  serial.setSize(terminal.term.cols, terminal.term.rows)
 }
 
 function scrollToBottom() {

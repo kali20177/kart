@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { SerialPortManager } from './SerialPortManager'
+import { PtyManager } from './PtyManager'
 import { JsonStore } from './JsonStore'
 import { mainLogger } from './logger'
 
@@ -185,6 +186,43 @@ function configureWebSerial(): void {
 // 每个窗口对应一个管理器（用于把数据事件推回本窗口渲染进程）
 const _serialManagers = new Map<number, SerialPortManager>()
 
+// ── 本地 pty 终端（node-pty，验证本地 shell / vim 全屏）──
+
+// 每个窗口对应一个管理器（用于把 pty 输出推回本窗口渲染进程）
+const _ptyManagers = new Map<number, PtyManager>()
+
+/** 注册本地 pty 终端 IPC handlers */
+function registerPtyIpc(): void {
+  // 启动一个本地 shell（渲染端以固定 id 连接）
+  ipcMain.handle('pty:open', (event, id: string, options: { cols: number; rows: number }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _ptyManagers.get(win.id) : null
+    if (!mgr) throw new Error('pty 管理器不可用')
+    try {
+      mgr.open(id, options)
+      mainLogger.info('pty', `pty opened: ${id}`)
+    } catch (e) {
+      mainLogger.error('pty', `open failed: ${id}: ${e instanceof Error ? e.message : String(e)}`)
+      throw e
+    }
+  })
+
+  // 写入 pty（用户按键 / line 模式发送）
+  ipcMain.handle('pty:write', (event, id: string, data: string) => {
+    _ptyManagers.get(BrowserWindow.fromWebContents(event.sender)?.id ?? -1)?.write(id, data)
+  })
+
+  // 同步窗口尺寸到 pty（shell 的 stty 感知，vim 全屏必需）
+  ipcMain.handle('pty:resize', (event, id: string, cols: number, rows: number) => {
+    _ptyManagers.get(BrowserWindow.fromWebContents(event.sender)?.id ?? -1)?.resize(id, cols, rows)
+  })
+
+  // 关闭 pty
+  ipcMain.handle('pty:close', (event, id: string) => {
+    _ptyManagers.get(BrowserWindow.fromWebContents(event.sender)?.id ?? -1)?.close(id)
+  })
+}
+
 /** 注册 serialport 相关的 IPC handlers */
 function registerSerialPortIpc(): void {
   // 枚举可用串口，返回真实 COM 口名
@@ -308,6 +346,8 @@ function createWindow(): void {
 
   // 创建 serialport 管理器（绑定到本窗口，用于推送数据事件）
   _serialManagers.set(win.id, new SerialPortManager(win))
+  // 创建本地 pty 管理器（本地终端验证用）
+  _ptyManagers.set(win.id, new PtyManager(win))
 
   // 转发渲染进程 console 到日志文件（保留源码位置便于定位）
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
@@ -333,15 +373,23 @@ function createWindow(): void {
     }
     _serialManagers.get(win.id)?.destroy()
     _serialManagers.delete(win.id)
+    _ptyManagers.get(win.id)?.destroy()
+    _ptyManagers.delete(win.id)
   })
 
   if (devServerUrl) {
-    mainLogger.info('main', `load dev server: ${devServerUrl}`)
-    win.loadURL(devServerUrl)
+    // KART_PTY=1 时在 URL 追加 ?pty，渲染端据此把驱动切到本地终端（验证 vim 全屏）
+    const url = process.env.KART_PTY === '1' ? `${devServerUrl}?pty` : devServerUrl
+    mainLogger.info('main', `load dev server: ${url}`)
+    win.loadURL(url)
   } else {
     const html = path.join(__dirname, '../../dist/index.html')
-    mainLogger.info('main', `load file: ${html}`)
-    win.loadFile(html)
+    // KART_PTY=1 时带 ?pty 加载（本地终端验证）；prod 下 loadFile 经 query 传参
+    if (process.env.KART_PTY === '1') {
+      win.loadFile(html, { query: { pty: '1' } })
+    } else {
+      win.loadFile(html)
+    }
   }
 }
 
@@ -351,6 +399,7 @@ app.whenReady().then(() => {
   jsonStore = new JsonStore()
   registerRecorderIpc()
   registerSerialPortIpc()
+  registerPtyIpc()
   registerLoggerIpc()
   registerPersistIpc(jsonStore)
   configureWebSerial()

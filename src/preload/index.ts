@@ -20,6 +20,19 @@ ipcRenderer.on('serial:error', (_e, payload: { path: string; msg: string }) => {
   for (const h of serialErrorHandlers) h(payload.msg, payload.path)
 })
 
+// ── 本地 pty 终端数据事件 ──
+// 主进程通过 webContents.send('pty:data'/'pty:exit') 推送本地 shell 输出与退出。
+type PtyDataHandler = (data: string, id: string) => void
+type PtyExitHandler = (id: string) => void
+const ptyDataHandlers = new Set<PtyDataHandler>()
+const ptyExitHandlers = new Set<PtyExitHandler>()
+ipcRenderer.on('pty:data', (_e, payload: { id: string; data: string }) => {
+  for (const h of ptyDataHandlers) h(payload.data, payload.id)
+})
+ipcRenderer.on('pty:exit', (_e, payload: { id: string; exitCode: number; signal?: number }) => {
+  for (const h of ptyExitHandlers) h(payload.id)
+})
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   versions: process.versions,
@@ -78,6 +91,37 @@ contextBridge.exposeInMainWorld('electron', {
     onError: (handler: SerialErrorHandler) => {
       serialErrorHandlers.add(handler)
       return () => { serialErrorHandlers.delete(handler) }
+    }
+  },
+
+  // ── 本地 pty 终端（node-pty，本地 shell 验证）──
+  pty: {
+    /** 启动本地 shell，返回固定 id（渲染端用 'local-shell' 连接） */
+    open: (id: string, options: { cols: number; rows: number }) =>
+      ipcRenderer.invoke('pty:open', id, options),
+
+    /** 写入 pty（用户按键 / 行发送） */
+    write: (id: string, data: string) =>
+      ipcRenderer.invoke('pty:write', id, data),
+
+    /** 同步窗口尺寸到 pty（vim 全屏必需） */
+    resize: (id: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('pty:resize', id, cols, rows),
+
+    /** 关闭本地 shell */
+    close: (id: string) =>
+      ipcRenderer.invoke('pty:close', id),
+
+    /** 注册 pty 输出回调，返回取消订阅函数 */
+    onData: (handler: PtyDataHandler) => {
+      ptyDataHandlers.add(handler)
+      return () => { ptyDataHandlers.delete(handler) }
+    },
+
+    /** 注册 pty 退出回调（shell 进程结束），返回取消订阅函数 */
+    onExit: (handler: PtyExitHandler) => {
+      ptyExitHandlers.add(handler)
+      return () => { ptyExitHandlers.delete(handler) }
     }
   },
 

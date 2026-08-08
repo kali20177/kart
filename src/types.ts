@@ -87,6 +87,8 @@ export interface SerialDriver {
   setSignals(signals: { dtr?: boolean; rts?: boolean }): Promise<void>
   /** 置/清 Break 条件（TX 拉低）。未打开端口或硬件不支持时抛错。 */
   setBreak(active: boolean): Promise<void>
+  /** 更新终端视口尺寸（pty 等支持 resize 的驱动；serialport/web serial 无此能力，忽略调用）。 */
+  setSize?(cols: number, rows: number): Promise<void>
   /** 订阅接收数据，返回取消订阅函数 */
   onData(cb: (bytes: Uint8Array) => void): () => void
   readonly isOpen: boolean
