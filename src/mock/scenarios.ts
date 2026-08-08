@@ -162,24 +162,24 @@ export function bufferFloodChunk(linesPerChunk = 500): Uint8Array {
 const SHELL_PROMPT = '\x1b[1;32mroot@kart:~# \x1b[0m'
 
 const SHELL_BANNER =
-  '\x1b[1;34mKART 模拟串口终端\x1b[0m\n' +
-  '嵌入式 Linux console 模拟（设备回显 + 行编辑）。命令：help / ls / cat / echo / clear / color / uname / vim\n' +
+  '\x1b[1;34mKART 模拟串口终端\x1b[0m\r\n' +
+  '嵌入式 Linux console 模拟（设备回显 + 行编辑）。命令：help / ls / cat / echo / clear / color / uname / vim\r\n' +
   SHELL_PROMPT
 
 const SHELL_FILES: Record<string, string> = {
-  app: '#!/bin/sh\nKART_SHELL=1\nexec /sbin/init',
-  config: 'baud=115200\nlog_level=debug\nterminal=vt100'
+  app: '#!/bin/sh\r\nKART_SHELL=1\r\nexec /sbin/init',
+  config: 'baud=115200\r\nlog_level=debug\r\nterminal=vt100'
 }
 
 const SHELL_HELP =
-  '可用命令：\n' +
-  '  help             显示帮助\n' +
-  '  ls               列出文件\n' +
-  '  cat <file>       查看文件（app / config）\n' +
-  '  echo <text>      输出文本\n' +
-  '  clear            清屏\n' +
-  '  color            显示 ANSI 颜色\n' +
-  '  uname            内核信息\n' +
+  '可用命令：\r\n' +
+  '  help             显示帮助\r\n' +
+  '  ls               列出文件\r\n' +
+  '  cat <file>       查看文件（app / config）\r\n' +
+  '  echo <text>      输出文本\r\n' +
+  '  clear            清屏\r\n' +
+  '  color            显示 ANSI 颜色\r\n' +
+  '  uname            内核信息\r\n' +
   '  vim              提示全屏编辑器支持状态'
 
 const SHELL_COMMANDS = ['help', 'ls', 'cat', 'echo', 'clear', 'color', 'uname', 'vim']
@@ -193,7 +193,7 @@ function shellLs(): string {
 function shellColorDemo(): string {
   let out = '前景色：'
   for (let i = 30; i <= 37; i++) out += `\x1b[${i}m fg${i} \x1b[0m`
-  out += '\n加粗：'
+  out += '\r\n加粗：'
   for (let i = 30; i <= 37; i++) out += `\x1b[1;${i}mB${i}\x1b[0m `
   return out
 }
@@ -201,6 +201,21 @@ function shellColorDemo(): string {
 /** 连接时打印的 banner */
 export function shellBanner(): Uint8Array {
   return text(SHELL_BANNER)
+}
+
+/** 终端显示宽度：CJK/全角等宽字符占 2 列，其余 1 列（退格擦除需按此计数，否则宽字符删不干净） */
+function charWidth(ch: string): number {
+  const cp = ch.codePointAt(0) ?? 0
+  if (
+    (cp >= 0x1100 && cp <= 0x115f) || // Hangul Jamo
+    (cp >= 0x2e80 && cp <= 0xa4cf) || // CJK 部首扩展..彝文
+    (cp >= 0xac00 && cp <= 0xd7a3) || // 谚文音节
+    (cp >= 0xf900 && cp <= 0xfaff) || // CJK 兼容表意
+    (cp >= 0xfe30 && cp <= 0xfe4f) || // CJK 兼容形式
+    (cp >= 0xff00 && cp <= 0xff60) || // 全角形式
+    (cp >= 0xffe0 && cp <= 0xffe6)    // 全角符号
+  ) return 2
+  return 1
 }
 
 /** 模拟 shell：对写入的字节做设备侧回显 + 行编辑 + 命令应答 */
@@ -219,8 +234,10 @@ export class MockShell {
         parts.push('\r\n', out)
       } else if (ch === '\b' || code === 0x7f) {
         if (this.line.length) {
+          const removed = this.line.slice(-1)
           this.line = this.line.slice(0, -1)
-          parts.push('\b \b')
+          // 按字符显示宽度擦除（CJK 宽字符占 2 列）
+          parts.push('\b \b'.repeat(charWidth(removed)))
         }
       } else if (ch === '\t') {
         const completed = this.complete()
@@ -228,9 +245,8 @@ export class MockShell {
           const rest = completed.slice(this.line.length)
           this.line = completed
           parts.push(rest)
-        } else {
-          parts.push('\t')
         }
+        // 无唯一补全：不回显字面 tab（会移动光标到制表位、与文本脱节），保持光标不动
       } else if (code === 0x03) {
         this.line = ''
         parts.push('^C\r\n', SHELL_PROMPT)
