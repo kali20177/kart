@@ -304,6 +304,8 @@ onBeforeUnmount(() => {
       :render-option="renderPortOption"
       :consistent-menu-width="false"
       size="small"
+      filterable
+      tag
       :placeholder="t('conn.selectPort')"
       style="width: 210px"
       :disabled="serial.connected"
