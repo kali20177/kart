@@ -34,7 +34,7 @@ function makeSettings(partial?: Partial<AppSettings['terminal']>): AppSettings {
   }
 }
 
-function setup(settings?: AppSettings) {
+function setup(settings?: AppSettings, useUtf8?: boolean) {
   let cb: (bytes: Uint8Array) => void = () => {}
   const sent: Uint8Array[] = []
   const paused = ref(false)
@@ -51,6 +51,7 @@ function setup(settings?: AppSettings) {
     paused,
     pauseStartTime,
     settings: settings ?? makeSettings(),
+    useUtf8,
   } as TerminalDeps)
   return { store, emit: (b: Uint8Array) => cb(b), sent, paused }
 }
@@ -117,6 +118,24 @@ describe('terminal store · 摄入与渲染（xterm）', () => {
     const { store, emit } = setup()
     emit(new Uint8Array([0x41, 0x42, 0x0d, 0x0a]))
     expect(store.rawDump.value).toBe('41 42 0d 0a')
+  })
+
+  it('useUtf8=true：编码设为 GBK 时仍按 UTF-8 解码（pty 场景，本地 shell 输出为 UTF-8）', async () => {
+    const settings = makeSettings()
+    settings.encoding = 'gbk'
+    const { store, emit } = setup(settings, true)
+    emit(new TextEncoder().encode('串口调试'))
+    await flush()
+    expect(store.scrollbackText()).toBe('串口调试')
+  })
+
+  it('useUtf8 缺省：GBK 编码下 UTF-8 字节被按 GBK 解码成乱码（串口语义，非 pty）', async () => {
+    const settings = makeSettings()
+    settings.encoding = 'gbk'
+    const { store, emit } = setup(settings, false)
+    emit(new TextEncoder().encode('串口调试'))
+    await flush()
+    expect(store.scrollbackText()).not.toBe('串口调试')
   })
 })
 

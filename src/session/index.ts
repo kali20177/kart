@@ -116,6 +116,8 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       paused: pause.paused,
       pauseStartTime: pause.pauseStartTime,
       settings: s,
+      // pty 数据源保证 UTF-8，忽略用户编码设置（串口 GBK 需求不适用于本地 shell）
+      useUtf8: serial.driverType.value === 'pty',
     })
 
     return reactive({ serial, messages, pause, waveform, recorder, transfer, terminal, settings: s })

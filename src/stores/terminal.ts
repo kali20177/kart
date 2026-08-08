@@ -12,6 +12,8 @@ export interface TerminalDeps {
   paused: Ref<boolean>
   pauseStartTime: Ref<number>
   settings: AppSettings
+  /** 数据源保证为 UTF-8（pty 本地终端），解码时忽略用户编码设置（GBK 等会导致乱码） */
+  useUtf8?: boolean
 }
 
 const enc = (s: string) => new TextEncoder().encode(s)
@@ -48,7 +50,7 @@ export function createTerminalStore(deps: TerminalDeps) {
       rawRing.push(b)
       if (rawRing.length > 400) rawRing.shift()
     }
-    if (!decoder) decoder = new TextDecoder(deps.settings.encoding, { fatal: false })
+    if (!decoder) decoder = new TextDecoder(deps.useUtf8 ? 'utf-8' : deps.settings.encoding, { fatal: false })
     const text = decoder.decode(bytes, { stream: true })
     term.write(text)
     for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 0x0a) writtenLines++
