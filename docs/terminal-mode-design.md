@@ -3,7 +3,7 @@
 > **注：** 终端渲染与 ANSI/VT 解析采用 **xterm.js**（`@xterm/xterm` + `@xterm/addon-fit`，VS Code 终端同款），替换此前自研的 cell 网格 buffer + ANSI 解析器。xterm 内置完整终端能力：cell 网格缓冲、光标、SGR/256 色/真彩、回滚、alt-screen（DEC 1049）、滚动区域 + SU/SD、插入/删除行列（ICH/DCH/IL/DL）、CPR/DA/窗口尺寸应答、括号粘贴、鼠标上报——**vim/nano 全屏编辑直接可用**。
 >
 > 本文件是终端模式的架构说明 + 实施蓝图，行文以已实现代码为准。
-> 日期：2026-08-08。状态：**xterm.js 迁移中**（见「实施计划」里程碑）。
+> 日期：2026-08-08。状态：**xterm.js 迁移完成；全屏 TUI 由 node-pty 本地 shell 通道验证**（见「实施计划」里程碑）。
 >
 > 关联：`docs/production-gaps.md`；迁移前自研实现见 git 历史（`feat/terminal` 提交，本分支已替换）。
 
@@ -105,7 +105,7 @@ xterm 内部自动处理 CPR（`ESC[6n`）、DA（`ESC[c`/`ESC[>c`）、窗口�
 ## 关键模块说明
 
 **terminal store**（[src/stores/terminal.ts](../src/stores/terminal.ts)，xterm 薄桥）
-- deps：`{ onData, sendRaw, paused, pauseStartTime, settings }`；接线在 `session/index.ts`。
+- deps：`{ onData, sendRaw, paused, pauseStartTime, settings, useUtf8? }`；接线在 `session/index.ts`。`useUtf8` 由 `driverType === 'pty'` 注入：pty 数据源保证 UTF-8，解码时忽略用户编码设置（串口 GBK 需求不适用于本地 shell，否则 GBK 下 pty 中文乱码）。
 - 持有 `Terminal` 实例（xterm 核心无 DOM 依赖，可 headless 建；`open()` 才需 DOM，由组件调用）。
 - `ingest(bytes)`：暂停则跳过；`TextDecoder(enc,{stream:true})` 流式解码 → `term.write(text)`；更新 rawDump 环与 droppedLines 近似。
 - 输入通道：`term.onData(data)` → `if mode!=='char' return`；`\r`→`lineEndingBytes(lineEnding)`、`\x7f`+backspace=bs→`0x08`；echo ON 先 `term.write(data)`；`sendBytes(record=false)`。
@@ -137,13 +137,14 @@ terminal: {
   backspace: 'del' | 'bs' // 退格字节，默认 'del'(0x7F)
   lineEnding: LineEnding  // Enter 追加行尾，默认 'cr'
   scrollbackLimit: number // 回滚行上限 → xterm options.scrollback，默认 5000
+  fontFamily: string      // 终端字体 → xterm options.fontFamily，默认 'monospace'；设置面板经 Local Font Access 枚举系统字体
 }
 ```
 
 ## 边界与已知限制
 
 - **droppedLines 为近似值**：xterm 静默裁剪回滚，无精确丢弃计数；用写入行数近似，仅作提示。
-- **GBK**：显示侧流式 `TextDecoder('gbk',{stream:true})` 正常；发送侧按 UTF-8（ASCII 兼容，中文输入边缘场景）。
+- **GBK**：显示侧流式 `TextDecoder('gbk',{stream:true})` 正常；发送侧按 UTF-8（ASCII 兼容，中文输入边缘场景）。**pty 场景固定 UTF-8**（`useUtf8`，忽略用户编码设置——本地 shell 输出为 UTF-8，GBK 只用于串口）。
 - **line 模式无本地 readline（Ctrl+A/E/U/W）**：Ctrl 组合透传字节，避免与设备侧编辑冲突。
 - **echo 不自动探测**：双回显手动关 echo 规避（默认关）。
 - **导出无行级时间戳**：v1 导纯文本（`scrollbackText()`）；行时间戳记 future。
@@ -156,23 +157,23 @@ terminal: {
 
 ## 实施计划
 
-**M1（当前分支）——xterm.js 迁移：替换自研渲染为 xterm 薄桥**
+**M1 —— xterm.js 迁移（已完成）**
 - ✅ 安装 `@xterm/xterm` + `@xterm/addon-fit`；`main.ts` 引入 `xterm.css`
 - ✅ terminal store 重写为薄桥（`term.write`/`onData`/暂停/rawDump/回滚近似）
 - ✅ TerminalPane 挂载 xterm + FitAddon + 工具栏；TerminalInput 收敛为 line 模式
 - ✅ 删除 `src/terminal/` 自研解析/buffer/input-map 及测试；重写 `terminal.spec.ts`、更新 session 集成测试
-- ⬜ 首次打开/隐藏切回时 fit 与焦点、bundle 体积核对
+- ◐ 首次打开/隐藏切回 fit 与焦点已由 ResizeObserver + 首次 `fit()` + `focusTerm()` 覆盖；bundle 体积核对待做
 
-**M2 —— 全屏 TUI 验证（vim 目标）**
-- 用 mock shell 场景验证 vim/nano/htop 全屏渲染：alt-screen、光标保存恢复、滚动区域、CPR/DA/窗口尺寸应答（xterm 内置）
-- mock 增补全屏程序自测场景（如 vim 打开/退出/滚动/编辑），无硬件复现
-- 括号粘贴（`ESC[?2004h`）：粘贴多行文本避免逐字符触发 vim 插入（xterm 默认支持，验证透传）
+**M2 —— 全屏 TUI 验证（核心目标已由 node-pty 通道完成）**
+- ✅ 真实 TUI 验证：`scripts/verify-pty.mjs`（node-pty 在 Electron 内 spawn 本地 shell）实测 vim 全屏 alt-screen 渲染、真实行编辑、ANSI 色彩、CPR/DA/窗口尺寸应答（`stty size` / 终端协商天然可用）。**此前的 mock 占位场景（`scenarios.ts` 的 `vim` 仅返回提示文本，非真实 alt-screen 字节流）已不再是「无硬件验证 vim」的唯一手段**，且 mock 是假 shell，本就无法产出真实 TUI 字节流。
+- ◐ 括号粘贴（`ESC[?2004h`）：xterm 默认支持，待补 verify-pty 断言（粘贴多行文本避免逐字符触发 vim 插入）。
+- ◐ mock 增补全屏自测场景：**降级为浏览器端兜底**——node-pty 是 Electron-only，浏览器无 Electron 环境时的 TUI 渲染只能靠 mock 模拟字节流；优先级低于真实 shell 验证。
 
-**M3 —— 体验完善**
-- SettingsModal「终端」页：字号缩放、回滚上限、行尾/退格/模式默认值 + `persistNow`
-- 暂停缺口标记、导出文本按钮（`scrollbackText()` 已就绪）
-- 主题映射：`AppSettings.themeId` → xterm `options.theme`（亮/暗调色板）
-- line 模式本地 readline 快捷键（可选）
+**M3 —— 体验完善（进行中）**
+- ◐ SettingsModal「终端」页：已落地「字体」（**Local Font Access API 枚举操作系统已安装字体**，非预定义列表——避免字体不存在时 xterm 回退渲染错乱；枚举不可用时 tag+filterable 手动输入兜底）与「字号缩放」（`terminal.fontScale`，已有 xterm 热更新）；回滚上限、行尾/退格/模式默认值 + `persistNow` 未做。Local Font Access 需主进程授权 `local-fonts` 权限（`configureWebSerial` 内）。
+- ⬜ 暂停缺口标记、导出文本按钮（`scrollbackText()` 已就绪）
+- ⬜ 主题映射：`AppSettings.themeId` → xterm `options.theme`（亮/暗调色板）
+- ⬜ line 模式本地 readline 快捷键（可选）
 
 ## 待确认决策
 
