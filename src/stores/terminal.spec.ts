@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ref } from 'vue'
+import { ref, nextTick, reactive } from 'vue'
 import { createTerminalStore, type TerminalDeps } from './terminal'
 import type { AppSettings } from '@/types'
 
@@ -24,6 +24,7 @@ function makeSettings(partial?: Partial<AppSettings['terminal']>): AppSettings {
       backspace: 'del',
       lineEnding: 'crlf',
       scrollbackLimit: 100,
+      fontFamily: 'monospace',
       ...partial,
     },
     autoReconnect: false,
@@ -136,6 +137,16 @@ describe('terminal store · 摄入与渲染（xterm）', () => {
     emit(new TextEncoder().encode('串口调试'))
     await flush()
     expect(store.scrollbackText()).not.toBe('串口调试')
+  })
+
+  it('fontFamily 初始值应用 + 设置变更热更新到 xterm options', async () => {
+    // 生产 settings 为 Pinia reactive proxy，watch 依赖响应式追踪；测试须 reactive 包裹
+    const settings = reactive(makeSettings())
+    const { store } = setup(settings)
+    expect(store.term.options.fontFamily).toBe('monospace')
+    settings.terminal.fontFamily = 'Fira Code'
+    await nextTick()
+    expect(store.term.options.fontFamily).toBe('Fira Code')
   })
 })
 

@@ -132,7 +132,9 @@ function configureWebSerial(): void {
 
   // 放行 'serial' 权限检查（getPorts 复用已授权端口、requestPort 选择后访问均触发）。
   // 串口的「请求」由下方 select-serial-port 事件接管，不经过 setPermissionRequestHandler。
-  ses.setPermissionCheckHandler((_wc, permission) => permission === 'serial')
+  // 'local-fonts'：渲染端 queryLocalFonts 枚举系统字体（设置→终端→字体），无 handler 时该权限默认拒绝。
+  ses.setPermissionCheckHandler((_wc, permission) => permission === 'serial' || (permission as string) === 'local-fonts')
+  ses.setPermissionRequestHandler((_wc, permission, callback) => callback((permission as string) === 'local-fonts'))
 
   ses.on('select-serial-port', (event, portList, webContents, callback) => {
     event.preventDefault()

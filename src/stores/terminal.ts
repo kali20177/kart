@@ -23,6 +23,7 @@ export function createTerminalStore(deps: TerminalDeps) {
   const term = new Terminal({
     scrollback: s.scrollbackLimit,
     fontSize: Math.round(deps.settings.fontSize * s.fontScale),
+    fontFamily: s.fontFamily,
     allowProposedApi: true,
   })
 
@@ -116,6 +117,10 @@ export function createTerminalStore(deps: TerminalDeps) {
   watch(
     () => deps.settings.fontSize * deps.settings.terminal.fontScale,
     (n) => { term.options.fontSize = Math.round(n) }
+  )
+  watch(
+    () => deps.settings.terminal.fontFamily,
+    (n) => { term.options.fontFamily = n }
   )
 
   onScopeDispose(() => {

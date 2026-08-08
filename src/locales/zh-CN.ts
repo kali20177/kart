@@ -313,6 +313,12 @@ export default {
     maxHistoryPoints: '历史缓冲上限',
     // 连接
     autoReconnect: '掉线自动重连',
+    // 终端
+    terminal: '终端',
+    fontFamily: '字体',
+    fontSizeScale: '字号缩放',
+    fontFamilySelect: '搜索或输入字体名',
+    fontFamilyUnavailable: '当前环境不支持枚举系统字体，可直接输入字体名',
     // 波特率
     customBaud: '自定义波特率',
     baudEmpty: '在连接栏波特率框输入新数值即可添加；预设档位不可删除。',

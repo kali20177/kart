@@ -164,6 +164,8 @@ export interface TerminalSettings {
   lineEnding: LineEnding
   /** 回滚行上限（超限裁剪并累计 droppedLines） */
   scrollbackLimit: number
+  /** 终端字体（xterm options.fontFamily，CSS font-family 值；默认系统等宽 monospace） */
+  fontFamily: string
 }
 
 /** 导出偏好（持久化到 localStorage） */

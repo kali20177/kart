@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   NModal,
   NForm,
@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
 import { listThemes } from '@/themes'
+import { listSystemFonts } from '@/utils/fonts'
 import type { Session } from '@/session'
 
 const props = defineProps<{ session?: Session }>()
@@ -55,6 +56,20 @@ const checksumAlgoOptions = computed(() => [
 ])
 const themeOptions = computed(() =>
   listThemes().map(t => ({ label: t.name, value: t.id }))
+)
+// 终端字体：枚举操作系统已安装字体（Local Font Access），避免预定义列表里字体不存在导致 xterm 回退渲染错乱。
+// 枚举不可用（非 Chromium/权限拒绝）时降级为空列表，NSelect tag+filterable 支持手动输入字体名兜底。
+const terminalFonts = ref<string[]>([])
+const fontLoading = ref(false)
+async function loadFonts() {
+  if (fontLoading.value || terminalFonts.value.length > 0) return
+  fontLoading.value = true
+  terminalFonts.value = await listSystemFonts()
+  fontLoading.value = false
+}
+watch(activeTab, (tab) => { if (tab === 'terminal') void loadFonts() })
+const fontFamilyOptions = computed(() =>
+  terminalFonts.value.map((f) => ({ label: f, value: f }))
 )
 // waveformFormatOptions 已移除（仅保留文本行解析模式）
 // 未来扩展新协议时在此添加协议选择器
@@ -131,6 +146,11 @@ const navItems = computed<NavItem[]>(() => [
     key: 'connection',
     label: t('settings.connection'),
     icon: 'M8 3v10M3 8h10M5 5l6 6M11 5l-6 6'
+  },
+  {
+    key: 'terminal',
+    label: t('settings.terminal'),
+    icon: 'M2 3h12v10H2zM4 6l3 2-3 2M9 10h3'
   },
   {
     key: 'baud',
@@ -296,6 +316,25 @@ const navItems = computed<NavItem[]>(() => [
           <div class="section-title">{{ t('settings.connection') }}</div>
           <NFormItem :label="t('settings.autoReconnect')">
             <NSwitch v-model:value="s.autoReconnect" />
+          </NFormItem>
+        </NForm>
+
+        <!-- ========== 终端 ========== -->
+        <NForm v-if="activeTab === 'terminal'" label-placement="top" size="small">
+          <div class="section-title">{{ t('settings.terminal') }}</div>
+          <NFormItem :label="t('settings.fontFamily')">
+            <NSelect
+              v-model:value="s.terminal.fontFamily"
+              :options="fontFamilyOptions"
+              :loading="fontLoading"
+              :placeholder="terminalFonts.length ? t('settings.fontFamilySelect') : t('settings.fontFamilyUnavailable')"
+              filterable
+              tag
+              clearable
+            />
+          </NFormItem>
+          <NFormItem :label="t('settings.fontSizeScale')">
+            <NInputNumber v-model:value="s.terminal.fontScale" :min="0.5" :max="2" :step="0.05" style="width: 100%" />
           </NFormItem>
         </NForm>
 

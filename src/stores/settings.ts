@@ -31,7 +31,8 @@ const DEFAULTS: AppSettings = {
     echo: false,
     backspace: 'del' as const,
     lineEnding: 'cr' as const,
-    scrollbackLimit: 5000
+    scrollbackLimit: 5000,
+    fontFamily: 'monospace'
   },
   autoReconnect: false,
   showPauseNotification: true,
