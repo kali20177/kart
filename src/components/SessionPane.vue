@@ -108,10 +108,12 @@ function refreshOpenPanels() {
 function onReady(event: DockviewReadyEvent) {
   api = event.api
   if (!restoreLayout(currentPort.value)) {
-    // 无保存布局（或坏布局已清除）：建默认三面板。ensurePanel 容忍半截状态。
+    // 无保存布局（或坏布局已清除）：建默认三面板，并恢复「消息」为默认活动视图。
+    // addPanel 会激活最后添加的面板（默认落到终端），须显式切回消息，与旧 view-tabs 默认一致。
     ensurePanel('messages')
     ensurePanel('waveform')
     ensurePanel('terminal')
+    api.getPanel('messages')?.api.setActive()
   }
   // 布局/面板变化均落盘：尺寸移动走 onDidLayoutChange，关闭/重开面板走 add/remove
   const scheduleSave = () => {
