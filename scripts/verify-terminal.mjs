@@ -91,8 +91,8 @@ async function main() {
     await page.waitForSelector('.session-pane', { timeout: 10000 })
     await sleep(300)
 
-    // 1. 默认消息视图，未挂 xterm
-    check('默认视图不挂 xterm', (await page.locator('.xterm').count()) === 0)
+    // 1. 默认消息视图：xterm 已挂载（dockview renderer:'always' 保活）但不可见
+    check('默认视图 xterm 不可见', (await page.locator('.xterm:visible').count()) === 0)
 
     // 2. 切 Shell 场景并连接
     await setScenario(page, 'Shell 交互终端')
@@ -100,8 +100,8 @@ async function main() {
     await page.locator('button', { hasText: '断开' }).first().waitFor({ timeout: 5000 })
     check('mock 连接成功（按钮变「断开」）', true)
 
-    // 3. 切「终端」tab，xterm 挂载
-    await page.locator('.view-tabs .tab', { hasText: '终端' }).click()
+    // 3. 切「终端」tab，xterm 可见
+    await page.locator('.dv-tab', { hasText: '终端' }).click()
     await page.locator('.xterm').waitFor({ state: 'visible', timeout: 5000 })
     const canvas = await page.locator('.xterm canvas').count()
     const rowsCount = await page.locator('.xterm-rows').count()

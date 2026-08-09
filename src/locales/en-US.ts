@@ -6,6 +6,7 @@ export default {
     waveform: 'Waveform',
     terminal: 'Terminal',
     dragResize: 'Drag to resize width',
+    addView: 'Add / switch view',
   },
   session: {
     tabLabel: 'Session {n}',

@@ -422,6 +422,10 @@ onMounted(() => {
       const h = Math.floor(e.contentRect.height)
       // 0 尺寸（隐藏 tab）跳过；切回时此处自动触发 setSize + 补一次 setData
       if (w === 0 || h === 0) return
+      // dockview 隐藏面板（renderContainer）用 visibility:hidden 而非 display:none，
+      // 宽度非 0 且容器高度会随 uPlot 内容增长——必须跳过，否则 setSize 反复触发尺寸
+      // 变化形成反馈环；切回可见时 dockview attach 会触发 RO 补 setSize
+      if (getComputedStyle(e.target as HTMLElement).visibility === 'hidden') return
       if (chart && (w !== lastW || h !== lastH)) {
         lastW = w
         lastH = h
@@ -580,6 +584,9 @@ function handleExport(key: string) {
   display: flex;
   flex-direction: column;
   flex: 1;
+  /* dockview 下父容器（.dv-vue-part）是 block 非 flex，flex:1 不生效，须显式定高，
+     否则高度退化为 uPlot 内容自适应，canvas 与容器相互撑高形成增长反馈环 */
+  height: 100%;
   min-height: 0;
 }
 .toolbar {

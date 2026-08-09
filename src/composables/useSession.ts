@@ -10,6 +10,9 @@ const ACTIVE_SESSION_KEY: InjectionKey<Ref<Session>> = Symbol('active-session')
 /** 被其他会话占用的端口集合注入 key（ConnectionBar 端口下拉禁用提示用）。 */
 const OCCUPIED_PORTS_KEY: InjectionKey<Ref<ReadonlySet<string>>> = Symbol('occupied-ports')
 
+/** 打开文件传输对话框回调注入 key（消息面板内 InputComposer 触发 → App.vue 根层渲染对话框）。 */
+const OPEN_FILE_TRANSFER_KEY: InjectionKey<(file?: File) => void> = Symbol('open-file-transfer')
+
 /**
  * 提供当前组件子树使用的会话。SessionPane 为每个 tab 调用一次，传入对应会话。
  */
@@ -63,6 +66,20 @@ export function provideOccupiedPorts(ports: Ref<ReadonlySet<string>>): void {
 /** 获取被其他会话占用的端口集合（端口下拉禁用提示用）。未 provide 时返回空集合。 */
 export function useOccupiedPorts(): Ref<ReadonlySet<string>> {
   return inject(OCCUPIED_PORTS_KEY, EMPTY_PORTS)
+}
+
+/**
+ * 提供「打开文件传输对话框」回调。SessionPane 调用，传入绑定自身会话的 emit；
+ * 消息面板组件（InputComposer 挂在其底部）经 useOpenFileTransfer 取用。
+ * dockview 面板内容是动态渲染的，无法走组件 emit 链到 SessionPane，故用注入回调转发。
+ */
+export function provideOpenFileTransfer(fn: (file?: File) => void): void {
+  provide(OPEN_FILE_TRANSFER_KEY, fn)
+}
+
+/** 获取「打开文件传输对话框」回调。未 provide（如单测）时返回 no-op。 */
+export function useOpenFileTransfer(): (file?: File) => void {
+  return inject(OPEN_FILE_TRANSFER_KEY, () => {})
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set()

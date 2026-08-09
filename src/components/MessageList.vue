@@ -9,16 +9,12 @@ import MessageBubble from './MessageBubble.vue'
 import { useSession } from '@/composables/useSession'
 import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
-import type { DataMode, Direction, Message } from '@/types'
+import type { Direction, Message } from '@/types'
 import { formatMessageLine, formatTimestamp, computeDeltas } from '@/utils/message-format'
 import ExportDialog from './ExportDialog.vue'
 
-const props = defineProps<{ viewMode: DataMode }>()
-const emit = defineEmits<{
-  (e: 'resend', bytes: Uint8Array): void
-}>()
-
-const { messages: messagesStore, settings: settingsStore, pause: pauseStore } = useSession()
+const session = useSession()
+const { messages: messagesStore, settings: settingsStore, pause: pauseStore, serial } = session
 const dialog = useDialog()
 const toast = useMessage()
 const { copy } = useClipboard()
@@ -43,7 +39,11 @@ const showTimeFilter = ref(false)
 const hasNote = ref(false)
 const matchIndex = ref(0)
 /** 搜索类型跟随当前视图模式 —— ASCII 视图搜索文本，HEX 视图搜索原始字节 */
-const searchMode = computed(() => props.viewMode === 'ascii' ? 'text' : 'hex')
+const searchMode = computed(() => session.viewMode === 'ascii' ? 'text' : 'hex')
+
+function onResend(bytes: Uint8Array) {
+  serial.resend(bytes)
+}
 
 /** HH:MM:SS[.mmm] / HH:MM → 当日毫秒数；非法返回 null */
 const timeStart = computed(() => parseTimeInput(timeInputStart.value))
@@ -270,7 +270,7 @@ function copySelected() {
   const lines = selectedMessages()
     .map((m) =>
       formatMessageLine(m, {
-        viewMode: props.viewMode,
+        viewMode: session.viewMode,
         encoding: settingsStore.encoding,
         timeStyle: 'short'
       })
@@ -409,12 +409,12 @@ watch(
           <DynamicScrollerItem
             :item="item"
             :active="active"
-            :size-dependencies="[item.bytes.length, props.viewMode]"
+            :size-dependencies="[item.bytes.length, session.viewMode]"
             :data-index="index"
           >
             <MessageBubble
               :message="item"
-              :view-mode="props.viewMode"
+              :view-mode="session.viewMode"
               :encoding="settingsStore.encoding"
               :selectable="multiSelect"
               :selected="selected.has(item.id)"
@@ -424,7 +424,7 @@ watch(
               :active-match="matchIndex === index && matchCount > 0"
               :delta-ms="deltaMap.get(item.id)?.deltaMs"
               :elapsed-ms="deltaMap.get(item.id)?.elapsedMs"
-              @resend="emit('resend', $event)"
+              @resend="onResend"
               @select="onBubbleSelect(item)"
               @contextmenu="(e: MouseEvent) => onBubbleContext(item, e)"
             />
@@ -518,6 +518,9 @@ watch(
   display: flex;
   flex-direction: column;
   flex: 1;
+  /* dockview 下父容器（.dv-vue-part）是 block 非 flex，flex:1 不生效，须显式定高，
+     否则消息列表高度塌陷为内容高（空消息时 0） */
+  height: 100%;
   min-height: 0;
 }
 .toolbar {

@@ -1,0 +1,50 @@
+/* dockview 主题变量 → 项目玻璃拟态令牌（自动跟随明暗主题） */
+.dv-dockview {  --dv-tabs-and-actions-container-height: 36px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-group-view-background-color: transparent;
+  --dv-tabs-and-actions-container-background-color: var(--glass-bg);
+  --dv-activegroup-visiblepanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: var(--accent);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-inactivegroup-visiblepanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-tab-divider-color: var(--glass-border);
+  --dv-tabs-container-scrollbar-color: var(--text-dim);
+  --dv-drag-over-background-color: rgba(90, 93, 94, 0.5);
+  --dv-drag-over-background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  --dv-drag-over-border-color: var(--accent);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--accent);
+  --dv-border-radius: var(--radius-sm);
+  --dv-tab-border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  --dv-icon-hover-background-color: color-mix(in srgb, var(--text) 12%, transparent);
+  --dv-floating-border: 1px solid var(--glass-border);
+  --dv-floating-box-shadow: var(--shadow-lg), 0 0 0 1px var(--glass-border);
+  --dv-overlay-z-index: 999;
+}
+
+/* tab 栏毛玻璃 + 底边线（与旧 view-tabs 视觉一致） */
+.dv-tabs-and-actions-container {
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* 面板内容区背景（避免玻璃半透明透出下层文字） */
+.dv-content-container {
+  background: var(--bg-panel);
+}
+
+/* 活动 tab 加 accent 下划线（旧 tab 风格） */
+.dv-tab.dv-active-tab {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* dockview 宿主填满容器：宿主 div 由 DockviewVue 渲染，跨组件作用域 scoped
+   样式不达（无 data-v 属性），尺寸必须放全局 */
+.dock {
+  width: 100%;
+  height: 100%;
+}
