@@ -52,14 +52,42 @@ const openPanels = ref<Set<PanelId>>(new Set(PANEL_IDS))
 const currentPort = computed(() => session.serial.selectedPort ?? '')
 const LAYOUT_KEY = (port: string) => STORAGE_PREFIX + 'view-layout:' + (port || 'default')
 
-/** 布局按「当前选中端口」分开持久化：串口 A 调成终端布局、串口 B 调成波形布局互不干扰 */
+/** 读取指定端口的持久化布局。JSON 解析失败或结构非法（损坏/跨版本）时清除并返回 null。 */
 function loadLayout(port: string): SerializedLayout | null {
   try {
     const raw = localStorage.getItem(LAYOUT_KEY(port))
-    return raw ? (JSON.parse(raw) as SerializedLayout) : null
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    // dockview fromJSON 对非法根节点直接抛错，先拦截，避免打挂 dockview
+    const rootType = (parsed as { grid?: { root?: { type?: unknown } } }).grid?.root?.type
+    if (rootType !== 'branch') {
+      // 结构非法：清除坏数据，避免每次重载重复失败
+      try { localStorage.removeItem(LAYOUT_KEY(port)) } catch { /* ignore */ }
+      return null
+    }
+    return parsed as SerializedLayout
   } catch {
     return null
   }
+}
+
+/** 恢复指定端口布局；成功返回 true，无保存布局或恢复失败（已清除坏数据）返回 false。 */
+function restoreLayout(port: string): boolean {
+  const saved = loadLayout(port)
+  if (!saved || !api) return false
+  try {
+    // reuseExistingPanels：同 id 面板复用（组件不重建，xterm/消息列表状态不丢）
+    api.fromJSON(saved, { reuseExistingPanels: true })
+    return true
+  } catch {
+    try { localStorage.removeItem(LAYOUT_KEY(port)) } catch { /* ignore */ }
+    return false
+  }
+}
+
+/** 面板不存在则创建（fromJSON 失败留下半截状态时也能自愈）。 */
+function ensurePanel(id: PanelId) {
+  if (api && !api.getPanel(id)) api.addPanel({ id, component: id, title: panelTitle(id) })
 }
 
 function saveLayout() {
@@ -79,14 +107,11 @@ function refreshOpenPanels() {
 
 function onReady(event: DockviewReadyEvent) {
   api = event.api
-  const saved = loadLayout(currentPort.value)
-  if (saved) {
-    // reuseExistingPanels：同 id 面板复用（组件不重建，xterm/消息列表状态不丢）
-    api.fromJSON(saved, { reuseExistingPanels: true })
-  } else {
-    api.addPanel({ id: 'messages', component: 'messages', title: panelTitle('messages') })
-    api.addPanel({ id: 'waveform', component: 'waveform', title: panelTitle('waveform') })
-    api.addPanel({ id: 'terminal', component: 'terminal', title: panelTitle('terminal') })
+  if (!restoreLayout(currentPort.value)) {
+    // 无保存布局（或坏布局已清除）：建默认三面板。ensurePanel 容忍半截状态。
+    ensurePanel('messages')
+    ensurePanel('waveform')
+    ensurePanel('terminal')
   }
   // 布局/面板变化均落盘：尺寸移动走 onDidLayoutChange，关闭/重开面板走 add/remove
   const scheduleSave = () => {
@@ -102,8 +127,7 @@ function onReady(event: DockviewReadyEvent) {
 // 会话内切换端口 → 恢复该端口的布局；无保存布局则保持当前（首次连上新端口即继承当前布局）
 watch(currentPort, (port) => {
   if (!api) return
-  const saved = loadLayout(port)
-  if (saved) api.fromJSON(saved, { reuseExistingPanels: true })
+  restoreLayout(port)
 })
 
 // 会话关闭前落盘最后一次布局（防抖窗口内的改动不丢）
@@ -210,6 +234,11 @@ defineExpose({ insertAscii, toComposer: onToComposer })
   line-height: 1;
   width: 22px;
   height: 22px;
+  /* 字面量「＋」用文本基线排列会偏上，flex 居中保证字形在方框正中 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;

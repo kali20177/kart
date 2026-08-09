@@ -18,6 +18,15 @@ const { t } = useI18n()
 
 const containerRef = ref<HTMLDivElement | null>(null)
 
+/** dockview 面板内容组件 props：params.api 携带面板激活状态（与 TerminalPane 一致）。 */
+interface WaveformPanelParams {
+  api?: {
+    isActive: boolean
+    onDidActiveChange: (cb: (e: { isActive: boolean }) => void) => { dispose(): void }
+  }
+}
+const props = defineProps<{ params?: WaveformPanelParams }>()
+
 // 通道配色：按通道数均分色相环，保证任意通道数下颜色不重复
 function channelColor(index: number, total: number): string {
   const hue = total > 1 ? (index / total) * 360 : 0
@@ -30,6 +39,7 @@ let ro: ResizeObserver | null = null
 let rafId: number | null = null
 let lastW = 0
 let lastH = 0
+let apiSub: { dispose(): void } | null = null
 
 // 光标 tooltip 状态
 const tooltipVisible = ref(false)
@@ -368,6 +378,25 @@ function syncData() {
   chart.setData(waveform.data as unknown as uPlot.AlignedData)
 }
 
+/**
+ * 将 uPlot 尺寸同步到当前容器。
+ * 面板挂载于 dockview 隐藏容器（visibility:hidden，尺寸非 0）时，rebuild 按挂载瞬间
+ * 的旧尺寸建图；dockview 随后把容器收敛到最终尺寸时 RO 虽触发、却被 visibility 守卫
+ * 跳过，且切到该面板只改 visibility 不改尺寸（RO 不再触发）——激活时必须强制对一次。
+ * 同尺寸 setSize 是幂等 no-op，不会触发反馈环。
+ */
+function resizeToContainer() {
+  const el = containerRef.value
+  if (!chart || !el) return
+  const w = el.clientWidth
+  const h = el.clientHeight
+  if (w === 0 || h === 0) return
+  lastW = w
+  lastH = h
+  chart.setSize({ width: w, height: h })
+  syncData()
+}
+
 // 数据变化 → rAF 节流刷入。watch 版本号而非数组长度：窗口滚满后长度恒定，
 // 长度信号会失效导致图表停止刷新；version 每次 ingest 自增，保证持续触发。
 watch(
@@ -424,20 +453,25 @@ onMounted(() => {
       if (w === 0 || h === 0) return
       // dockview 隐藏面板（renderContainer）用 visibility:hidden 而非 display:none，
       // 宽度非 0 且容器高度会随 uPlot 内容增长——必须跳过，否则 setSize 反复触发尺寸
-      // 变化形成反馈环；切回可见时 dockview attach 会触发 RO 补 setSize
+      // 变化形成反馈环；激活时的强制 resize 由下方 onDidActiveChange 订阅补上
       if (getComputedStyle(e.target as HTMLElement).visibility === 'hidden') return
-      if (chart && (w !== lastW || h !== lastH)) {
-        lastW = w
-        lastH = h
-        chart.setSize({ width: w, height: h })
-        syncData()
-      }
+      resizeToContainer()
     }
   })
   ro.observe(el)
+  // 面板激活（dockview 切 tab/拖拽均触发）：visibility 变化不改尺寸、RO 不触发，
+  // 需主动对一次容器尺寸（覆盖「挂载于隐藏面板时按旧尺寸建图」的残留状态）
+  apiSub = props.params?.api?.onDidActiveChange?.((e) => {
+    if (e.isActive) {
+      // 等当前帧 DOM（visibility/布局）落定后再读容器尺寸
+      requestAnimationFrame(resizeToContainer)
+    }
+  }) ?? null
 })
 
 onBeforeUnmount(() => {
+  apiSub?.dispose()
+  apiSub = null
   if (rafId != null) cancelAnimationFrame(rafId)
   rafId = null
   ro?.disconnect()

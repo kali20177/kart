@@ -12,7 +12,6 @@
   --dv-inactivegroup-hiddenpanel-tab-color: var(--text-dim);
   --dv-tab-divider-color: var(--glass-border);
   --dv-tabs-container-scrollbar-color: var(--text-dim);
-  --dv-drag-over-background-color: rgba(90, 93, 94, 0.5);
   --dv-drag-over-background-color: color-mix(in srgb, var(--accent) 18%, transparent);
   --dv-drag-over-border-color: var(--accent);
   --dv-sash-color: transparent;

@@ -102,6 +102,20 @@ try {
   await page.locator('.dv-tab', { hasText: '波形' }).click()
   await page.waitForTimeout(400)
   check('波形激活时发送框隐藏（随消息面板）', (await page.locator('.composer:visible').count()) === 0)
+  // 2b2. 波形面板挂载时处于隐藏（消息激活），激活后 uPlot 须对到容器尺寸——
+  // 回归项：隐藏态按旧尺寸建图 + visibility 守卫跳过 RO 导致 canvas 比容器高几十 px
+  const waveSize = await page.evaluate(() => {
+    const canvas = document.querySelector('.uplot canvas')
+    const area = document.querySelector('.chart-area')
+    if (!canvas || !area) return null
+    return { cw: canvas.clientWidth, ch: canvas.clientHeight, aw: area.clientWidth, ah: area.clientHeight }
+  })
+  check(
+    '波形激活后 uPlot canvas 尺寸与面板容器一致',
+    waveSize !== null && waveSize.cw > 100 && waveSize.ch > 100 &&
+      Math.abs(waveSize.cw - waveSize.aw) <= 4 && Math.abs(waveSize.ch - waveSize.ah) <= 4,
+    waveSize ? `canvas=${waveSize.cw}x${waveSize.ch} area=${waveSize.aw}x${waveSize.ah}` : '无 canvas'
+  )
   await page.locator('.dv-tab', { hasText: '终端' }).click()
   await page.waitForTimeout(400)
   check('终端激活时发送框隐藏（随消息面板）', (await page.locator('.composer:visible').count()) === 0)
