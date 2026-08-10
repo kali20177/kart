@@ -71,7 +71,7 @@ try {
     const del = []
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
-      if (k && k.includes('view-layout:')) del.push(k)
+      if (k && (k.includes('view-layout:') || k.includes('connbar:collapsed:'))) del.push(k)
     }
     del.forEach((k) => localStorage.removeItem(k))
   })
@@ -230,6 +230,25 @@ try {
   check('关闭会话 2 → 回到 1 个会话 tab', (await sessionTabs().count()) === 1, `sessionTabs=${await sessionTabs().count()}`)
   check('末会话恢复无关闭按钮', (await closeBtns().count()) === 0)
   check('并排组随关闭收敛为单组', (await rootGroupCount()) === 1, `rootGroups=${await rootGroupCount()}`)
+
+  // —— 参数栏收起：栏高收缩，数据显示区变高（默认展开）——
+  // 数据显示区 = SessionPane 内的 .dock-wrap（App 外层 .dock-wrap 是固定高度容器）
+  const barH = async () => (await page.locator('.bar').boundingBox())?.height ?? 0
+  const dockH = async () => (await page.locator('.session-pane .dock-wrap').boundingBox())?.height ?? 0
+  const barH0 = await barH()
+  const dockH0 = await dockH()
+  check('参数栏默认展开（高度正常）', barH0 > 30, `h=${barH0}`)
+  await page.locator('.collapse-btn').click()
+  await page.waitForTimeout(400) // 等 padding 过渡（0.18s）
+  const barH1 = await barH()
+  const dockH1 = await dockH()
+  check('收起后参数栏高度收缩（≥8px）', barH0 - barH1 >= 8, `h ${barH0} → ${barH1}`)
+  check('收起后数据显示区变高', dockH1 > dockH0, `dock ${dockH0} → ${dockH1}`)
+  await page.screenshot({ path: path.join(SHOT_DIR, '8-connbar-collapsed.png') })
+  // 恢复展开（避免残留影响后续流程）
+  await page.locator('.collapse-btn').click()
+  await page.waitForTimeout(400)
+  check('再点展开恢复原高度', (await barH()) === barH0, `h=${await barH()}`)
 
   check('无 console/pageerror', errors.length === 0, errors.join('; '))
   // 流程中的面板 attach/detach 会有瞬时 RO loop；断言结束后 idle 2s 无新增（无持续反馈环）

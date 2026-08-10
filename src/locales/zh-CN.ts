@@ -161,6 +161,8 @@ export default {
     stopBitsTip: '停止位：帧后空闲比特，常用 1',
     connect: '连接',
     disconnect: '断开',
+    collapseParams: '收起参数栏',
+    expandParams: '展开参数栏',
     mockScene: '模拟场景',
     asciiTable: 'ASCII 表',
     settings: '设置',

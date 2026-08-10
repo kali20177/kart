@@ -161,6 +161,8 @@ export default {
     stopBitsTip: 'Stop bits: idle bits after frame, 1 is standard',
     connect: 'Connect',
     disconnect: 'Disconnect',
+    collapseParams: 'Collapse params',
+    expandParams: 'Expand params',
     mockScene: 'Scenario',
     asciiTable: 'ASCII Table',
     settings: 'Settings',
