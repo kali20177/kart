@@ -195,6 +195,9 @@ function handleSelect(key: string) {
     <NDropdown trigger="click" :options="helpMenu" @select="handleSelect">
       <NButton size="tiny" quaternary>{{ t('menu.help') }}</NButton>
     </NDropdown>
+    <!-- 右侧插槽：全局功能按钮（ASCII/设置）复用本行，不额外占行高 -->
+    <div class="menubar-spacer" />
+    <slot />
   </div>
 
   <NModal v-model:show="showAbout" preset="card" :title="t('menu.about')" style="width: 420px">
@@ -252,6 +255,9 @@ function handleSelect(key: string) {
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   border-bottom: 1px solid var(--glass-border);
   flex-shrink: 0;
+}
+.menubar-spacer {
+  flex: 1;
 }
 .about,
 .license {

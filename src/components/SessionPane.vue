@@ -9,24 +9,20 @@ import MessagePanel from './MessagePanel.vue'
 import WaveformChart from './WaveformChart.vue'
 import TerminalPane from './TerminalPane.vue'
 import StatusBar from './StatusBar.vue'
-import { provideOpenFileTransfer, provideSession } from '@/composables/useSession'
+import { provideOpenFileTransfer, provideSession, useOpenFileTransferHandler } from '@/composables/useSession'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
 import type { Session } from '@/session'
-import type { DataMode } from '@/types'
-import type { AsciiEntry } from '@/utils/ascii-table'
 
 const props = defineProps<{ session: Session }>()
-
-const emit = defineEmits<{
-  (e: 'open-file-transfer', file?: File): void
-}>()
 
 const session = props.session
 provideSession(session)
 
 const { t } = useI18n()
 
-const NAMED_ESCAPES = new Set([0, 9, 10, 13])
+const openFileTransferHandler = useOpenFileTransferHandler()
+// 根级 dockview 的面板内容无法 emit 到 App.vue，改经根注入回调触发文件传输对话框
+provideOpenFileTransfer((file?: File) => openFileTransferHandler(session, file))
 
 // —— dockview 可停靠布局 ——
 // 三个面板（消息/波形/终端）作为 dockview 面板注册。面板内容组件经 Teleport
@@ -157,29 +153,7 @@ function onViewMenuSelect(key: string) {
 }
 
 // —— 发送框联动（发送框在消息面板内，状态存 session.composerText/viewMode） ——
-function onToComposer(p: { text: string; mode: DataMode }) {
-  session.composerText = p.text
-  session.viewMode = p.mode
-}
-
-function onOpenFileTransfer(file?: File) {
-  emit('open-file-transfer', file)
-}
-// 消息面板（dockview 动态渲染，无法走组件 emit 链到本组件）经注入回调触发文件传输对话框
-provideOpenFileTransfer(onOpenFileTransfer)
-
-/** 编码器支持的命名转义（与 encodeWithEscapes 的 switch 保持一致） */
-function insertAscii(e: AsciiEntry) {
-  if (session.viewMode === 'hex') {
-    session.composerText += (session.composerText && !session.composerText.endsWith(' ') ? ' ' : '') + e.hex + ' '
-  } else if (e.char != null) {
-    session.composerText += e.char
-  } else if (e.escape && NAMED_ESCAPES.has(e.dec)) {
-    session.composerText += e.escape
-  }
-}
-
-defineExpose({ insertAscii, toComposer: onToComposer })
+// ASCII 插入 / 快速命令「调到发送框」由 App.vue 直接操作活动会话（utils/composer），不再走组件暴露
 </script>
 
 <template>

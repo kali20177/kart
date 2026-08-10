@@ -13,6 +13,12 @@ const OCCUPIED_PORTS_KEY: InjectionKey<Ref<ReadonlySet<string>>> = Symbol('occup
 /** 打开文件传输对话框回调注入 key（消息面板内 InputComposer 触发 → App.vue 根层渲染对话框）。 */
 const OPEN_FILE_TRANSFER_KEY: InjectionKey<(file?: File) => void> = Symbol('open-file-transfer')
 
+/** 会话列表注入 key（根级 dockview 的会话 tab 组件用：数量→可关闭性、序号→默认标题）。 */
+const SESSIONS_KEY: InjectionKey<Ref<Session[]>> = Symbol('sessions')
+
+/** 文件传输对话框根处理器注入 key（SessionPane 经注入回调触发 App.vue 对话框，替换组件 emit 链）。 */
+const OPEN_FILE_TRANSFER_HANDLER_KEY: InjectionKey<(session: Session, file?: File) => void> = Symbol('open-file-transfer-handler')
+
 /**
  * 提供当前组件子树使用的会话。SessionPane 为每个 tab 调用一次，传入对应会话。
  */
@@ -80,6 +86,36 @@ export function provideOpenFileTransfer(fn: (file?: File) => void): void {
 /** 获取「打开文件传输对话框」回调。未 provide（如单测）时返回 no-op。 */
 export function useOpenFileTransfer(): (file?: File) => void {
   return inject(OPEN_FILE_TRANSFER_KEY, () => {})
+}
+
+/**
+ * 提供会话列表。App.vue 在根级调用一次，传入 sessions ref；
+ * 根级 dockview 的自定义会话 tab（SessionTab）用它判断数量（末会话不可关闭）与序号标题。
+ */
+export function provideSessions(sessions: Ref<Session[]>): void {
+  provide(SESSIONS_KEY, sessions)
+}
+
+/** 获取会话列表 ref。必须在 provideSessions 的子树内调用。 */
+export function useSessions(): Ref<Session[]> {
+  const sessions = inject(SESSIONS_KEY, null)
+  if (!sessions) {
+    throw new Error('useSessions() 必须在 provideSessions() 的组件子树内调用')
+  }
+  return sessions
+}
+
+/**
+ * 提供「打开文件传输对话框」根处理器。App.vue 根级调用一次，绑定触发会话与对话框；
+ * SessionPane 在根级 dockview 中无法经 emit 链上报，改为注入回调转发（会话由回调参数带回）。
+ */
+export function provideOpenFileTransferHandler(fn: (session: Session, file?: File) => void): void {
+  provide(OPEN_FILE_TRANSFER_HANDLER_KEY, fn)
+}
+
+/** 获取「打开文件传输对话框」根处理器。未 provide（如单测）时返回 no-op。 */
+export function useOpenFileTransferHandler(): (session: Session, file?: File) => void {
+  return inject(OPEN_FILE_TRANSFER_HANDLER_KEY, () => {})
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set()

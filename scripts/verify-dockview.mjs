@@ -34,8 +34,10 @@ function check(name, ok, detail = '') {
   else fail++
 }
 
+// 内层 dockview（会话内三面板）的 tab：嵌套 dockview 经 Teleport 挂在 SessionPane 子树，
+// 且 dockview 的 tab 栏与网格是兄弟层级（.dv-tab 不在 .dv-dockview 内），用 .session-pane 定位内层
 const tabNames = async (page) =>
-  page.$$eval('.dv-tab', (tabs) => tabs.map((t) => (t.textContent ?? '').trim().replace(/\s+/g, ' ')))
+  page.$$eval('.session-pane .dv-tab', (tabs) => tabs.map((t) => (t.textContent ?? '').trim().replace(/\s+/g, ' ')))
 
 delete process.env.ELECTRON_RUN_AS_NODE
 
@@ -85,16 +87,27 @@ try {
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 })
 
   // 1. dockview 容器渲染，三个面板 tab 齐全
-  await page.locator('.dv-dockview').waitFor({ timeout: 10000 })
+  await page.locator('.dv-dockview').first().waitFor({ timeout: 10000 })
   await page.waitForTimeout(800)
   let names = await tabNames(page)
   check('初始 3 个面板 tab（消息/波形/终端）', names.length === 3 && names.every((n) => /消息|波形|终端/.test(n)), `tabs=${JSON.stringify(names)}`)
+  // 1b. 布局紧凑性：全局按钮（ASCII/设置）并入菜单栏行，dock 区域紧贴菜单栏（无独立工具栏行）
+  // 注意：不能按 .toolbar 类名判定——MessageList 内部工具条本就叫 .toolbar，只看几何
+  const compact = await page.evaluate(() => {
+    const mb = document.querySelector('.menubar')
+    const dw = document.querySelector('.dock-wrap')
+    if (!mb || !dw) return false
+    const mr = mb.getBoundingClientRect()
+    const dr = dw.getBoundingClientRect()
+    return Math.abs(dr.top - mr.bottom) <= 2
+  })
+  check('dock 区域紧贴菜单栏（无独立工具栏行）', compact, `menubar.bottom vs dock.top=${await page.evaluate(() => { const m = document.querySelector('.menubar')?.getBoundingClientRect(); const d = document.querySelector('.dock-wrap')?.getBoundingClientRect(); return `${m?.bottom} vs ${d?.top}` })}`)
   await page.screenshot({ path: path.join(SHOT_DIR, '1-initial.png') })
 
   // 2. 切换 tab：点「终端」→ 激活
   await page.locator('.dv-tab', { hasText: '终端' }).click()
   await page.waitForTimeout(400)
-  const activeText = await page.$eval('.dv-tab.dv-active-tab', (el) => el.textContent ?? '')
+  const activeText = await page.$eval('.session-pane .dv-tab.dv-active-tab', (el) => el.textContent ?? '')
   check('切换激活「终端」tab', activeText.includes('终端'), `active=${JSON.stringify(activeText)}`)
   await page.screenshot({ path: path.join(SHOT_DIR, '2-terminal-active.png') })
 
@@ -148,7 +161,7 @@ try {
 
   // 5. reload 后布局保持（波形仍关闭）
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.locator('.dv-dockview').waitFor({ timeout: 10000 })
+  await page.locator('.dv-dockview').first().waitFor({ timeout: 10000 })
   await page.waitForTimeout(800)
   names = await tabNames(page)
   check('reload 后持久化布局恢复（波形仍关闭）', names.length === 2 && !names.some((n) => n.includes('波形')), `tabs=${JSON.stringify(names)}`)
@@ -169,6 +182,54 @@ try {
     return vals.join('')
   })
   check('恢复后面板已重新持久化（布局含 waveform）', afterRestore.includes('waveform'), `len=${afterRestore.length}`)
+
+  // —— 会话级 dockview：新建 / 并排停靠 / 关闭 ——
+  // 根级会话 tab 是自定义 tab（SessionTab，根元素带 .session-tab 类），
+  // 标题可能是端口名或「会话 N」；内层面板 tab 无此类，天然区分
+  const sessionTabs = () => page.locator('.session-tab')
+  const closeBtns = () => page.locator('.session-tab-close')
+
+  // 7. 初始 1 个会话 tab，末会话无关闭按钮（替代旧 tab 条 disabled × 的末会话保护）
+  check('初始 1 个会话 tab（会话 1）', (await sessionTabs().count()) === 1, `tabs=${JSON.stringify(await tabNames(page))}`)
+  check('末会话无关闭按钮', (await closeBtns().count()) === 0)
+
+  // 8. 新建会话：右上角 ＋ → 2 个会话 tab，均可关闭
+  await page.locator('.session-add').click()
+  await page.waitForTimeout(600)
+  check('新建会话后 2 个会话 tab', (await sessionTabs().count()) === 2, `sessionTabs=${await sessionTabs().count()}`)
+  check('2 个会话均可关闭', (await closeBtns().count()) === 2)
+  await page.screenshot({ path: path.join(SHOT_DIR, '6-two-sessions.png') })
+
+  // 9. 并排停靠：把「会话 2」拖到 dock 区域右缘 → 根级分成两栏（两个串口数据流同屏）
+  // dockview 跨 dockview 拖拽不显示对方下拉区（viewId 不匹配），内层 dockview 不会误接收会话面板。
+  // 新会话继承上次使用的端口，tab 标题可能同名（本机都显示 /dev/cu.usbserial-*），按插入序取最后 tab。
+  // 根级组数 = 含 .session-tab（自定义会话 tab）的 tab 栏数量；内层 tab 栏不含此类
+  const rootGroupCount = async () =>
+    page.locator('.dv-tabs-and-actions-container').filter({ has: page.locator('.session-tab') }).count()
+  check('并排前根级单组', (await rootGroupCount()) === 1)
+  const tab2 = page.locator('.session-tab').last()
+  const tb = await tab2.boundingBox()
+  const dockBox = await page.locator('.dock-wrap').first().boundingBox()
+  if (!tb || !dockBox) throw new Error('会话 tab / dock 区域不可测（boundingBox 为空）')
+  await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2)
+  await page.mouse.down()
+  // 目标：右缘内侧 6px（激活区 10px 内，避开右侧栏 grip 的 3px 悬挑）
+  await page.mouse.move(dockBox.x + dockBox.width - 6, tb.y + tb.height / 2, { steps: 15 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+  check('拖「会话 2」到右缘 → 根级并排两组', (await rootGroupCount()) === 2, `rootGroups=${await rootGroupCount()}`)
+  check('并排后 2 个会话 tab 分属两组（均可见）', (await sessionTabs().count()) === 2)
+  await page.screenshot({ path: path.join(SHOT_DIR, '7-sessions-split.png') })
+
+  // 10. 关闭会话 2（hover tab 显示 × 再点）→ 回到 1 个会话，末会话无关闭按钮
+  const tab2b = page.locator('.session-tab').last()
+  await tab2b.hover()
+  await page.waitForTimeout(200)
+  await tab2b.locator('.session-tab-close').click()
+  await page.waitForTimeout(600)
+  check('关闭会话 2 → 回到 1 个会话 tab', (await sessionTabs().count()) === 1, `sessionTabs=${await sessionTabs().count()}`)
+  check('末会话恢复无关闭按钮', (await closeBtns().count()) === 0)
+  check('并排组随关闭收敛为单组', (await rootGroupCount()) === 1, `rootGroups=${await rootGroupCount()}`)
 
   check('无 console/pageerror', errors.length === 0, errors.join('; '))
   // 流程中的面板 attach/detach 会有瞬时 RO loop；断言结束后 idle 2s 无新增（无持续反馈环）
