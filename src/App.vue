@@ -140,7 +140,7 @@ const commandsCollapsed = ref(false)
 // 手柄在侧边栏左边缘：向左拖增大、向右拖减小。
 const COL_MIN = 200
 const COL_MAX = 480
-const DEFAULT_RIGHT_WIDTH = 280
+const DEFAULT_RIGHT_WIDTH = 200
 const rightWidth = useStorage(STORAGE_PREFIX + 'app:rightWidth', DEFAULT_RIGHT_WIDTH)
 const dragging = ref(false)
 const rightStyle = computed(() =>
@@ -375,7 +375,7 @@ onMounted(() => {
 }
 .right {
   flex: none;
-  width: 280px;
+  width: 240px;
   position: relative;
   transition: width 0.18s;
 }
