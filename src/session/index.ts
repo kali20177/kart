@@ -104,6 +104,8 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       onData: (cb) => serial.onData(cb),
       onTxData: (cb) => serial.onTxData(cb),
       connected: serial.connected,
+      // 端口进文件名与主进程录制流键（并排多会话录制区分数据来源）
+      port: serial.selectedPort,
       settings: s,
     })
 

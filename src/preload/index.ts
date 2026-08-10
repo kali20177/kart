@@ -128,13 +128,14 @@ contextBridge.exposeInMainWorld('electron', {
   recorder: {
     showDirectoryPicker: () =>
       ipcRenderer.invoke('recorder:show-directory-picker'),
-    createFile: (dirPath: string, fileName: string) =>
-      ipcRenderer.invoke('recorder:create-file', dirPath, fileName),
+    // streamKey：录制流标识（如端口名），主进程按 (窗口, streamKey) 键控写入流
+    createFile: (dirPath: string, fileName: string, streamKey?: string) =>
+      ipcRenderer.invoke('recorder:create-file', dirPath, fileName, streamKey),
     // invoke 返回 false 表示流已出错/无活动流，触发渲染进程置 error 状态
-    writeChunk: (chunk: Uint8Array) =>
-      ipcRenderer.invoke('recorder:write-chunk', chunk) as Promise<boolean>,
-    closeFile: () =>
-      ipcRenderer.invoke('recorder:close-file') as Promise<boolean>,
+    writeChunk: (streamKey: string | undefined, chunk: Uint8Array) =>
+      ipcRenderer.invoke('recorder:write-chunk', streamKey, chunk) as Promise<boolean>,
+    closeFile: (streamKey: string | undefined) =>
+      ipcRenderer.invoke('recorder:close-file', streamKey) as Promise<boolean>,
     onWriteError: (handler: (msg: string) => void) => {
       writeErrorHandler = handler
     }

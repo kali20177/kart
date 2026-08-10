@@ -20,9 +20,9 @@ declare global {
       }
       recorder?: {
         showDirectoryPicker(): Promise<string | null>
-        createFile(dirPath: string, fileName: string): Promise<{ fileName: string } | null>
-        writeChunk(chunk: Uint8Array): Promise<boolean>
-        closeFile(): Promise<boolean>
+        createFile(dirPath: string, fileName: string, streamKey?: string): Promise<{ fileName: string } | null>
+        writeChunk(streamKey: string | undefined, chunk: Uint8Array): Promise<boolean>
+        closeFile(streamKey: string | undefined): Promise<boolean>
         onWriteError(handler: (msg: string) => void): void
       }
       log?: {
