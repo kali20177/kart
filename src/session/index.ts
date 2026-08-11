@@ -133,7 +133,8 @@ export function createSession(overrides: SessionOverrides = {}): Session {
         const port = serial.selectedPort.value
         if (port) storage.set(DECODER_KEY(port), cfg)
       },
-      { deep: true }
+      // flush:'sync'：配置体量小，立即落盘——避免同 tick 内变更后紧接 dispose 丢最后一次写
+      { deep: true, flush: 'sync' }
     )
 
     const waveform = createWaveformStore({

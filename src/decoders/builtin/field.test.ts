@@ -81,4 +81,15 @@ describe('field decoder · 匹配门槛', () => {
     expect(fieldDecoder.decode(new Uint8Array([1, 2]), { fields: [{ name: '', length: 1, format: 'u8' }] }).matched).toBe(false)
     expect(fieldDecoder.decode(new Uint8Array([1, 2]), { fields: [{ name: 'x', length: 0, format: 'u8' }] }).matched).toBe(false)
   })
+
+  it('length 小于格式最小字节数 → matched false，不抛 RangeError（DataView 越界）', () => {
+    // u16 需 2 字节、u32 需 4 字节；length 不足时不应崩管线，返回不匹配
+    expect(fieldDecoder.decode(new Uint8Array([0x12, 0x34]), { fields: [{ name: 'x', length: 1, format: 'u16be' }] }).matched).toBe(false)
+    expect(fieldDecoder.decode(new Uint8Array([0x12, 0x34]), { fields: [{ name: 'x', length: 1, format: 'u16le' }] }).matched).toBe(false)
+    expect(fieldDecoder.decode(new Uint8Array([0x12, 0x34, 0x56]), { fields: [{ name: 'x', length: 3, format: 'u32le' }] }).matched).toBe(false)
+    // 最小字节数恰好满足则正常解析
+    const ok = fieldDecoder.decode(new Uint8Array([0x12, 0x34]), { fields: [{ name: 'x', length: 2, format: 'u16be' }] })
+    expect(ok.matched).toBe(true)
+    expect(ok.fields?.[0].value).toBe('4660')
+  })
 })

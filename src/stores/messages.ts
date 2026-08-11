@@ -144,14 +144,20 @@ export function createMessagesStore(deps: MessagesDeps) {
       }
     }
 
-    // 帧解码：启用且本帧匹配时叠加结构化字段视图；不匹配保持原始帧显示
+    // 帧解码：启用且本帧匹配时叠加结构化字段视图；不匹配保持原始帧显示。
+    // try/catch 兜底：解码器配置是可由用户手改的持久化 JSON，解码器契约上不应抛——
+    // 一旦异常（如极端非法配置）静默丢弃本帧解码，绝不打穿 RX 管线。
     const dc = deps.decoder
     if (dc.enabled) {
       const def = getDecoder(dc.id)
       if (def) {
-        const r = def.decode(payload, dc.options)
-        if (r.matched) {
-          msg.decoded = { decoderId: dc.id, summary: r.summary, fields: r.fields ?? [] }
+        try {
+          const r = def.decode(payload, dc.options)
+          if (r.matched) {
+            msg.decoded = { decoderId: dc.id, summary: r.summary, fields: r.fields ?? [] }
+          }
+        } catch {
+          /* 解码器异常：丢弃本帧解码，保持原始帧视图 */
         }
       }
     }

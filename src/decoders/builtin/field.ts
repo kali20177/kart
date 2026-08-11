@@ -1,9 +1,21 @@
 // 内置「字段布局解析器」：按有序字段定义把帧切成带名字段。
 // 字段 offset 省略 = 接续上一字段末尾；帧长不足任一字段或 header 不匹配 → 不匹配。
 
-import type { DecodeField, DecoderDefinition, FieldDef, FieldDecoderOptions } from '../types'
+import type { DecodeField, DecoderDefinition, FieldDef, FieldDecoderOptions, FieldFormat } from '../types'
 import { bytesToHex, parseHexInput } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
+
+/** 各格式要求的最小字节数（DataView 越界会抛 RangeError，须前置校验） */
+const FORMAT_MIN_LEN: Record<FieldFormat, number> = {
+  u8: 1,
+  u16le: 2,
+  u16be: 2,
+  u32le: 4,
+  u32be: 4,
+  ascii: 1,
+  utf8: 1,
+  hex: 1
+}
 
 /** 读取一个字段的格式化显示值 */
 function formatField(frame: Uint8Array, def: FieldDef, start: number): string {
@@ -54,8 +66,8 @@ export const fieldDecoder: DecoderDefinition<FieldDecoderOptions> = {
     const out: DecodeField[] = []
     let cursor = 0
     for (const def of fields) {
-      // 非法字段定义（缺名/长度 ≤0）视为配置错误 → 不匹配，避免渲染脏数据
-      if (!def || !def.name || def.length <= 0) return { matched: false }
+      // 非法字段定义（缺名/长度 ≤0/长度不足格式最小字节数）视为配置错误 → 不匹配，避免渲染脏数据或 DataView 越界
+      if (!def || !def.name || def.length <= 0 || def.length < FORMAT_MIN_LEN[def.format]) return { matched: false }
       const start = def.offset ?? cursor
       if (start < 0 || start + def.length > frame.length) return { matched: false }
       out.push({ name: def.name, value: formatField(frame, def, start), offset: start, length: def.length })

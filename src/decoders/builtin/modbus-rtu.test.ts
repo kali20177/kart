@@ -43,13 +43,51 @@ describe('modbus-rtu decoder', () => {
     expect(modbusRtuDecoder.decode(frame).matched).toBe(true)
   })
 
+  it('fc01 线圈响应（byteCount=3 共 4 字节）→ 判为响应而非请求，按位图呈现', () => {
+    // byteCount=3 + 3 位图字节，数据区恰好 4 字节——旧实现会误判为请求帧
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x01, [0x03, 0xcd, 0x6b, 0x05]))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'byteCount')?.value).toBe('3')
+    expect(r.fields?.find((f) => f.name === 'coils')?.value).toBe('CD 6B 05')
+    expect(r.fields?.find((f) => f.name === 'reg')).toBeUndefined()
+  })
+
+  it('fc01 请求（起始 0x0000 数量 0x0A）→ 判为请求', () => {
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x01, [0x00, 0x00, 0x00, 0x0a]))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'reg')?.value).toBe('0x0000')
+    expect(r.fields?.find((f) => f.name === 'count')?.value).toBe('10')
+  })
+
+  it('fc03 请求起始地址 0x0300（byteCount 奇数歧义）→ 偶数校验排除，判为请求', () => {
+    // 请求 data=[0x03,0x00,0x00,0x0A]：data[0]===3 满足 len-1，但 byteCount 奇数为非法 fc03 响应 → 走请求分支
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x03, [0x03, 0x00, 0x00, 0x0a]))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'reg')?.value).toBe('0x0300')
+    expect(r.fields?.find((f) => f.name === 'count')?.value).toBe('10')
+  })
+
+  it('异常响应（fc|0x80）→ 解析异常码', () => {
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x83, [0x02]))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'fc')?.value).toContain('0x83')
+    expect(r.fields?.find((f) => f.name === 'exception')?.value).toBe('0x02 Illegal Data Address')
+  })
+
+  it('byteCount 与数据长度不符 → 不判响应，回退 data 字段', () => {
+    // byteCount=4 但只有 2 个数据字节：4 !== 2 → 非响应、非请求 → data hex
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x03, [0x04, 0x00, 0x64]))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'data')?.value).toBe('04 00 64')
+  })
+
   it('CRC 损坏 → 不匹配（坏帧保持原始视图）', () => {
     const frame = modbusFrame(0x01, 0x03, [0x00, 0x00, 0x00, 0x0a])
     frame[frame.length - 1] ^= 0xff
     expect(modbusRtuDecoder.decode(frame).matched).toBe(false)
   })
 
-  it('帧过短（<8）→ 不匹配', () => {
+  it('帧过短（<5）→ 不匹配', () => {
     expect(modbusRtuDecoder.decode(new Uint8Array([0x01, 0x03, 0x00, 0x00])).matched).toBe(false)
   })
 })

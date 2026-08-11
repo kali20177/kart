@@ -255,7 +255,7 @@ function onRowContext(e: MouseEvent) {
       </div>
 
       <!-- 帧解码字段块：结构化字段叠加在原始视图上方（不替换，原始字节始终可对照） -->
-      <div v-if="message.decoded" class="decoded">
+      <div v-if="message.decoded && (message.decoded.summary || message.decoded.fields.length > 0)" class="decoded">
         <div v-if="message.decoded.summary" class="decoded-summary">{{ message.decoded.summary }}</div>
         <div class="decoded-fields">
           <span
