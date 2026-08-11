@@ -17,6 +17,9 @@ const FORMAT_MIN_LEN: Record<FieldFormat, number> = {
   hex: 1
 }
 
+/** 数值格式：长度必须与格式精确一致（超出会静默截断产生误导值）；ascii/utf8/hex 为变长，只需 ≥1 */
+const NUMERIC_FORMATS: ReadonlySet<FieldFormat> = new Set(['u8', 'u16le', 'u16be', 'u32le', 'u32be'])
+
 /** 读取一个字段的格式化显示值 */
 function formatField(frame: Uint8Array, def: FieldDef, start: number): string {
   const slice = frame.subarray(start, start + def.length)
@@ -40,6 +43,9 @@ function formatField(frame: Uint8Array, def: FieldDef, start: number): string {
     case 'ascii': return decodeBytes(slice, 'ascii')
     case 'utf8': return decodeBytes(slice, 'utf-8')
     case 'hex': return bytesToHex(slice)
+    default:
+      // 未知 format（持久化 JSON 可绕过 TS 联合）——decode 前置校验已拦截，此处兜底不渲染 undefined 脏值
+      return ''
   }
 }
 
@@ -66,8 +72,11 @@ export const fieldDecoder: DecoderDefinition<FieldDecoderOptions> = {
     const out: DecodeField[] = []
     let cursor = 0
     for (const def of fields) {
-      // 非法字段定义（缺名/长度 ≤0/长度不足格式最小字节数）视为配置错误 → 不匹配，避免渲染脏数据或 DataView 越界
-      if (!def || !def.name || def.length <= 0 || def.length < FORMAT_MIN_LEN[def.format]) return { matched: false }
+      const minLen = FORMAT_MIN_LEN[def.format]
+      // 配置校验：缺名/长度 ≤0/未知格式（持久化 JSON 可绕过 TS）/长度不足——任一不满足即不匹配，
+      // 避免渲染脏数据或 DataView 越界；数值格式长度须精确一致，超出会静默截断产生误导值
+      if (!def || !def.name || minLen === undefined || def.length < minLen) return { matched: false }
+      if (NUMERIC_FORMATS.has(def.format) && def.length !== minLen) return { matched: false }
       const start = def.offset ?? cursor
       if (start < 0 || start + def.length > frame.length) return { matched: false }
       out.push({ name: def.name, value: formatField(frame, def, start), offset: start, length: def.length })

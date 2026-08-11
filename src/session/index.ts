@@ -104,7 +104,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     // 解码器配置按端口持久化：切端口时加载该端口的配置，修改时写回当前端口。
     // 关键语义：连接前（端口未选）的配置编辑不写进 'default' 垃圾键，而是保留在内存，
     // 首个端口选中且无已存配置时沿用并落盘——避免「先启用再连接」被端口切换清掉。
-    const DECODER_KEY = (port: string | null | undefined) => `decoder-config:${port ?? 'default'}`
+    const DECODER_KEY = (port: string) => `decoder-config:${port}`
     let hasSelectedPort = false
     watch(
       serial.selectedPort,

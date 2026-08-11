@@ -92,4 +92,15 @@ describe('field decoder · 匹配门槛', () => {
     expect(ok.matched).toBe(true)
     expect(ok.fields?.[0].value).toBe('4660')
   })
+
+  it('数值格式长度超出最小字节数 → matched false（避免静默截断产生误导值）', () => {
+    // u8 配 length:2 时原实现只显示第 1 字节的截断值
+    expect(fieldDecoder.decode(new Uint8Array([0x12, 0x34]), { fields: [{ name: 'x', length: 2, format: 'u8' }] }).matched).toBe(false)
+    expect(fieldDecoder.decode(new Uint8Array([0x12, 0x34, 0x56, 0x78]), { fields: [{ name: 'x', length: 3, format: 'u32be' }] }).matched).toBe(false)
+  })
+
+  it('未知 format（持久化 JSON 可绕过 TS 联合）→ matched false，不渲染 undefined 脏值', () => {
+    const opts = { fields: [{ name: 'x', length: 1, format: 'bogus' }] } as unknown as FieldDecoderOptions
+    expect(fieldDecoder.decode(new Uint8Array([0x12, 0x34]), opts).matched).toBe(false)
+  })
 })
