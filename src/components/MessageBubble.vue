@@ -254,6 +254,22 @@ function onRowContext(e: MouseEvent) {
         </span>
       </div>
 
+      <!-- 帧解码字段块：结构化字段叠加在原始视图上方（不替换，原始字节始终可对照） -->
+      <div v-if="message.decoded" class="decoded">
+        <div v-if="message.decoded.summary" class="decoded-summary">{{ message.decoded.summary }}</div>
+        <div class="decoded-fields">
+          <span
+            v-for="(f, fi) in message.decoded.fields"
+            :key="fi"
+            class="decoded-field"
+            :title="`${f.name} @ ${f.offset}+${f.length}`"
+          >
+            <span class="fname">{{ f.name }}</span>
+            <span class="fval">{{ f.value }}</span>
+          </span>
+        </div>
+      </div>
+
       <!-- ASCII 视图：无高亮 -->
       <pre v-if="viewMode === 'ascii' && !hlAscii" class="body ascii">{{ asciiShown }}</pre>
       <!-- ASCII 视图：文本高亮 -->
@@ -409,6 +425,43 @@ function onRowContext(e: MouseEvent) {
 }
 .spacer {
   flex: 1;
+}
+
+/* 帧解码字段块：字段 chip 排 + 概要行 */
+.decoded {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--glass-border);
+}
+.decoded-summary {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: var(--accent-cyan);
+  margin-bottom: 4px;
+}
+.decoded-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.decoded-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  line-height: 1.4;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  white-space: nowrap;
+}
+.decoded-field .fname {
+  color: var(--text-dim);
+}
+.decoded-field .fval {
+  color: var(--text);
 }
 .actions {
   display: flex;

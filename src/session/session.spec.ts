@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createSession, type Session } from '@/session'
 import { setDriverType } from '@/serial'
 import { MockSerialSource } from '@/mock/MockSerialSource'
+import { binaryFrame } from '@/mock/scenarios'
 
 // 每个测试创建的会话，afterEach 统一 dispose 清理（定时器/订阅/驱动）
 let sessions: Session[] = []
@@ -128,6 +129,51 @@ describe('createSession · 会话接线', () => {
     expect(mock.breakActive).toBe(false)
 
     await session.serial.disconnect()
+  })
+})
+
+describe('createSession · 帧解码（会话级配置 + 端口持久化）', () => {
+  it('连接后启用帧解码 → 二进制连续帧显示字段块', async () => {
+    const mock = new MockSerialSource()
+    const session = makeSession(mock)
+    await session.serial.refreshPorts()
+    await session.serial.connect()
+    // 默认模板（AA55 帧头 + 字段布局）匹配 mock 二进制帧：AA 55 06 <payload6> <xor>
+    session.decoder.enabled = true
+    mock.inject(binaryFrame(0))
+    await waitForMessages(session, 1)
+    const m = session.messages.messages[0]
+    expect(m.decoded).toBeDefined()
+    expect(m.decoded?.fields.map((f) => f.name)).toEqual(['header', 'len', 'payload', 'crc'])
+    expect(m.decoded?.fields[0].value).toBe('AA 55')
+    await session.serial.disconnect()
+  })
+
+  it('先启用帧解码再连接（端口未选）→ 配置不丢失仍生效', async () => {
+    const mock = new MockSerialSource()
+    const session = makeSession(mock)
+    // 端口尚未选择时就启用（对应「先打开设置启用，再连 mock」的用户流程）
+    session.decoder.enabled = true
+    await session.serial.refreshPorts() // 此刻 selectedPort 变为 COM3，触发端口 watcher
+    await session.serial.connect()
+    expect(session.decoder.enabled).toBe(true)
+    mock.inject(binaryFrame(0))
+    await waitForMessages(session, 1)
+    expect(session.messages.messages[0].decoded).toBeDefined()
+    await session.serial.disconnect()
+  })
+
+  it('端口配置跨会话持久化（新会话连接同端口自动载入）', async () => {
+    const a = makeSession(new MockSerialSource())
+    await a.serial.refreshPorts()
+    await a.serial.connect() // COM3
+    a.decoder.enabled = true // 持久化到 decoder-config:COM3
+    await a.serial.disconnect()
+
+    const b = makeSession(new MockSerialSource())
+    await b.serial.refreshPorts() // COM3 → 应载入 enabled=true
+    expect(b.decoder.enabled).toBe(true)
+    b.dispose()
   })
 })
 

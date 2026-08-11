@@ -1,5 +1,8 @@
-import { effectScope, reactive, ref, type UnwrapNestedRefs } from 'vue'
+import { effectScope, reactive, ref, watch, type UnwrapNestedRefs } from 'vue'
 import type { AppSettings, DataMode, SerialDriver } from '@/types'
+import type { DecoderConfig } from '@/decoders/types'
+import { DEFAULT_DECODER_CONFIG } from '@/decoders'
+import { storage } from '@/composables/useStorage'
 import { createSerialStore } from '@/stores/serial'
 import { createMessagesStore } from '@/stores/messages'
 import { createPauseStore } from '@/stores/pause'
@@ -35,6 +38,8 @@ export interface Session {
   viewMode: DataMode
   /** 发送框草稿文本（发送框随消息面板显示/隐藏，会话级保存） */
   composerText: string
+  /** 帧解码配置（会话级、按端口持久化；消息管线读取，SettingsModal 编辑） */
+  decoder: DecoderConfig
   /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
   dispose: () => void
 }
@@ -67,6 +72,10 @@ export function createSession(overrides: SessionOverrides = {}): Session {
   const stores = scope.run(() => {
     const s = useSettingsStore().settings
 
+    // 帧解码配置：会话级、按端口持久化。用 reactive 对象直传 messages store（与 settings 同例），
+    // SettingsModal 经 session.decoder 直接编辑同一对象；端口确定后由下方 watcher 按端口加载/保存。
+    const decoderCfg = reactive(structuredClone(DEFAULT_DECODER_CONFIG))
+
     // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
     let _clearMessages: () => void = () => {}
     let _clearWaveform: () => void = () => {}
@@ -78,6 +87,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
 
     const messages = createMessagesStore({
       settings: s,
+      decoder: decoderCfg,
       paused: pause.paused,
       pauseStartTime: pause.pauseStartTime,
       togglePause: () => pause.toggle(),
@@ -90,6 +100,41 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       settings: s,
       createDriver,
     })
+
+    // 解码器配置按端口持久化：切端口时加载该端口的配置，修改时写回当前端口。
+    // 关键语义：连接前（端口未选）的配置编辑不写进 'default' 垃圾键，而是保留在内存，
+    // 首个端口选中且无已存配置时沿用并落盘——避免「先启用再连接」被端口切换清掉。
+    const DECODER_KEY = (port: string | null | undefined) => `decoder-config:${port ?? 'default'}`
+    let hasSelectedPort = false
+    watch(
+      serial.selectedPort,
+      (port) => {
+        if (!port) return
+        const stored = storage.get<Partial<DecoderConfig> | null>(DECODER_KEY(port), null)
+        const merged = {
+          ...structuredClone(DEFAULT_DECODER_CONFIG),
+          ...stored,
+          options: { ...DEFAULT_DECODER_CONFIG.options, ...(stored?.options ?? {}) }
+        }
+        if (stored || hasSelectedPort) {
+          // 该端口已有配置，或之前已选过端口 → 载入该端口配置（不同端口不同协议）
+          Object.assign(decoderCfg, merged)
+        } else {
+          // 首个端口且无已存配置：沿用内存配置（可能连接前刚启用），落盘一次
+          storage.set(DECODER_KEY(port), decoderCfg)
+        }
+        hasSelectedPort = true
+      },
+      { immediate: true }
+    )
+    watch(
+      decoderCfg,
+      (cfg) => {
+        const port = serial.selectedPort.value
+        if (port) storage.set(DECODER_KEY(port), cfg)
+      },
+      { deep: true }
+    )
 
     const waveform = createWaveformStore({
       onData: (cb) => serial.onData(cb),
@@ -126,7 +171,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       useUtf8: serial.driverType.value === 'pty',
     })
 
-    return reactive({ serial, messages, pause, waveform, recorder, transfer, terminal, settings: s, viewMode: ref(s.defaultView), composerText: ref('') })
+    return reactive({ serial, messages, pause, waveform, recorder, transfer, terminal, settings: s, viewMode: ref(s.defaultView), composerText: ref(''), decoder: decoderCfg })
   })!
 
   const id = _nextSessionId++

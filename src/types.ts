@@ -1,4 +1,5 @@
 // 全局共享类型 —— 阶段 2 接入 Web Serial 时这些类型基本保持不变
+import type { DecodeInfo } from '@/decoders/types'
 
 /** 数据方向 */
 export type Direction = 'rx' | 'tx'
@@ -27,6 +28,8 @@ export interface Message {
   error?: string
   /** 校验失败标记（与 error 独立，可共存） */
   checksumFailed?: boolean
+  /** 解码结果：会话启用帧解码且本帧匹配时存在——字段块叠加在原始视图上方渲染（不替换原始字节） */
+  decoded?: DecodeInfo
   /** 消息种类：'frame'=普通帧，'file'=文件下发气泡，'divider'=分隔线（缺省 'frame' 向后兼容） */
   kind?: 'frame' | 'file' | 'divider'
   /** 文件下发时指向 transfer store 中的状态 */
@@ -223,6 +226,7 @@ export type MockScenarioId =
   | 'waveform-text'
   | 'waveform-text-labeled'
   | 'buffer-flood'
+  | 'modbus'
   | 'shell'
 
 // ─── 文件下发类型（阶段 1 文件传输 UI） ───

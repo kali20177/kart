@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { effectScope } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSettingsStore } from './settings'
-import { useMessagesStore } from './messages'
+import { useMessagesStore, createMessagesStore, type MessagesDeps } from './messages'
+import { usePauseStore } from './pause'
+import { storeToRefs } from 'pinia'
+import { DEFAULT_DECODER_CONFIG } from '@/decoders'
+import type { DecoderConfig } from '@/decoders/types'
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -163,5 +168,140 @@ describe('messages store · 缓冲裁剪 droppedFrames', () => {
     expect(s.droppedFrames).toBe(3)
     s.clear()
     expect(s.droppedFrames).toBe(0)
+  })
+})
+
+describe('messages store · 帧解码', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function flush() {
+    vi.advanceTimersByTime(16)
+  }
+
+  /** 用可注入的 decoder 配置直接构造 messages store（会话级解码配置经 deps 注入） */
+  function makeStore(decoder: DecoderConfig) {
+    const settings = useSettingsStore()
+    const pause = usePauseStore()
+    const { paused, pauseStartTime } = storeToRefs(pause)
+    const scope = effectScope(true)
+    const store = scope.run(() =>
+      createMessagesStore({
+        settings: settings.settings,
+        decoder,
+        paused,
+        pauseStartTime,
+        togglePause: () => pause.toggle()
+      } satisfies MessagesDeps)
+    )!
+    return { store, scope }
+  }
+
+  it('启用字段解码且帧匹配 → 消息带 decoded 字段视图', () => {
+    const settings = useSettingsStore()
+    settings.settings.frame.strategy = 'delimiter'
+    settings.settings.frame.delimiterHex = '0A'
+    const decoder: DecoderConfig = {
+      enabled: true,
+      id: 'field',
+      options: {
+        header: 'AA55',
+        fields: [
+          { name: 'hdr', length: 2, format: 'hex' },
+          { name: 'val', length: 2, format: 'u16be' }
+        ]
+      }
+    }
+    const { store, scope } = makeStore(decoder)
+    try {
+      // AA 55 12 34 \n → 匹配（header AA55），val=0x1234=4660
+      store.ingestRx(new Uint8Array([0xaa, 0x55, 0x12, 0x34, 0x0a]))
+      flush()
+      expect(store.messages.value.length).toBe(1)
+      const m = store.messages.value[0]
+      expect(m.decoded).toBeDefined()
+      expect(m.decoded?.decoderId).toBe('field')
+      expect(m.decoded?.fields.map((f) => [f.name, f.value])).toEqual([
+        ['hdr', 'AA 55'],
+        ['val', '4660']
+      ])
+      // 原始字节始终保留
+      expect(Array.from(m.bytes)).toEqual([0xaa, 0x55, 0x12, 0x34, 0x0a])
+    } finally {
+      scope.stop()
+    }
+  })
+
+  it('header 不匹配的帧 → 无 decoded（保持原始帧）', () => {
+    const settings = useSettingsStore()
+    settings.settings.frame.strategy = 'delimiter'
+    settings.settings.frame.delimiterHex = '0A'
+    const decoder: DecoderConfig = {
+      enabled: true,
+      id: 'field',
+      options: {
+        header: 'AA55',
+        fields: [{ name: 'val', length: 2, format: 'u16be' }]
+      }
+    }
+    const { store, scope } = makeStore(decoder)
+    try {
+      store.ingestRx(new Uint8Array([0xbb, 0x55, 0x12, 0x34, 0x0a])) // 帧头不是 AA55
+      flush()
+      expect(store.messages.value.length).toBe(1)
+      expect(store.messages.value[0].decoded).toBeUndefined()
+    } finally {
+      scope.stop()
+    }
+  })
+
+  it('解码器禁用 → 所有帧无 decoded', () => {
+    const settings = useSettingsStore()
+    settings.settings.frame.strategy = 'delimiter'
+    settings.settings.frame.delimiterHex = '0A'
+    const decoder = structuredClone(DEFAULT_DECODER_CONFIG) // enabled=false
+    const { store, scope } = makeStore(decoder)
+    try {
+      store.ingestRx(new Uint8Array([0xaa, 0x55, 0x12, 0x34, 0x0a]))
+      flush()
+      expect(store.messages.value.length).toBe(1)
+      expect(store.messages.value[0].decoded).toBeUndefined()
+    } finally {
+      scope.stop()
+    }
+  })
+
+  it('运行时切换配置立即生效（配置为同一对象，逐帧读取）', () => {
+    const settings = useSettingsStore()
+    settings.settings.frame.strategy = 'delimiter'
+    settings.settings.frame.delimiterHex = '0A'
+    const decoder: DecoderConfig = {
+      enabled: true,
+      id: 'field',
+      options: {
+        header: 'BB55',
+        fields: [{ name: 'val', length: 2, format: 'u16be' }]
+      }
+    }
+    const { store, scope } = makeStore(decoder)
+    try {
+      store.ingestRx(new Uint8Array([0xbb, 0x55, 0x12, 0x34, 0x0a]))
+      flush()
+      expect(store.messages.value[0].decoded).toBeDefined()
+
+      // 切 header 后，同帧不再匹配
+      decoder.options.header = 'AA55'
+      store.ingestRx(new Uint8Array([0xbb, 0x55, 0x12, 0x34, 0x0a]))
+      flush()
+      expect(store.messages.value[1].decoded).toBeUndefined()
+    } finally {
+      scope.stop()
+    }
   })
 })

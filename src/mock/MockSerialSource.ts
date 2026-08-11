@@ -5,6 +5,7 @@ import {
   bufferFloodChunk,
   gbkSample,
   logLine,
+  modbusSample,
   throughputChunk,
   waveformTextChunk,
   waveformTextLabeledChunk,
@@ -116,6 +117,10 @@ export class MockSerialSource implements SerialDriver {
     switch (this.scenario) {
       case 'binary-frames':
         this.timer = setInterval(() => this.emit(binaryFrame(this.seq++)), 800)
+        break
+      case 'modbus':
+        // 每 800ms 一条 Modbus RTU 帧（fc03 应答为主，穿插请求），验证 Modbus RTU 解码器
+        this.timer = setInterval(() => this.emit(modbusSample(this.seq++)), 800)
         break
       case 'high-throughput':
         // 每 8ms 吐一段，模拟高波特率连续流
