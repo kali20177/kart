@@ -6,7 +6,7 @@ import { MockSerialSource } from '@/mock/MockSerialSource'
 import { WebSerialDriver } from '@/serial/WebSerialDriver'
 import { SerialPortDriver } from '@/serial/SerialPortDriver'
 import { TcpDriver } from '@/serial/TcpDriver'
-import { createDriverOfType, createSerialDriver, getDriverType, getUnsupportedReason } from '@/serial'
+import { createDriverOfType, createSerialDriver, getDriverType, getUnsupportedReason, setDriverType } from '@/serial'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
 import { computeChecksum } from '@/utils/checksum'
@@ -159,13 +159,12 @@ export function createSerialStore(deps: SerialDeps) {
   }
 
   async function connect() {
-    // TCP 传输：连接前从 host/port 组端点（统一写入 selectedPort——显示/录制文件名/decoder-config 键共用）
+    // TCP 传输：连接前从 host/port 组端点（统一写入 selectedPort——显示/录制文件名/decoder-config 键共用）。
+    // 无效端点抛错而非静默返回——ConnectionBar 的 toggle() 捕获后弹 toast，用户能感知原因。
     if (driverType.value === 'tcp') {
       const host = tcpOptions.host.trim()
-      if (!host || !isValidTcpPort(tcpOptions.port)) {
-        logger.warn('serial', `connect skipped: invalid tcp endpoint ${host}:${tcpOptions.port}`)
-        return
-      }
+      if (!host) throw new Error('TCP 主机不能为空')
+      if (!isValidTcpPort(tcpOptions.port)) throw new Error(`TCP 端口无效: ${tcpOptions.port}（范围 1-65535）`)
       selectedPort.value = `${host}:${tcpOptions.port}`
     }
     if (connected.value || !selectedPort.value) return
@@ -342,7 +341,8 @@ export function createSerialStore(deps: SerialDeps) {
 
   /**
    * 切换驱动类型（含用户传输切换）。直接按目标类型构建驱动（不经环境解析单例，
-   * 使生产环境可切 tcp；setDriverType 仍仅用于 DEV 环境覆盖初始后端）。
+   * 使生产环境可切 tcp）；DEV 下同步 setDriverType 更新模块解析结果，让新建会话
+   * 继承当前切换（如 DEV 驱动切换工具切到 mock/pty 后新会话仍是 mock/pty）。
    */
   async function switchDriver(type: DriverType) {
     if (type === driverType.value) return
@@ -353,6 +353,8 @@ export function createSerialStore(deps: SerialDeps) {
     reconnectNextAt.value = null
     reconnectAttempts.value = 0
     const prevDriver = driver
+    // DEV 下更新模块解析状态（生产 no-op，不改变环境默认）；顺带清空模块单例引用
+    setDriverType(type)
     driver = createDriverOfType(type)
     driverType.value = type
     unsupportedReason.value = type === 'unsupported' ? getUnsupportedReason() : null

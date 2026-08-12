@@ -215,6 +215,20 @@ describe('createSession · TCP 传输', () => {
       window.electron = prevElectron
     }
   })
+
+  it('TCP 端点无效（空 host / 越界端口）→ connect 抛错且不触达驱动', async () => {
+    const session = makeSession(new MockSerialSource())
+    await session.serial.setTransport('tcp')
+    expect(session.serial.transportType).toBe('tcp')
+
+    session.serial.tcpOptions.host = '   '
+    await expect(session.serial.connect()).rejects.toThrow('TCP 主机不能为空')
+
+    session.serial.tcpOptions.host = '192.168.1.5'
+    session.serial.tcpOptions.port = 70000
+    await expect(session.serial.connect()).rejects.toThrow('TCP 端口无效')
+    expect(session.serial.connected).toBe(false)
+  })
 })
 
 describe('createSession · 终端接线（mock shell 场景）', () => {

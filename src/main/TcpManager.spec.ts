@@ -58,7 +58,7 @@ describe('parseEndpoint', () => {
     expect(parseEndpoint('localhost:8080')).toEqual({ host: 'localhost', port: 8080 })
   })
 
-  it('非法输入返回 null（无冒号/空段/端口越界/非数字）', () => {
+  it('非法输入返回 null（无冒号/空段/端口越界/非数字/带进制）', () => {
     expect(parseEndpoint('')).toBeNull()
     expect(parseEndpoint('host')).toBeNull()
     expect(parseEndpoint(':502')).toBeNull()
@@ -66,6 +66,9 @@ describe('parseEndpoint', () => {
     expect(parseEndpoint('host:0')).toBeNull()
     expect(parseEndpoint('host:70000')).toBeNull()
     expect(parseEndpoint('host:abc')).toBeNull()
+    // Number('0x50')=80 会绕过数值范围检查，但端口字面量不应带进制
+    expect(parseEndpoint('host:0x50')).toBeNull()
+    expect(parseEndpoint('host:80.5')).toBeNull()
   })
 })
 

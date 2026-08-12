@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onBeforeUnmount, ref, watch, type VNode, type VNodeChild } from 'vue'
-import { NSelect, NButton, NTooltip, NModal, NInput, useMessage } from 'naive-ui'
+import { NSelect, NButton, NTooltip, NModal, NInput, NInputNumber, useMessage } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { useSession, useOccupiedPorts } from '@/composables/useSession'
 import { storage } from '@/composables/useStorage'
@@ -25,7 +25,7 @@ const occupiedPorts = useOccupiedPorts()
 const tcpAvailable = !!window.electron?.tcp
 const transportOptions = computed(() => [
   { label: t('transport.serial'), value: 'serial' as const },
-  ...(tcpAvailable ? [{ label: 'TCP', value: 'tcp' as const }] : [])
+  ...(tcpAvailable ? [{ label: t('transport.tcp'), value: 'tcp' as const }] : [])
 ])
 
 // —— 参数栏收起（默认展开）——
@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
           :value="serial.tcpOptions.host"
           size="small"
           :placeholder="t('transport.tcpHost')"
-          style="width: 150px"
+          style="width: 130px"
           :disabled="serial.connected"
           @update:value="(v: string) => { serial.tcpOptions.host = v }"
         />
@@ -444,7 +444,8 @@ onBeforeUnmount(() => {
           :min="1"
           :max="65535"
           size="small"
-          style="width: 90px"
+          style="width: 110px"
+          :placeholder="t('transport.tcpPort')"
           :disabled="serial.connected"
           @update:value="(v: number | null) => { if (v != null) serial.tcpOptions.port = v }"
         />

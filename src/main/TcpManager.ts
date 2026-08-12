@@ -10,7 +10,10 @@ export function parseEndpoint(endpoint: string): { host: string; port: number } 
   const idx = endpoint.lastIndexOf(':')
   if (idx <= 0 || idx === endpoint.length - 1) return null
   const host = endpoint.slice(0, idx)
-  const port = Number(endpoint.slice(idx + 1))
+  const portStr = endpoint.slice(idx + 1)
+  // 仅接受十进制整数串（Number 会把 '0x50' 解析成 80，端口字面量不应带进制）
+  if (!/^\d+$/.test(portStr)) return null
+  const port = Number(portStr)
   if (!host || !Number.isInteger(port) || port < 1 || port > 65535) return null
   return { host, port }
 }
@@ -90,7 +93,7 @@ export class TcpManager {
     // 先删 entry 再触发 close——'close' 事件回调查不到 entry，不会误报「已断开」
     this._conns.delete(endpoint)
     try {
-      entry.socket.end()
+      // destroy() 立即断开；end() 的优雅 FIN 等待对调试工具无意义，且与 destroy 连调用法冗余
       entry.socket.destroy()
     } catch {
       /* 连接可能已断开，忽略 */

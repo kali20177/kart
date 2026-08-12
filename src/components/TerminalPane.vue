@@ -54,6 +54,14 @@ const showDroppedBar = computed(() => terminal.droppedLines > 0 && !droppedBarDi
 /** 调试：原始 RX 字节 hex 视图 */
 const showRaw = ref(false)
 
+// 直通模式底部提示：按回显状态差异化——对端无回显（如 nc）且本地回显关闭时，
+// 按键虽然已发送但屏幕不可见，必须提示原因并给出去向（工具栏「回显」开关）。
+const charHint = computed(() => {
+  if (!serial.connected) return t('terminal.needConnect')
+  return terminal.echo ? t('terminal.inputCharHintEcho') : t('terminal.inputCharHintNoEcho')
+})
+const charHintWarn = computed(() => serial.connected && !terminal.echo)
+
 /** 首次挂载：xterm.open + FitAddon + 跟随滚动监听 */
 function ensureOpen() {
   if (opened || !termHost.value) return
@@ -227,8 +235,8 @@ watch(
     </div>
 
     <TerminalInput v-if="terminal.mode === 'line'" ref="inputRef" />
-    <div v-else class="char-hint">
-      {{ serial.connected ? t('terminal.inputCharHint') : t('terminal.needConnect') }}
+    <div v-else class="char-hint" :class="{ warn: charHintWarn }">
+      {{ charHint }}
     </div>
   </div>
 </template>
@@ -338,6 +346,11 @@ watch(
   color: var(--text-dim);
   font-size: 12px;
   text-align: center;
+}
+/* 回显关闭：输入对用户不可见，用警示色提示去向（区别于普通提示） */
+.char-hint.warn {
+  color: var(--warn);
+  border-top-color: var(--warn);
 }
 .fade-enter-active,
 .fade-leave-active {
