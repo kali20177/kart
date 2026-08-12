@@ -1,4 +1,4 @@
-import type { MockScenarioId, PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, IoTransport, PortOptions, SerialSignals, DriverType, MockScenarioId } from '@/types'
 import {
   atResponse,
   binaryFrame,
@@ -14,7 +14,8 @@ import {
 } from './scenarios'
 
 /** 模拟串口源：用定时器代替真实硬件，提供多种调试场景 */
-export class MockSerialSource implements SerialDriver {
+export class MockSerialSource implements IoTransport {
+  readonly type: DriverType = 'mock'
   private listeners = new Set<(bytes: Uint8Array) => void>()
   private timer: ReturnType<typeof setInterval> | null = null
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
@@ -30,7 +31,7 @@ export class MockSerialSource implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<PortInfo[]> {
+  async listEndpoints(): Promise<EndpointInfo[]> {
     // 造假的完整元数据，用于开发模式预览下拉两行效果
     return [
       { path: 'COM3', manufacturer: 'QinHeng Electronics (CH340/CH341)', vendorId: '1a86', productId: '7523' },

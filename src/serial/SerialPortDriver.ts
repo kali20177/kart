@@ -1,4 +1,4 @@
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, IoTransport, PortOptions, SerialSignals, DriverType } from '@/types'
 
 /**
  * serialport 驱动 —— 通过 IPC 委托主进程的 serialport 库执行串口操作。
@@ -11,7 +11,8 @@ import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types
  *   - getSignals 返回真实 DCD/CTS/DSR/RI 状态
  *   - native bindings prebuilt，跨平台，无本机 C++ 工具链依赖
  */
-export class SerialPortDriver implements SerialDriver {
+export class SerialPortDriver implements IoTransport {
+  readonly type: DriverType = 'serialport'
   private _isOpen = false
   private _openPath: string | null = null
   private _listeners = new Set<(bytes: Uint8Array) => void>()
@@ -24,7 +25,7 @@ export class SerialPortDriver implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<PortInfo[]> {
+  async listEndpoints(): Promise<EndpointInfo[]> {
     const api = this._api()
     if (!api) return []
     try {
@@ -165,7 +166,7 @@ export class SerialPortDriver implements SerialDriver {
 
 /** 预加载脚本暴露的 serial API 类型 */
 export interface ElectronSerial {
-  listPorts(): Promise<PortInfo[]>
+  listPorts(): Promise<EndpointInfo[]>
   open(portName: string, options: PortOptions): Promise<void>
   close(portName: string): Promise<void>
   write(portName: string, data: Uint8Array): Promise<number>

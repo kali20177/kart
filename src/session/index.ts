@@ -1,5 +1,5 @@
 import { effectScope, reactive, ref, watch, type UnwrapNestedRefs } from 'vue'
-import type { AppSettings, DataMode, SerialDriver } from '@/types'
+import type { AppSettings, DataMode, IoTransport } from '@/types'
 import type { DecoderConfig } from '@/decoders/types'
 import { DEFAULT_DECODER_CONFIG } from '@/decoders'
 import { storage } from '@/composables/useStorage'
@@ -15,7 +15,7 @@ import { createFreshSerialDriver } from '@/serial'
 
 /** 创建会话时的可覆盖依赖（主要为测试注入 mock 驱动）。 */
 export interface SessionOverrides {
-  createDriver?: () => SerialDriver
+  createDriver?: () => IoTransport
 }
 
 /**

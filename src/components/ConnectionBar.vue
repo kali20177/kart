@@ -7,7 +7,7 @@ import { storage } from '@/composables/useStorage'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
-import type { MockScenarioId, PortInfo } from '@/types'
+import type { MockScenarioId, EndpointInfo, TransportType } from '@/types'
 
 const isDev = import.meta.env.DEV
 
@@ -20,6 +20,13 @@ const message = useMessage()
 const tipStyle = 'font-size:12px;line-height:1.5;padding:4px 8px;max-width:280px'
 
 const occupiedPorts = useOccupiedPorts()
+
+// 传输类型选择：串口 / TCP。TCP 仅 Electron 环境可用（依赖主进程 net 模块）
+const tcpAvailable = !!window.electron?.tcp
+const transportOptions = computed(() => [
+  { label: t('transport.serial'), value: 'serial' as const },
+  ...(tcpAvailable ? [{ label: 'TCP', value: 'tcp' as const }] : [])
+])
 
 // —— 参数栏收起（默认展开）——
 // 收起隐藏端口/波特率等参数控件，腾出数据显示高度；状态按端口持久化，
@@ -46,7 +53,7 @@ const portOptions = computed(() =>
 )
 
 /** 端口下拉第二行：厂商名 + VID/PID。触发框（selected）只显示路径，元数据降级到菜单项。 */
-function formatPortMeta(p: PortInfo): string {
+function formatPortMeta(p: EndpointInfo): string {
   const id = p.vendorId && p.productId ? `VID:${p.vendorId} PID:${p.productId}` : p.vendorId ? `VID:${p.vendorId}` : ''
   return [p.manufacturer, id].filter(Boolean).join(' · ')
 }
@@ -315,6 +322,18 @@ onBeforeUnmount(() => {
   <div class="bar" :class="{ collapsed }">
     <!-- 展开态：完整参数控件 -->
     <template v-if="!collapsed">
+      <!-- 传输类型选择器：串口 / TCP（TCP 仅 Electron） -->
+      <NSelect
+        :value="serial.transportType"
+        :options="transportOptions"
+        size="small"
+        style="width: 88px"
+        :disabled="serial.connected"
+        @update:value="(v: TransportType) => serial.setTransport(v)"
+      />
+
+      <!-- 串口传输：端口/波特率/数据位/校验/停止位 + mock 场景 -->
+      <template v-if="serial.transportType === 'serial'">
       <NSelect
         v-model:value="serial.selectedPort"
         :options="portOptions"
@@ -407,6 +426,29 @@ onBeforeUnmount(() => {
           style="width: 150px"
           @update:value="(v: MockScenarioId) => serial.setScenario(v)"
         />
+      </template>
+      </template>
+
+      <!-- TCP 传输：主机 + 端口 -->
+      <template v-else>
+        <NInput
+          :value="serial.tcpOptions.host"
+          size="small"
+          :placeholder="t('transport.tcpHost')"
+          style="width: 150px"
+          :disabled="serial.connected"
+          @update:value="(v: string) => { serial.tcpOptions.host = v }"
+        />
+        <NInputNumber
+          :value="serial.tcpOptions.port"
+          :min="1"
+          :max="65535"
+          size="small"
+          style="width: 90px"
+          :disabled="serial.connected"
+          @update:value="(v: number | null) => { if (v != null) serial.tcpOptions.port = v }"
+        />
+        <span class="tcp-hint">{{ t('transport.tcpHint') }}</span>
       </template>
     </template>
 
@@ -530,6 +572,11 @@ onBeforeUnmount(() => {
 .mock-label {
   font-size: 12px;
   color: var(--text-dim);
+}
+.tcp-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.85;
 }
 
 /* —— REC 胶囊录制按钮 —— */

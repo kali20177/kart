@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createSession, type Session } from '@/session'
 import { setDriverType } from '@/serial'
@@ -174,6 +174,46 @@ describe('createSession · 帧解码（会话级配置 + 端口持久化）', ()
     await b.serial.refreshPorts() // COM3 → 应载入 enabled=true
     expect(b.decoder.enabled).toBe(true)
     b.dispose()
+  })
+})
+
+describe('createSession · TCP 传输', () => {
+  it('setTransport(tcp) → 端点连接 → 远端字节流入消息列表（假 bridge 注入）', async () => {
+    // 假 electron.tcp 桥：内存 handler 集合，测试侧可注入远端字节
+    const dataHandlers = new Set<(data: Uint8Array, id: string) => void>()
+    const fakeTcp = {
+      open: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+      write: vi.fn(async () => {}),
+      onData: vi.fn((h: (data: Uint8Array, id: string) => void) => {
+        dataHandlers.add(h)
+        return () => { dataHandlers.delete(h) }
+      }),
+      onError: vi.fn(() => () => {})
+    }
+    const prevElectron = window.electron
+    // jsdom 下无 electron：仅注入 tcp 段（TcpDriver 经 window.electron?.tcp 取桥）
+    window.electron = { tcp: fakeTcp } as unknown as NonNullable<typeof window.electron>
+    try {
+      const session = makeSession(new MockSerialSource())
+      await session.serial.setTransport('tcp')
+      expect(session.serial.transportType).toBe('tcp')
+      session.serial.tcpOptions.host = '192.168.1.5'
+      session.serial.tcpOptions.port = 502
+      await session.serial.connect()
+      expect(session.serial.connected).toBe(true)
+      // TCP 端点统一写入 selectedPort（显示/录制/decoder-config 键共用）
+      expect(session.serial.selectedPort).toBe('192.168.1.5:502')
+
+      // 假 bridge 注入远端字节 → 消息列表
+      for (const h of dataHandlers) h(new Uint8Array([0xaa, 0x55, 0x12, 0x34]), '192.168.1.5:502')
+      await waitForMessages(session, 1)
+      expect(Array.from(session.messages.messages[0].bytes)).toEqual([0xaa, 0x55, 0x12, 0x34])
+
+      await session.serial.disconnect()
+    } finally {
+      window.electron = prevElectron
+    }
   })
 })
 

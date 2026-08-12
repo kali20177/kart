@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { effectScope } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSerialStore, createSerialStore, type SerialDeps } from './serial'
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, PortOptions, SerialSignals, IoTransport, DriverType } from '@/types'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
 
 const KEY = STORAGE_PREFIX + 'customBaudRates'
@@ -89,12 +89,13 @@ describe('serial store · reset', () => {
 // ── 输出线控制（DTR/RTS/Break）──
 
 /** 记录调用痕迹的假驱动：setSignals/setBreak 写入 observable 状态供断言 */
-class FakeDriver implements SerialDriver {
+class FakeDriver implements IoTransport {
+  readonly type: DriverType = 'serialport'
   isOpen = false
   signals: { dtr?: boolean; rts?: boolean } = {}
   break: boolean | null = null
 
-  listPorts = async (): Promise<PortInfo[]> => []
+  listEndpoints = async (): Promise<EndpointInfo[]> => []
   open = async (_path: string, _options: PortOptions): Promise<void> => {
     this.isOpen = true
   }

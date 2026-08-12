@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { SerialPortManager } from './SerialPortManager'
+import { TcpManager } from './TcpManager'
 import { PtyManager } from './PtyManager'
 import { JsonStore } from './JsonStore'
 import { mainLogger } from './logger'
@@ -209,6 +210,9 @@ const _serialManagers = new Map<number, SerialPortManager>()
 // 每个窗口对应一个管理器（用于把 pty 输出推回本窗口渲染进程）
 const _ptyManagers = new Map<number, PtyManager>()
 
+// ── TCP client（net 模块，每个窗口一个管理器，按端点管理多个连接）──
+const _tcpManagers = new Map<number, TcpManager>()
+
 /** 注册本地 pty 终端 IPC handlers */
 function registerPtyIpc(): void {
   // 启动一个本地 shell（渲染端以固定 id 连接）
@@ -238,6 +242,38 @@ function registerPtyIpc(): void {
   // 关闭 pty
   ipcMain.handle('pty:close', (event, id: string) => {
     _ptyManagers.get(BrowserWindow.fromWebContents(event.sender)?.id ?? -1)?.close(id)
+  })
+}
+
+/** 注册 TCP client 相关 IPC handlers（endpoint = "host:port"） */
+function registerTcpIpc(): void {
+  // 连接远端
+  ipcMain.handle('tcp:open', async (event, endpoint: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _tcpManagers.get(win.id) : null
+    if (!mgr) throw new Error('TCP 管理器不可用')
+    try {
+      await mgr.open(endpoint)
+      mainLogger.info('tcp', `connected: ${endpoint}`)
+    } catch (e) {
+      mainLogger.error('tcp', `connect failed: ${endpoint}: ${e instanceof Error ? e.message : String(e)}`)
+      throw e
+    }
+  })
+
+  // 关闭连接
+  ipcMain.handle('tcp:close', (event, endpoint: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _tcpManagers.get(win.id) : null
+    mgr?.close(endpoint)
+  })
+
+  // 写入数据
+  ipcMain.handle('tcp:write', async (event, endpoint: string, data: Uint8Array) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _tcpManagers.get(win.id) : null
+    if (!mgr) throw new Error('TCP 管理器不可用')
+    await mgr.write(endpoint, Buffer.from(data))
   })
 }
 
@@ -366,6 +402,8 @@ function createWindow(): void {
   _serialManagers.set(win.id, new SerialPortManager(win))
   // 创建本地 pty 管理器（本地终端验证用）
   _ptyManagers.set(win.id, new PtyManager(win))
+  // 创建 TCP 管理器（TCP client 连接，多会话按端点管理）
+  _tcpManagers.set(win.id, new TcpManager(win))
 
   // 转发渲染进程 console 到日志文件（保留源码位置便于定位）
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
@@ -396,6 +434,8 @@ function createWindow(): void {
     _serialManagers.delete(win.id)
     _ptyManagers.get(win.id)?.destroy()
     _ptyManagers.delete(win.id)
+    _tcpManagers.get(win.id)?.destroy()
+    _tcpManagers.delete(win.id)
   })
 
   if (devServerUrl) {
@@ -421,6 +461,7 @@ app.whenReady().then(() => {
   registerRecorderIpc()
   registerSerialPortIpc()
   registerPtyIpc()
+  registerTcpIpc()
   registerLoggerIpc()
   registerPersistIpc(jsonStore)
   configureWebSerial()

@@ -1,12 +1,23 @@
-import type { SerialDriver } from '@/types'
+import type { IoTransport, DriverType } from '@/types'
 import { WebSerialDriver } from './WebSerialDriver'
 import { SerialPortDriver } from './SerialPortDriver'
 import { PtyDriver } from './PtyDriver'
+import { TcpDriver } from './TcpDriver'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { UnsupportedDriver } from './UnsupportedDriver'
+import { registerTransport, getTransportDef } from './registry'
 import { logger } from '@/utils/logger'
 
-export type DriverType = 'mock' | 'webserial' | 'serialport' | 'pty' | 'unsupported'
+export type { DriverType } from '@/types'
+
+// ── 内置传输注册（导入即注册，镜像 decoders 模式）──
+registerTransport({ type: 'serialport', create: () => new SerialPortDriver() })
+registerTransport({ type: 'webserial', create: () => new WebSerialDriver() })
+registerTransport({ type: 'tcp', create: () => new TcpDriver() })
+registerTransport({ type: 'mock', create: () => new MockSerialSource() })
+registerTransport({ type: 'pty', create: () => new PtyDriver() })
+registerTransport({ type: 'unsupported', create: () => new UnsupportedDriver() })
+
 export type UnsupportedReason = 'insecure-context' | 'no-web-serial'
 
 interface ResolveEnv {
@@ -103,31 +114,20 @@ export function setDriverType(type: DriverType): void {
   logger.info('serial', `driver switched (DEV): ${type}`)
 }
 
-let _driver: SerialDriver | null = null
+let _driver: IoTransport | null = null
 
 /** 按驱动类型创建实例（无缓存）。per-session 路径与测试用。 */
-export function createDriverOfType(type: DriverType): SerialDriver {
-  switch (type) {
-    case 'serialport':
-      return new SerialPortDriver()
-    case 'pty':
-      return new PtyDriver()
-    case 'webserial':
-      return new WebSerialDriver()
-    case 'mock':
-      return new MockSerialSource()
-    default:
-      return new UnsupportedDriver()
-  }
+export function createDriverOfType(type: DriverType): IoTransport {
+  return getTransportDef(type)?.create() ?? new UnsupportedDriver()
 }
 
 /** 创建当前环境类型的新驱动实例（无缓存）——每个会话一个独立实例。 */
-export function createFreshSerialDriver(): SerialDriver {
+export function createFreshSerialDriver(): IoTransport {
   return createDriverOfType(getDriverType())
 }
 
 /** 创建或获取当前驱动实例（模块级缓存） */
-export function createSerialDriver(): SerialDriver {
+export function createSerialDriver(): IoTransport {
   if (_driver) return _driver
   _driver = createDriverOfType(getDriverType())
   return _driver

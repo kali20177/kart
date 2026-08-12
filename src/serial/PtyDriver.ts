@@ -1,4 +1,4 @@
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, IoTransport, PortOptions, SerialSignals, DriverType } from '@/types'
 
 /** PtyDriver 连接使用的固定端口路径（与主进程 PtyManager 约定一致） */
 const PTY_PORT_PATH = 'local-shell'
@@ -13,7 +13,8 @@ const INITIAL_ROWS = 24
  * 真实行编辑、ANSI 色彩、vim/nano 全屏（尺寸经 setSize 同步给 shell 的 stty）。
  * 输出为 UTF-8 字符串经 TextEncoder 转字节流入 onData，输入同理解码。
  */
-export class PtyDriver implements SerialDriver {
+export class PtyDriver implements IoTransport {
+  readonly type: DriverType = 'pty'
   private _isOpen = false
   private _listeners = new Set<(bytes: Uint8Array) => void>()
   private _unsubData: (() => void) | null = null
@@ -25,7 +26,7 @@ export class PtyDriver implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<PortInfo[]> {
+  async listEndpoints(): Promise<EndpointInfo[]> {
     return [{ path: PTY_PORT_PATH, manufacturer: '本地终端 (node-pty)' }]
   }
 

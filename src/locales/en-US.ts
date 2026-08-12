@@ -503,4 +503,11 @@ export default {
     fieldHint: 'Blank offset continues from the end of the previous field (first = 0). Fields render as a chip block above the raw frame.',
     modbusHint: 'Modbus RTU: matches when frame length ≥ 8 and CRC16 valid; parses slave address / function code / registers / CRC.',
   },
+  transport: {
+    serial: 'Serial',
+    tcp: 'TCP',
+    tcpHost: 'Host / IP',
+    tcpPort: 'Port',
+    tcpHint: 'Enter host and port before connecting',
+  },
 }

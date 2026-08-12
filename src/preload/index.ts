@@ -33,6 +33,20 @@ ipcRenderer.on('pty:exit', (_e, payload: { id: string; exitCode: number; signal?
   for (const h of ptyExitHandlers) h(payload.id)
 })
 
+// ── TCP 连接数据事件 ──
+// 主进程通过 webContents.send('tcp:data'/'tcp:error', { id, ... }) 推送（id=端点 "host:port"），
+// 形态与 serial 完全一致（Uint8Array 字节 + Set 转发），仅事件名与路由字段名不同。
+type TcpDataHandler = (data: Uint8Array, id: string) => void
+type TcpErrorHandler = (msg: string, id: string) => void
+const tcpDataHandlers = new Set<TcpDataHandler>()
+const tcpErrorHandlers = new Set<TcpErrorHandler>()
+ipcRenderer.on('tcp:data', (_e, payload: { id: string; data: Uint8Array }) => {
+  for (const h of tcpDataHandlers) h(payload.data, payload.id)
+})
+ipcRenderer.on('tcp:error', (_e, payload: { id: string; msg: string }) => {
+  for (const h of tcpErrorHandlers) h(payload.msg, payload.id)
+})
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   versions: process.versions,
@@ -122,6 +136,34 @@ contextBridge.exposeInMainWorld('electron', {
     onExit: (handler: PtyExitHandler) => {
       ptyExitHandlers.add(handler)
       return () => { ptyExitHandlers.delete(handler) }
+    }
+  },
+
+  // ── TCP client（主进程 net 模块，仅 Electron）──
+  // 端点统一为 "host:port" 字符串；字节流形态与 serial 一致（Uint8Array 载荷）。
+  tcp: {
+    /** 连接远端（host:port），返回连接错误信息或 null */
+    open: (endpoint: string) =>
+      ipcRenderer.invoke('tcp:open', endpoint),
+
+    /** 关闭连接 */
+    close: (endpoint: string) =>
+      ipcRenderer.invoke('tcp:close', endpoint),
+
+    /** 写入字节 */
+    write: (endpoint: string, data: Uint8Array) =>
+      ipcRenderer.invoke('tcp:write', endpoint, data),
+
+    /** 注册数据接收回调，返回取消订阅函数 */
+    onData: (handler: TcpDataHandler) => {
+      tcpDataHandlers.add(handler)
+      return () => { tcpDataHandlers.delete(handler) }
+    },
+
+    /** 注册错误/断连回调，返回取消订阅函数 */
+    onError: (handler: TcpErrorHandler) => {
+      tcpErrorHandlers.add(handler)
+      return () => { tcpErrorHandlers.delete(handler) }
     }
   },
 

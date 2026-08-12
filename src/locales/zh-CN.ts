@@ -513,4 +513,11 @@ export default {
     fieldHint: '偏移留空时自动接续上一字段末尾（首个为 0）。字段按序渲染为气泡上方的字段块。',
     modbusHint: 'Modbus RTU：帧长 ≥8 且 CRC16 校验通过即匹配，自动解析从站地址/功能码/寄存器/CRC。',
   },
+  transport: {
+    serial: '串口',
+    tcp: 'TCP',
+    tcpHost: '主机 / IP',
+    tcpPort: '端口',
+    tcpHint: '连接前填写主机与端口',
+  },
 }

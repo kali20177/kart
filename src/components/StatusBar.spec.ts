@@ -7,15 +7,16 @@ import StatusBar from './StatusBar.vue'
 import { createSession, type Session } from '@/session'
 import { provideSession } from '@/composables/useSession'
 import { i18n } from '@/i18n'
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, PortOptions, SerialSignals, IoTransport, DriverType } from '@/types'
 
 /** 记录调用痕迹的假驱动：setSignals/setBreak 写入 observable 状态供断言 */
-class FakeDriver implements SerialDriver {
+class FakeDriver implements IoTransport {
+  readonly type: DriverType = 'serialport'
   isOpen = false
   signals: { dtr?: boolean; rts?: boolean } = {}
   break: boolean | null = null
 
-  listPorts = async (): Promise<PortInfo[]> => []
+  listEndpoints = async (): Promise<EndpointInfo[]> => []
   open = async (_path: string, _options: PortOptions): Promise<void> => {
     this.isOpen = true
   }
@@ -37,7 +38,7 @@ class FakeDriver implements SerialDriver {
 let wrappers: VueWrapper[] = []
 let sessions: Session[] = []
 
-function mountStatusBar(driver: SerialDriver) {
+function mountStatusBar(driver: IoTransport) {
   setActivePinia(createPinia())
   const session = createSession({ createDriver: () => driver })
   sessions.push(session)

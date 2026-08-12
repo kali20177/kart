@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { resolveDriverType } from '@/serial'
+import { resolveDriverType, createDriverOfType } from '@/serial'
+import type { DriverType } from '@/types'
 
 describe('resolveDriverType', () => {
   it('Electron + DEV ?pty -> pty（本地终端，优先级最高，压过 serialport 与 ?mock）', () => {
@@ -32,5 +33,15 @@ describe('resolveDriverType', () => {
   it('安全上下文但无 Web Serial -> unsupported (no-web-serial)', () => {
     expect(resolveDriverType({ isElectron: false, isDevMock: false, isDevPty: false, isSecureContext: true, hasWebSerial: false }))
       .toEqual({ type: 'unsupported', reason: 'no-web-serial' })
+  })
+})
+
+describe('createDriverOfType', () => {
+  it('tcp -> TcpDriver（type=tcp；tcp 是用户切换的传输，不经环境解析）', () => {
+    expect(createDriverOfType('tcp').type).toBe('tcp')
+  })
+
+  it('未知类型兜底 unsupported', () => {
+    expect(createDriverOfType('no-such' as DriverType).type).toBe('unsupported')
   })
 })

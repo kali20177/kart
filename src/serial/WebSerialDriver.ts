@@ -1,4 +1,4 @@
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, IoTransport, PortOptions, SerialSignals, DriverType } from '@/types'
 import { lookupVendorName, toHexId } from '@/utils/usb-vendors'
 import { logger } from '@/utils/logger'
 
@@ -8,7 +8,8 @@ interface PortEntry {
   onDisconnect: () => void
 }
 
-export class WebSerialDriver implements SerialDriver {
+export class WebSerialDriver implements IoTransport {
+  readonly type: DriverType = 'webserial'
   private _entries: PortEntry[] = []
   private _listeners = new Set<(bytes: Uint8Array) => void>()
   private _port: SerialPort | null = null
@@ -29,13 +30,13 @@ export class WebSerialDriver implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<PortInfo[]> {
+  async listEndpoints(): Promise<EndpointInfo[]> {
     await this._restorePromise
     // 重新拉取已授权端口：设备拔出后重新接入，getPorts() 仍会返回同一授权
-    // SerialPort 对象。_addEntry 内部已做去重（按 key），故每次 listPorts 自愈列表，
+    // SerialPort 对象。_addEntry 内部已做去重（按 key），故每次 listEndpoints 自愈列表，
     // 让「自动重连」轮询 refreshPorts() 时能重新发现归位设备。
     await this._restorePorts()
-    return this._entries.map((e) => this._toPortInfo(e.port, e.key))
+    return this._entries.map((e) => this._toEndpointInfo(e.port, e.key))
   }
 
   /** 触发浏览器串口选择器，返回新端口的标识字符串。用户取消返回 null。 */
@@ -162,7 +163,7 @@ export class WebSerialDriver implements SerialDriver {
 
   // ── private ──
 
-  private _toPortInfo(port: SerialPort, key: string): PortInfo {
+  private _toEndpointInfo(port: SerialPort, key: string): EndpointInfo {
     try {
       const info = port.getInfo()
       const vendorId = info.usbVendorId ? toHexId(info.usbVendorId) : undefined
