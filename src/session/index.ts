@@ -176,5 +176,8 @@ export function createSession(overrides: SessionOverrides = {}): Session {
   })!
 
   const id = _nextSessionId++
-  return { id, ...stores, dispose: () => scope.stop() }
+  // 整包 reactive()：让 session 自身就是响应式 proxy，不依赖调用方容器（ref 数组）
+  // 深包装。此前返回 { id, ...stores } 普通对象——spread reactive 会解包顶层 ref，
+  // 会话 2 经 dockview params 传递时拿到非响应式副本，composer 等 UI 不再随状态更新。
+  return reactive({ id, ...stores, dispose: () => scope.stop() })
 }

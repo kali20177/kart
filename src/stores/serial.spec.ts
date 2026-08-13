@@ -199,3 +199,62 @@ describe('serial store · 输出线控制（DTR/RTS/Break）', () => {
     scope.stop()
   })
 })
+
+// ── 写失败提前断连 ──
+
+describe('serial store · 写失败提前断连（驱动已报断开，轮询未到）', () => {
+  it('write 失败且 driver.isOpen=false → 立即断连并排程重连，而非等 500ms 轮询', async () => {
+    // 自定义驱动：write 失败并报告物理断开（模拟远端断连后的窗口期）
+    class DroppedDriver extends FakeDriver {
+      override write = async (): Promise<void> => {
+        throw new Error('连接已断开')
+      }
+    }
+    const driver = new DroppedDriver()
+    const deps: SerialDeps = {
+      ingestRx: () => {},
+      addTx: () => {},
+      settings: { autoReconnect: true },
+      createDriver: () => driver
+    }
+    const scope = effectScope(true)
+    const store = scope.run(() => createSerialStore(deps))!
+    store.selectedPort.value = 'COM1'
+    await store.connect()
+    expect(store.connected.value).toBe(true)
+
+    // 模拟远端断连：驱动已报告 isOpen=false（signalTimer 500ms 轮询尚未触发）
+    driver.isOpen = false
+    const r = await store.send('hello', 'ascii', 'none', 'utf-8')
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('连接已断开')
+    // 提前断连：UI 状态立即恢复 + 自动重连已排程（disconnect 异步，flush 一次宏任务）
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(store.connected.value).toBe(false)
+    expect(store.reconnecting.value).toBe(true)
+    scope.stop()
+  })
+})
+
+// ── 驱动切换销毁（destroy?() 可选契约）──
+
+describe('serial store · 切换驱动时旧驱动销毁', () => {
+  it('旧驱动实现 destroy → 切换时被调用（不再依赖 instanceof 白名单）', async () => {
+    class DestroyableDriver extends FakeDriver {
+      destroyed = false
+      destroy = () => { this.destroyed = true }
+    }
+    const driver = new DestroyableDriver()
+    const { store, scope } = makeStore(driver)
+    await store.switchDriver('tcp')
+    expect(driver.destroyed).toBe(true)
+    scope.stop()
+  })
+
+  it('旧驱动未实现 destroy → 可选链跳过，不抛错', async () => {
+    const driver = new FakeDriver() // FakeDriver 无 destroy 方法
+    const { store, scope } = makeStore(driver)
+    await expect(store.switchDriver('tcp')).resolves.toBeUndefined()
+    scope.stop()
+  })
+})

@@ -34,8 +34,9 @@ ipcRenderer.on('pty:exit', (_e, payload: { id: string; exitCode: number; signal?
 })
 
 // ── TCP 连接数据事件 ──
-// 主进程通过 webContents.send('tcp:data'/'tcp:error', { id, ... }) 推送（id=端点 "host:port"），
+// 主进程通过 webContents.send('tcp:data'/'tcp:error', { id, ... }) 推送（id=主进程分配的 connId），
 // 形态与 serial 完全一致（Uint8Array 字节 + Set 转发），仅事件名与路由字段名不同。
+// 同一端点可开多个连接：每个连接有独立 connId，渲染端各驱动实例按自己的 connId 过滤。
 type TcpDataHandler = (data: Uint8Array, id: string) => void
 type TcpErrorHandler = (msg: string, id: string) => void
 const tcpDataHandlers = new Set<TcpDataHandler>()
@@ -140,19 +141,19 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   // ── TCP client（主进程 net 模块，仅 Electron）──
-  // 端点统一为 "host:port" 字符串；字节流形态与 serial 一致（Uint8Array 载荷）。
+  // 端点统一为 "host:port" 字符串；open 返回主进程分配的 connId，后续读写/事件按 connId 路由。
   tcp: {
-    /** 连接远端（host:port），返回连接错误信息或 null */
+    /** 连接远端（host:port），返回主进程分配的连接 id（connId） */
     open: (endpoint: string) =>
-      ipcRenderer.invoke('tcp:open', endpoint),
+      ipcRenderer.invoke('tcp:open', endpoint) as Promise<string>,
 
-    /** 关闭连接 */
-    close: (endpoint: string) =>
-      ipcRenderer.invoke('tcp:close', endpoint),
+    /** 关闭指定连接（connId） */
+    close: (connId: string) =>
+      ipcRenderer.invoke('tcp:close', connId),
 
-    /** 写入字节 */
-    write: (endpoint: string, data: Uint8Array) =>
-      ipcRenderer.invoke('tcp:write', endpoint, data),
+    /** 写入字节到指定连接（connId） */
+    write: (connId: string, data: Uint8Array) =>
+      ipcRenderer.invoke('tcp:write', connId, data),
 
     /** 注册数据接收回调，返回取消订阅函数 */
     onData: (handler: TcpDataHandler) => {

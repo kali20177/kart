@@ -245,35 +245,36 @@ function registerPtyIpc(): void {
   })
 }
 
-/** 注册 TCP client 相关 IPC handlers（endpoint = "host:port"） */
+/** 注册 TCP client 相关 IPC handlers（endpoint = "host:port"，连接以 connId 路由） */
 function registerTcpIpc(): void {
-  // 连接远端
+  // 连接远端，返回主进程分配的 connId
   ipcMain.handle('tcp:open', async (event, endpoint: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const mgr = win ? _tcpManagers.get(win.id) : null
     if (!mgr) throw new Error('TCP 管理器不可用')
     try {
-      await mgr.open(endpoint)
-      mainLogger.info('tcp', `connected: ${endpoint}`)
+      const connId = await mgr.open(endpoint)
+      mainLogger.info('tcp', `connected: ${endpoint} (${connId})`)
+      return connId
     } catch (e) {
       mainLogger.error('tcp', `connect failed: ${endpoint}: ${e instanceof Error ? e.message : String(e)}`)
       throw e
     }
   })
 
-  // 关闭连接
-  ipcMain.handle('tcp:close', (event, endpoint: string) => {
+  // 关闭指定连接（connId）
+  ipcMain.handle('tcp:close', (event, connId: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const mgr = win ? _tcpManagers.get(win.id) : null
-    mgr?.close(endpoint)
+    mgr?.close(connId)
   })
 
-  // 写入数据
-  ipcMain.handle('tcp:write', async (event, endpoint: string, data: Uint8Array) => {
+  // 写入数据到指定连接（connId）
+  ipcMain.handle('tcp:write', async (event, connId: string, data: Uint8Array) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const mgr = win ? _tcpManagers.get(win.id) : null
     if (!mgr) throw new Error('TCP 管理器不可用')
-    await mgr.write(endpoint, Buffer.from(data))
+    await mgr.write(connId, Buffer.from(data))
   })
 }
 

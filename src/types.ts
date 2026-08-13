@@ -104,6 +104,8 @@ export interface IoTransport {
   setBreak?(active: boolean): Promise<void>
   /** 更新终端视口尺寸（pty 等支持 resize 的驱动；serialport/web serial 无此能力，忽略调用）。 */
   setSize?(cols: number, rows: number): Promise<void>
+  /** 销毁驱动释放本地资源（serialport/webserial/tcp 持有端口/socket 句柄；无资源者可不实现）。 */
+  destroy?(): void
   /** 订阅接收数据，返回取消订阅函数 */
   onData(cb: (bytes: Uint8Array) => void): () => void
   readonly isOpen: boolean

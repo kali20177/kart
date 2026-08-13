@@ -21,8 +21,9 @@ const tipStyle = 'font-size:12px;line-height:1.5;padding:4px 8px;max-width:280px
 
 const occupiedPorts = useOccupiedPorts()
 
-// 传输类型选择：串口 / TCP。TCP 仅 Electron 环境可用（依赖主进程 net 模块）
-const tcpAvailable = !!window.electron?.tcp
+// 传输类型选择：串口 / TCP。TCP 实际收发依赖主进程 net 桥（Electron）；
+// DEV 下放开选择——浏览器开发态可预览 UI/校验流程，无桥时连接会明确报「TCP 不可用」。
+const tcpAvailable = isDev || !!window.electron?.tcp
 const transportOptions = computed(() => [
   { label: t('transport.serial'), value: 'serial' as const },
   ...(tcpAvailable ? [{ label: t('transport.tcp'), value: 'tcp' as const }] : [])
@@ -447,7 +448,7 @@ onBeforeUnmount(() => {
           style="width: 110px"
           :placeholder="t('transport.tcpPort')"
           :disabled="serial.connected"
-          @update:value="(v: number | null) => { if (v != null) serial.tcpOptions.port = v }"
+          @update:value="(v: number | null) => { serial.tcpOptions.port = v }"
         />
         <span class="tcp-hint">{{ t('transport.tcpHint') }}</span>
       </template>

@@ -203,7 +203,7 @@ async function onBreak() {
     <span v-else class="port" :class="{ stale: hasSessionData && !serial.connected }">
       {{ serial.connected || hasSessionData ? serial.selectedPort : t('status.notConnected') }}
     </span>
-    <span v-if="serial.connected || hasSessionData" v-show="serial.driverType !== 'tcp'" class="summary" :class="{ stale: !serial.connected }">
+    <span v-if="(serial.connected || hasSessionData) && serial.driverType !== 'tcp'" class="summary" :class="{ stale: !serial.connected }">
       {{ serial.summary }}
     </span>
 

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { TcpDriver, type ElectronTcp } from './TcpDriver'
 
-/** 假 electron.tcp 桥：内存 handler 集合，测试侧可注入远端字节/断连事件 */
+/** 假 electron.tcp 桥：内存 handler 集合，测试侧可注入远端字节/断连事件。
+ *  open 返回主进程分配的连接 id（connId），后续事件/读写按 connId 路由。 */
 function makeFakeTcp() {
   const dataHandlers = new Set<(data: Uint8Array, id: string) => void>()
   const errorHandlers = new Set<(msg: string, id: string) => void>()
   const api: ElectronTcp = {
-    open: vi.fn(async () => {}),
+    open: vi.fn(async (_endpoint: string) => 'conn-1'),
     close: vi.fn(async () => {}),
     write: vi.fn(async () => {}),
     onData: vi.fn((h) => {
@@ -45,40 +46,40 @@ describe('TcpDriver', () => {
     expect(await d.listEndpoints()).toEqual([])
   })
 
-  it('onData 仅转发本端点字节，其他端点事件丢弃（多会话隔离）', async () => {
+  it('onData 仅转发本连接（connId）字节，其他连接事件丢弃（多会话并发隔离）', async () => {
     const { api, dataHandlers } = makeFakeTcp()
     const d = new TcpDriver(api)
-    await d.open('h:1')
+    await d.open('h:1') // 假桥返回 conn-1
     const received: Uint8Array[] = []
     d.onData((b) => received.push(b))
 
-    for (const h of dataHandlers) h(new Uint8Array([1, 2]), 'h:1')
-    for (const h of dataHandlers) h(new Uint8Array([9, 9]), 'other:2') // 非本端点 → 丢弃
+    for (const h of dataHandlers) h(new Uint8Array([1, 2]), 'conn-1')
+    for (const h of dataHandlers) h(new Uint8Array([9, 9]), 'conn-2') // 其他连接 → 丢弃
     expect(received.length).toBe(1)
     expect(Array.from(received[0])).toEqual([1, 2])
     d.destroy()
   })
 
-  it('write 委托桥按端点写入字节', async () => {
+  it('write 委托桥按 connId 写入字节', async () => {
     const { api } = makeFakeTcp()
     const d = new TcpDriver(api)
     await d.open('h:1')
     await d.write(new Uint8Array([0xaa, 0x55]))
-    expect(api.write).toHaveBeenCalledWith('h:1', new Uint8Array([0xaa, 0x55]))
+    expect(api.write).toHaveBeenCalledWith('conn-1', new Uint8Array([0xaa, 0x55]))
     d.destroy()
   })
 
-  it('本端点断连（onError）→ isOpen=false 并停止监听；他端点断连不影响', async () => {
+  it('本连接断连（onError）→ isOpen=false 并停止监听；他连接断连不影响', async () => {
     const { api, dataHandlers, errorHandlers } = makeFakeTcp()
     const d = new TcpDriver(api)
     await d.open('h:1')
 
-    // 其他端点断连：与本实例无关，忽略
-    for (const h of errorHandlers) h('连接已断开', 'other:2')
+    // 其他连接断连：与本实例无关，忽略
+    for (const h of errorHandlers) h('连接已断开', 'conn-2')
     expect(d.isOpen).toBe(true)
 
-    // 本端点断连：标记断开并退订
-    for (const h of errorHandlers) h('连接已断开', 'h:1')
+    // 本连接断连：标记断开并退订
+    for (const h of errorHandlers) h('连接已断开', 'conn-1')
     expect(d.isOpen).toBe(false)
     // 退订后桥的 onData/onError handler 已移除（_stopListening 清空）
     expect(dataHandlers.size).toBe(0)
@@ -95,11 +96,11 @@ describe('TcpDriver', () => {
 
     await d.close()
     expect(d.isOpen).toBe(false)
-    expect(api.close).toHaveBeenCalledWith('h:1')
+    expect(api.close).toHaveBeenCalledWith('conn-1')
     expect(dataHandlers.size).toBe(0) // 已退订
 
-    // close 在途事件（若桥仍持有陈旧引用）因 _openEndpoint 置空而被过滤
-    for (const h of dataHandlers) h(new Uint8Array([0xff]), 'h:1')
+    // close 在途事件（若桥仍持有陈旧引用）因 _connId 置空而被过滤
+    for (const h of dataHandlers) h(new Uint8Array([0xff]), 'conn-1')
     expect(received.length).toBe(0)
     d.destroy()
   })
@@ -109,6 +110,6 @@ describe('TcpDriver', () => {
     const d = new TcpDriver(api)
     await d.open('h:1')
     d.destroy()
-    expect(api.close).toHaveBeenCalledWith('h:1')
+    expect(api.close).toHaveBeenCalledWith('conn-1')
   })
 })

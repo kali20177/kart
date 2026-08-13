@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { FitAddon } from '@xterm/addon-fit'
 import TerminalInput from './TerminalInput.vue'
 import { useSession } from '@/composables/useSession'
+import { resolveCharHintKind } from '@/utils/terminal-hint'
 
 /**
  * 终端视图：xterm 视口（内置 cell 网格/SGR/回滚/alt-screen）+ 工具栏 + 输入条。
@@ -54,13 +55,19 @@ const showDroppedBar = computed(() => terminal.droppedLines > 0 && !droppedBarDi
 /** 调试：原始 RX 字节 hex 视图 */
 const showRaw = ref(false)
 
-// 直通模式底部提示：按回显状态差异化——对端无回显（如 nc）且本地回显关闭时，
-// 按键虽然已发送但屏幕不可见，必须提示原因并给出去向（工具栏「回显」开关）。
+// 直通模式底部提示：仅 TCP 传输渲染（见 resolveCharHintKind）。串口设备回显无歧义，
+// 不显示提示；TCP 对端（如 nc）常无回显，本地回显关闭时输入不可见，必须警示。
+const isTcpTransport = computed(() => serial.driverType === 'tcp')
+const charHintKind = computed(() => resolveCharHintKind(serial.connected, terminal.echo, isTcpTransport.value))
 const charHint = computed(() => {
-  if (!serial.connected) return t('terminal.needConnect')
-  return terminal.echo ? t('terminal.inputCharHintEcho') : t('terminal.inputCharHintNoEcho')
+  switch (charHintKind.value) {
+    case 'needConnect': return t('terminal.needConnect')
+    case 'echoOn': return t('terminal.inputCharHintEcho')
+    case 'tcpNoEcho': return t('terminal.inputCharHintNoEcho')
+    default: return null // hidden：串口不渲染提示条
+  }
 })
-const charHintWarn = computed(() => serial.connected && !terminal.echo)
+const charHintWarn = computed(() => charHintKind.value === 'tcpNoEcho')
 
 /** 首次挂载：xterm.open + FitAddon + 跟随滚动监听 */
 function ensureOpen() {
@@ -235,7 +242,7 @@ watch(
     </div>
 
     <TerminalInput v-if="terminal.mode === 'line'" ref="inputRef" />
-    <div v-else class="char-hint" :class="{ warn: charHintWarn }">
+    <div v-else-if="charHint" class="char-hint" :class="{ warn: charHintWarn }">
       {{ charHint }}
     </div>
   </div>

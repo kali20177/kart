@@ -70,6 +70,12 @@ describe('parseEndpoint', () => {
     expect(parseEndpoint('host:0x50')).toBeNull()
     expect(parseEndpoint('host:80.5')).toBeNull()
   })
+
+  it('IPv6（host 含冒号）明确拒绝而非静默误解析：裸地址与方括号形式均 null', () => {
+    expect(parseEndpoint('::1:502')).toBeNull()
+    expect(parseEndpoint('fe80::1:502')).toBeNull()
+    expect(parseEndpoint('[fe80::1]:502')).toBeNull()
+  })
 })
 
 describe('TcpManager', () => {
@@ -77,20 +83,37 @@ describe('TcpManager', () => {
     socketInstances.length = 0
   })
 
-  it('open 成功 → data 事件推送 tcp:data（Uint8Array + id=端点）', async () => {
+  it('open 成功 → 返回连接 id；data 事件推送 tcp:data（Uint8Array + id=connId）', async () => {
     const { win, send } = makeWin()
     const mgr = new TcpManager(win)
-    await mgr.open('192.168.1.5:502')
+    const connId = await mgr.open('192.168.1.5:502')
+    expect(connId).toMatch(/^tcp:\d+$/)
     expect(send).not.toHaveBeenCalled() // 连接本身不产生数据推送
 
     socketInstances[0].emit('data', Buffer.from([0xaa, 0x55, 0x01]))
     expect(send).toHaveBeenCalledWith(
       'tcp:data',
-      expect.objectContaining({ id: '192.168.1.5:502', data: expect.any(Uint8Array) })
+      expect.objectContaining({ id: connId, data: expect.any(Uint8Array) })
     )
     const payload = send.mock.calls[0][1] as { id: string; data: Uint8Array }
-    expect(payload.id).toBe('192.168.1.5:502')
+    expect(payload.id).toBe(connId)
     expect(Array.from(payload.data)).toEqual([0xaa, 0x55, 0x01])
+    mgr.destroy()
+  })
+
+  it('同一端点可开多个连接（各自独立 connId，事件按 id 路由互不串流）', async () => {
+    const { win, send } = makeWin()
+    const mgr = new TcpManager(win)
+    const id1 = await mgr.open('h:1')
+    const id2 = await mgr.open('h:1')
+    expect(id1).not.toBe(id2)
+    expect(socketInstances.length).toBe(2)
+
+    socketInstances[0].emit('data', Buffer.from([1]))
+    socketInstances[1].emit('data', Buffer.from([2]))
+    expect(send).toHaveBeenCalledTimes(2)
+    const ids = send.mock.calls.map((c: [string, { id: string }]) => c[1].id)
+    expect(ids).toEqual([id1, id2])
     mgr.destroy()
   })
 
@@ -118,19 +141,19 @@ describe('TcpManager', () => {
   it('运行期错误 → 推送 tcp:error 并关闭连接', async () => {
     const { win, send } = makeWin()
     const mgr = new TcpManager(win)
-    await mgr.open('h:1')
+    const connId = await mgr.open('h:1')
     socketInstances[0].emit('error', new Error('ECONNRESET'))
-    expect(send).toHaveBeenCalledWith('tcp:error', expect.objectContaining({ id: 'h:1' }))
+    expect(send).toHaveBeenCalledWith('tcp:error', expect.objectContaining({ id: connId }))
     expect(socketInstances[0].destroy).toHaveBeenCalled()
     // 连接已清理：再写应失败
-    await expect(mgr.write('h:1', Buffer.from([1]))).rejects.toThrow('连接未打开')
+    await expect(mgr.write(connId, Buffer.from([1]))).rejects.toThrow('连接未打开')
     mgr.destroy()
   })
 
-  it('write 委托 socket.write', async () => {
+  it('write 委托 socket.write（按 connId）', async () => {
     const mgr = new TcpManager(makeWin().win)
-    await mgr.open('h:1')
-    await mgr.write('h:1', Buffer.from([0x01, 0x02]))
+    const connId = await mgr.open('h:1')
+    await mgr.write(connId, Buffer.from([0x01, 0x02]))
     expect(socketInstances[0].write).toHaveBeenCalled()
     mgr.destroy()
   })
@@ -138,21 +161,21 @@ describe('TcpManager', () => {
   it('远端断开（close 事件）→ 推送 tcp:error 并清理', async () => {
     const { win, send } = makeWin()
     const mgr = new TcpManager(win)
-    await mgr.open('h:1')
+    const connId = await mgr.open('h:1')
     socketInstances[0].emit('close')
     expect(send).toHaveBeenCalledWith(
       'tcp:error',
-      expect.objectContaining({ id: 'h:1', msg: expect.stringContaining('断开') })
+      expect.objectContaining({ id: connId, msg: expect.stringContaining('断开') })
     )
-    await expect(mgr.write('h:1', Buffer.from([1]))).rejects.toThrow('连接未打开')
+    await expect(mgr.write(connId, Buffer.from([1]))).rejects.toThrow('连接未打开')
     mgr.destroy()
   })
 
   it('主动 close 不误报断开（先删 entry 再触发 close）', async () => {
     const { win, send } = makeWin()
     const mgr = new TcpManager(win)
-    await mgr.open('h:1')
-    mgr.close('h:1')
+    const connId = await mgr.open('h:1')
+    mgr.close(connId)
     expect(send).not.toHaveBeenCalled()
     mgr.destroy()
   })

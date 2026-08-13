@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { isReactive } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createSession, type Session } from '@/session'
 import { setDriverType } from '@/serial'
@@ -46,6 +47,15 @@ async function injectLine(session: Session, mock: MockSerialSource, line: string
 }
 
 describe('createSession · 会话接线', () => {
+  it('session 自身是响应式 proxy（不依赖 ref 容器包装）——回归：dockview params 传递非响应式副本致 composer 不更新', () => {
+    const session = createSession({ createDriver: () => new MockSerialSource() })
+    sessions.push(session)
+    expect(isReactive(session)).toBe(true)
+    // 顶层字段经 reactive 解包，直接可读写
+    session.composerText = 'x'
+    expect(session.composerText).toBe('x')
+  })
+
   it('串口数据流 → 消息列表 + 波形（同一份字节被两个消费者处理）', async () => {
     const mock = new MockSerialSource()
     const session = makeSession(mock)
@@ -179,10 +189,10 @@ describe('createSession · 帧解码（会话级配置 + 端口持久化）', ()
 
 describe('createSession · TCP 传输', () => {
   it('setTransport(tcp) → 端点连接 → 远端字节流入消息列表（假 bridge 注入）', async () => {
-    // 假 electron.tcp 桥：内存 handler 集合，测试侧可注入远端字节
+    // 假 electron.tcp 桥：内存 handler 集合，测试侧可注入远端字节；open 返回主进程分配的 connId
     const dataHandlers = new Set<(data: Uint8Array, id: string) => void>()
     const fakeTcp = {
-      open: vi.fn(async () => {}),
+      open: vi.fn(async (_endpoint: string) => 'conn-1'),
       close: vi.fn(async () => {}),
       write: vi.fn(async () => {}),
       onData: vi.fn((h: (data: Uint8Array, id: string) => void) => {
@@ -205,8 +215,8 @@ describe('createSession · TCP 传输', () => {
       // TCP 端点统一写入 selectedPort（显示/录制/decoder-config 键共用）
       expect(session.serial.selectedPort).toBe('192.168.1.5:502')
 
-      // 假 bridge 注入远端字节 → 消息列表
-      for (const h of dataHandlers) h(new Uint8Array([0xaa, 0x55, 0x12, 0x34]), '192.168.1.5:502')
+      // 假 bridge 注入远端字节（按 connId 路由）→ 消息列表
+      for (const h of dataHandlers) h(new Uint8Array([0xaa, 0x55, 0x12, 0x34]), 'conn-1')
       await waitForMessages(session, 1)
       expect(Array.from(session.messages.messages[0].bytes)).toEqual([0xaa, 0x55, 0x12, 0x34])
 
@@ -228,6 +238,33 @@ describe('createSession · TCP 传输', () => {
     session.serial.tcpOptions.port = 70000
     await expect(session.serial.connect()).rejects.toThrow('TCP 端口无效')
     expect(session.serial.connected).toBe(false)
+  })
+
+  it('DEV 下 tcp → 切回串口（round-trip 不卡死；模块解析态不被 tcp 污染）', async () => {
+    const session = makeSession(new MockSerialSource())
+    await session.serial.setTransport('tcp')
+    expect(session.serial.transportType).toBe('tcp')
+
+    // 切回串口：应解析回环境串口后端（beforeEach 已 setDriverType('mock')），而不是又命中 tcp
+    await session.serial.setTransport('serial')
+    expect(session.serial.transportType).toBe('serial')
+    expect(session.serial.driverType).toBe('mock')
+  })
+
+  it('TCP host 含冒号（IPv6）→ 明确拒绝并提示，不静默误解析', async () => {
+    const session = makeSession(new MockSerialSource())
+    await session.serial.setTransport('tcp')
+    session.serial.tcpOptions.host = 'fe80::1'
+    session.serial.tcpOptions.port = 502
+    await expect(session.serial.connect()).rejects.toThrow('暂不支持 IPv6')
+  })
+
+  it('TCP 端口清空（null）→ 报「端口不能为空」', async () => {
+    const session = makeSession(new MockSerialSource())
+    await session.serial.setTransport('tcp')
+    session.serial.tcpOptions.host = '192.168.1.5'
+    session.serial.tcpOptions.port = null
+    await expect(session.serial.connect()).rejects.toThrow('TCP 端口不能为空')
   })
 })
 

@@ -3,7 +3,7 @@ import net from 'node:net'
 import { mainLogger } from './logger'
 
 /**
- * 解析 "host:port" 端点字符串。仅支持 IPv4/hostname（IPv6 含多个冒号，暂不支持）。
+ * 解析 "host:port" 端点字符串。仅支持 IPv4/hostname（IPv6 含冒号，暂不支持）。
  * 非法输入返回 null。
  */
 export function parseEndpoint(endpoint: string): { host: string; port: number } | null {
@@ -14,7 +14,8 @@ export function parseEndpoint(endpoint: string): { host: string; port: number } 
   // 仅接受十进制整数串（Number 会把 '0x50' 解析成 80，端口字面量不应带进制）
   if (!/^\d+$/.test(portStr)) return null
   const port = Number(portStr)
-  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) return null
+  // host 含 ':' 视为 IPv6（方括号形式 host 也为 '[::1]'）：明确拒绝而非静默误解析
+  if (!host || host.includes(':') || !Number.isInteger(port) || port < 1 || port > 65535) return null
   return { host, port }
 }
 
@@ -27,71 +28,71 @@ interface TcpEntry {
 /**
  * 主进程 TCP client 管理器 —— 用 Node net 模块管理到远端的连接。
  *
- * - 主进程按端点 "host:port" 持有多个 net.Socket（多会话并排各自连接）
- * - 数据事件（'data'）经 webContents.send 推送到渲染进程，payload 携带端点标识，
+ * - 主进程为每次 open 分配唯一连接 id（connId），按 id 持有多个 net.Socket
+ *   （多会话并排各自连接，同一端点允许多个连接）
+ * - 数据事件（'data'）经 webContents.send 推送到渲染进程，payload 携带 connId，
  *   渲染端按 id 过滤分发——形态与 SerialPortManager 完全一致
  * - 断连语义：远端关闭/错误 → 推送 'tcp:error' 并清理，渲染端 TcpDriver 据此
  *   置 isOpen=false，走 serial store 的断连/自动重连流程
  */
 export class TcpManager {
   private _conns = new Map<string, TcpEntry>()
+  private _nextId = 1
   private _win: BrowserWindow
 
   constructor(win: BrowserWindow) {
     this._win = win
   }
 
-  /** 连接远端（endpoint = "host:port"）。同一端点只允许一个连接。 */
-  open(endpoint: string): Promise<void> {
-    if (this._conns.has(endpoint)) {
-      return Promise.reject(new Error(`连接已存在: ${endpoint}`))
-    }
+  /** 连接远端（endpoint = "host:port"），返回本窗口内唯一的连接 id。 */
+  open(endpoint: string): Promise<string> {
     const target = parseEndpoint(endpoint)
     if (!target) {
       return Promise.reject(new Error(`无效的 TCP 端点: ${endpoint}`))
     }
+    const connId = `tcp:${this._nextId++}`
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const socket = net.connect({ host: target.host, port: target.port }, () => {
-        this._conns.set(endpoint, { socket, isOpen: true })
-        this._attachData(socket, endpoint)
-        resolve()
+        this._conns.set(connId, { socket, isOpen: true })
+        this._attachData(socket, connId)
+        resolve(connId)
       })
 
       socket.on('error', (err: Error) => {
-        const entry = this._conns.get(endpoint)
+        const entry = this._conns.get(connId)
         if (!entry?.isOpen) {
           // 连接阶段错误（如 ECONNREFUSED）
           reject(new Error(`连接 ${endpoint} 失败: ${err.message}`))
         } else {
           // 运行阶段错误 —— 推送并关闭
           mainLogger.error('tcp', `runtime error on ${endpoint}: ${err.message}`)
-          this._sendError(endpoint, `连接错误: ${err.message}`)
-          this.close(endpoint)
+          this._sendError(connId, `连接错误: ${err.message}`)
+          this.close(connId)
         }
       })
 
       // 远端断开：主动 close 已先删 entry，此处查不到 -> 不误报；
       // 真正断连 entry 仍在 -> 必须先发通知再删除（_sendError 依赖 entry 存在，
-      // 否则其 has(endpoint) 守卫会吞掉通知，渲染端永远收不到断连事件 -> 自动重连失效）
+      // 否则其 has(connId) 守卫会吞掉通知，渲染端永远收不到断连事件 -> 自动重连失效）
       socket.on('close', () => {
-        const entry = this._conns.get(endpoint)
+        const entry = this._conns.get(connId)
         if (entry?.isOpen) {
           entry.isOpen = false
           mainLogger.warn('tcp', `connection closed unexpectedly: ${endpoint}`)
-          this._sendError(endpoint, '连接已断开')
-          this._conns.delete(endpoint)
+          this._sendError(connId, '连接已断开')
+          this._conns.delete(connId)
         }
       })
     })
   }
 
   /** 关闭指定连接 */
-  close(endpoint: string): void {
-    const entry = this._conns.get(endpoint)
+  close(connId: string): void {
+    const entry = this._conns.get(connId)
     if (!entry) return
     // 先删 entry 再触发 close——'close' 事件回调查不到 entry，不会误报「已断开」
-    this._conns.delete(endpoint)
+    this._conns.delete(connId)
     try {
       // destroy() 立即断开；end() 的优雅 FIN 等待对调试工具无意义，且与 destroy 连调用法冗余
       entry.socket.destroy()
@@ -101,9 +102,9 @@ export class TcpManager {
   }
 
   /** 写入数据（await socket.write 回调） */
-  write(endpoint: string, data: Buffer): Promise<void> {
+  write(connId: string, data: Buffer): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const entry = this._conns.get(endpoint)
+      const entry = this._conns.get(connId)
       if (!entry?.isOpen) {
         reject(new Error('连接未打开'))
         return
@@ -117,30 +118,30 @@ export class TcpManager {
 
   /** 销毁管理器：关闭全部连接 */
   destroy(): void {
-    for (const endpoint of [...this._conns.keys()]) {
-      this.close(endpoint)
+    for (const connId of [...this._conns.keys()]) {
+      this.close(connId)
     }
   }
 
   // ── 私有方法 ──
 
   /** 挂载数据事件，每帧转发为 Uint8Array（确定性类型，不依赖 Buffer 跨进程语义） */
-  private _attachData(socket: net.Socket, endpoint: string): void {
+  private _attachData(socket: net.Socket, connId: string): void {
     socket.on('data', (buf: Buffer) => {
       // 连接已关闭后丢弃残留事件
-      if (!this._conns.get(endpoint)?.isOpen) return
+      if (!this._conns.get(connId)?.isOpen) return
       const data = Uint8Array.from(buf)
       if (!this._win.isDestroyed()) {
-        this._win.webContents.send('tcp:data', { id: endpoint, data })
+        this._win.webContents.send('tcp:data', { id: connId, data })
       }
     })
   }
 
   /** 推送错误 + 断连事件到渲染进程 */
-  private _sendError(endpoint: string, msg: string): void {
-    if (!this._conns.has(endpoint)) return
+  private _sendError(connId: string, msg: string): void {
+    if (!this._conns.has(connId)) return
     if (!this._win.isDestroyed()) {
-      this._win.webContents.send('tcp:error', { id: endpoint, msg })
+      this._win.webContents.send('tcp:error', { id: connId, msg })
     }
   }
 }
