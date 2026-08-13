@@ -142,9 +142,10 @@ try {
   check('发送框位于消息面板内', inPanel)
 
   // 3. 关闭「波形」面板：hover tab 显示关闭按钮再点
+  // 视图 tab 为自定义组件（ViewTab），关闭按钮类名 .view-tab-close（非 dockview 默认 tab 的 .dv-default-tab-action）
   const waveTab = page.locator('.dv-tab', { hasText: '波形' })
   await waveTab.hover()
-  await waveTab.locator('.dv-default-tab-action').click()
+  await waveTab.locator('.view-tab-close').click()
   await page.waitForTimeout(1600) // 等防抖（400ms）持久化落盘
   names = await tabNames(page)
   check('关闭「波形」后剩 2 个 tab', names.length === 2 && !names.some((n) => n.includes('波形')), `tabs=${JSON.stringify(names)}`)

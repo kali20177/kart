@@ -7,6 +7,7 @@ export default {
     terminal: '终端',
     dragResize: '拖动调整宽度',
     addView: '添加/切换视图',
+    closeView: '关闭视图',
   },
   session: {
     tabLabel: '会话{n}',

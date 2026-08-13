@@ -9,6 +9,7 @@ import MessagePanel from './MessagePanel.vue'
 import WaveformChart from './WaveformChart.vue'
 import TerminalPane from './TerminalPane.vue'
 import StatusBar from './StatusBar.vue'
+import ViewTab from './ViewTab.vue'
 import { provideOpenFileTransfer, provideSession, useOpenFileTransferHandler } from '@/composables/useSession'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
 import type { Session } from '@/session'
@@ -35,6 +36,10 @@ const components: Record<string, VueComponent> = {
   waveform: WaveformChart as unknown as VueComponent,
   terminal: TerminalPane as unknown as VueComponent,
 }
+
+/** 视图 tab 组件（自定义 tab：图标 + 视图主题色）。default-tab-component 对
+ *  无 tabComponent 字段的旧持久化布局同样生效，老布局切到新视觉无需清缓存 */
+const viewTabComponent = ViewTab as unknown as VueComponent
 
 const panelTitle = (id: PanelId): string =>
   id === 'messages' ? t('app.msg') : id === 'waveform' ? t('app.waveform') : t('app.terminal')
@@ -163,8 +168,9 @@ function onViewMenuSelect(key: string) {
       <div class="dock-wrap">
         <DockviewVue
           :components="components"
+          :default-tab-component="viewTabComponent"
           :default-renderer="'always'"
-          class="dock"
+          class="dock view-dock"
           @ready="onReady"
         />
         <NDropdown trigger="click" :options="viewMenuOptions" @select="onViewMenuSelect">

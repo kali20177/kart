@@ -629,7 +629,8 @@ function handleExport(key: string) {
   gap: 8px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
 }
 .spacer {
   flex: 1;

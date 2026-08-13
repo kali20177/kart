@@ -41,6 +41,13 @@
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+/* 内层视图 dock（.view-dock，会话内消息/波形/终端）：活动 tab 的 accent 下划线
+   交由 ViewTab 自定义 tab 按视图类型着色（.view-tab.active 的 --c 下划线），
+   这里中和全局蓝线，避免同一 tab 上出现两条下划线 */
+.view-dock .dv-tab.dv-active-tab {
+  box-shadow: none;
+}
+
 /* dockview 宿主填满容器：宿主 div 由 DockviewVue 渲染，跨组件作用域 scoped
    样式不达（无 data-v 属性），尺寸必须放全局 */
 .dock {

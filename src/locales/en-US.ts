@@ -7,6 +7,7 @@ export default {
     terminal: 'Terminal',
     dragResize: 'Drag to resize width',
     addView: 'Add / switch view',
+    closeView: 'Close view',
   },
   session: {
     tabLabel: 'Session {n}',
