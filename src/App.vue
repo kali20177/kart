@@ -324,7 +324,7 @@ onMounted(() => {
 .ascii-btn {
   height: 24px;
   padding: 0 8px;
-  font-family: var(--display-font);
+  font-family: var(--ascii-btn-font);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.5px;

@@ -8,9 +8,6 @@ export const oledHud: ThemeDefinition = {
   name: 'OLED HUD',
   description: 'Cyberpunk 终端风格，OLED 暗色 + 霓虹绿/青/琥珀',
   isDark: true,
-  // Orbitron 自托管（src/styles/fonts.css + public/fonts/orbitron-var.woff2），
-  // 不用 Google Fonts 走 CSP 允许路径；fonts 字段留空数组是占位，兼容未来扩展。
-  fonts: [],
   tokens: {
     '--bg': '#050508',
     '--bg-panel': '#0A0A0F',
@@ -47,6 +44,8 @@ export const oledHud: ThemeDefinition = {
     '--mono-font': "'JetBrains Mono','Cascadia Mono','Consolas',monospace",
     '--ui-font': "'Inter',-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif",
     '--display-font': "'Orbitron Local','Orbitron','Inter',sans-serif",
+    '--display-letter-spacing': '0.4px',
+    '--ascii-btn-font': "'Orbitron Local','Orbitron','Inter',sans-serif",
     '--search-highlight-bg': '#1A3D1A',
     '--search-highlight-text': '#00FF88',
     '--search-active-bg': '#2D5A1E',

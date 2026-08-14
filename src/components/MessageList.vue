@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useClipboard, useDebounceFn } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, NDropdown, NModal, useDialog, useMessage } from 'naive-ui'
@@ -128,12 +128,14 @@ function scrollToBottom() {
   inst?.scrollToBottom?.()
 }
 
-onMounted(() => {
+/** scroller 随空状态条件挂载/卸载，滚动监听必须响应式跟随，否则启动空态下监听永久缺失 */
+function bindScrollerListener() {
+  scrollEl?.removeEventListener('scroll', onScroll)
   scrollEl = (scroller.value as unknown as { $el: HTMLElement } | null)?.$el ?? null
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
-})
+}
+watch(scroller, bindScrollerListener, { immediate: true, flush: 'post' })
 onBeforeUnmount(() => scrollEl?.removeEventListener('scroll', onScroll))
-
 // 新数据到达：仅"跟随最新"且"非多选"时自动滚底（多选时用户在选历史，不应被滚走）
 watch(
   () => messagesStore.messages.length,
@@ -726,7 +728,7 @@ watch(
 
 /* ── 空状态 ── 屏幕中央占位，未连/等待/暂停/筛选空 四态共用布局，icon 颜色与文案随状态变化 */
 .empty-state {
-  flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -759,10 +761,12 @@ watch(
 }
 .empty-state[data-kind='waiting'] .empty-glyph {
   color: var(--accent);
+  border-color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 .empty-state[data-kind='paused'] .empty-glyph {
   color: var(--warn);
+  border-color: var(--warn);
   border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
 }
 .empty-state[data-kind='filtered'] .empty-glyph {
@@ -778,7 +782,7 @@ watch(
   50%      { opacity: 1;    }
 }
 @media (prefers-reduced-motion: reduce) {
-  .empty-state[data-kind='waiting'] .empty-led.waiting { animation-duration: 3.2s; }
+  .empty-state[data-kind='waiting'] .empty-led.waiting { animation: none; }
 }
 .empty-title {
   font-size: 14px;

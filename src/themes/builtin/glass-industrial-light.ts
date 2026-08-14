@@ -48,6 +48,8 @@ export const glassIndustrialLight: ThemeDefinition = {
     '--mono-font': "'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace",
     '--ui-font': "'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
     '--display-font': "'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+    '--display-letter-spacing': '0',
+    '--ascii-btn-font': "'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace",
   },
   naiveOverrides: {
     common: {

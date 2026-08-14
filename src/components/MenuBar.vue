@@ -286,7 +286,7 @@ function handleSelect(key: string) {
   font-size: 16px;
   font-weight: 600;
   font-family: var(--display-font);
-  letter-spacing: 0.4px;
+  letter-spacing: var(--display-letter-spacing);
 }
 .desc {
   margin: 4px 0 12px;
