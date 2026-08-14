@@ -203,7 +203,7 @@ async function onBreak() {
     <span v-else class="port" :class="{ stale: hasSessionData && !serial.connected }">
       {{ serial.connected || hasSessionData ? serial.selectedPort : t('status.notConnected') }}
     </span>
-    <span v-if="serial.connected || hasSessionData" class="summary" :class="{ stale: !serial.connected }">
+    <span v-if="(serial.connected || hasSessionData) && serial.driverType !== 'tcp'" class="summary" :class="{ stale: !serial.connected }">
       {{ serial.summary }}
     </span>
 
@@ -283,43 +283,45 @@ async function onBreak() {
       <div class="divider" />
     </template>
 
-    <!-- 输出线控制：DTR/RTS 持久切换 + Break 瞬态脉冲 -->
-    <div class="divider" />
-    <button
-      class="signal-btn"
-      :class="{ active: serial.dtr }"
-      :disabled="!serial.connected"
-      :title="t('status.dtrTip')"
-      @click="onToggleDtr"
-    >
-      DTR
-    </button>
-    <button
-      class="signal-btn"
-      :class="{ active: serial.rts }"
-      :disabled="!serial.connected"
-      :title="t('status.rtsTip')"
-      @click="onToggleRts"
-    >
-      RTS
-    </button>
-    <button
-      class="signal-btn brk"
-      :class="{ busy: serial.breakBusy }"
-      :disabled="!serial.connected"
-      :title="t('status.breakTip')"
-      @click="onBreak"
-    >
-      BRK
-    </button>
+    <!-- 输出线控制：DTR/RTS 持久切换 + Break 瞬态脉冲（仅串口；TCP 无调制解调器线） -->
+    <template v-if="serial.driverType !== 'tcp'">
+      <div class="divider" />
+      <button
+        class="signal-btn"
+        :class="{ active: serial.dtr }"
+        :disabled="!serial.connected"
+        :title="t('status.dtrTip')"
+        @click="onToggleDtr"
+      >
+        DTR
+      </button>
+      <button
+        class="signal-btn"
+        :class="{ active: serial.rts }"
+        :disabled="!serial.connected"
+        :title="t('status.rtsTip')"
+        @click="onToggleRts"
+      >
+        RTS
+      </button>
+      <button
+        class="signal-btn brk"
+        :class="{ busy: serial.breakBusy }"
+        :disabled="!serial.connected"
+        :title="t('status.breakTip')"
+        @click="onBreak"
+      >
+        BRK
+      </button>
 
-    <!-- 输入线（只读）：对端允许发送指示。圆点填充绿=对端允许接收，灰=未置位。
-         用状态圆点而非按钮样式，配合 tooltip 明确「只读、不可点击」。 -->
-    <div class="divider" />
-    <span class="signal-ro" :class="{ active: serial.signals.cts }" :title="t('status.ctsTip')">
-      <span class="signal-ro-dot" />
-      CTS
-    </span>
+      <!-- 输入线（只读）：对端允许发送指示。圆点填充绿=对端允许接收，灰=未置位。
+           用状态圆点而非按钮样式，配合 tooltip 明确「只读、不可点击」。 -->
+      <div class="divider" />
+      <span class="signal-ro" :class="{ active: serial.signals.cts }" :title="t('status.ctsTip')">
+        <span class="signal-ro-dot" />
+        CTS
+      </span>
+    </template>
   </div>
 </template>
 
@@ -336,6 +338,23 @@ async function onBreak() {
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   border-top: 1px solid var(--glass-border);
   color: var(--text-dim);
+  position: relative;
+}
+/* 顶部 1px inset 高光 — 玻璃反射光 */
+.status::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--glass-highlight) 8%,
+    var(--glass-highlight) 92%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0.6;
 }
 .led {
   width: 8px;

@@ -8,9 +8,6 @@ export const oledHud: ThemeDefinition = {
   name: 'OLED HUD',
   description: 'Cyberpunk 终端风格，OLED 暗色 + 霓虹绿/青/琥珀',
   isDark: true,
-  fonts: [
-    'https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap',
-  ],
   tokens: {
     '--bg': '#050508',
     '--bg-panel': '#0A0A0F',
@@ -32,6 +29,7 @@ export const oledHud: ThemeDefinition = {
     '--tx-text': '#E0E0E8',
     '--glass-bg': '#0A0A0F',
     '--glass-border': '#1E1E2E',
+    '--glass-highlight': '#00E676',
     '--glass-blur': '0px',
     '--glass-blur-sm': '0px',
     '--shadow-sm': '0 1px 3px rgba(0,0,0,0.5)',
@@ -45,6 +43,9 @@ export const oledHud: ThemeDefinition = {
     '--gap': '8px',
     '--mono-font': "'JetBrains Mono','Cascadia Mono','Consolas',monospace",
     '--ui-font': "'Inter',-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif",
+    '--display-font': "'Orbitron Local','Orbitron','Inter',sans-serif",
+    '--display-letter-spacing': '0.4px',
+    '--ascii-btn-font': "'Orbitron Local','Orbitron','Inter',sans-serif",
     '--search-highlight-bg': '#1A3D1A',
     '--search-highlight-text': '#00FF88',
     '--search-active-bg': '#2D5A1E',

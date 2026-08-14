@@ -1,4 +1,5 @@
 import type { MockScenarioId } from '@/types'
+import { crc16modbus } from '@/utils/checksum'
 
 export interface ScenarioDef {
   id: MockScenarioId
@@ -25,7 +26,12 @@ export const SCENARIOS: ScenarioDef[] = [
   {
     id: 'buffer-flood',
     label: '缓冲灌满压测',
-    description: '高频数值行灌入，快速触发消息/波形缓冲丢弃；建议配合「分隔符 \\n」帧策略'
+    description: '高频数值行灌入，快速触发消息/波形缓冲丢弃；建议配合「分隔符 \n」帧策略'
+  },
+  {
+    id: 'modbus',
+    label: 'Modbus RTU 从站应答',
+    description: '周期吐 fc03 读保持寄存器响应（4 寄存器随序号变化），穿插请求帧；配合「Modbus RTU」解码器'
   },
   {
     id: 'shell',
@@ -65,6 +71,34 @@ export function binaryFrame(seq: number): Uint8Array {
   let xor = 0
   for (const b of payload) xor ^= b
   return new Uint8Array([0xaa, 0x55, len, ...payload, xor])
+}
+
+/** Modbus RTU 帧：addr fc data crc16-LE（配合「字段解析/Modbus RTU」解码器验证） */
+export function modbusFrame(addr: number, fc: number, data: number[]): Uint8Array {
+  const body = new Uint8Array([addr, fc, ...data])
+  const crc = crc16modbus(body)
+  return new Uint8Array([...body, crc & 0xff, (crc >> 8) & 0xff])
+}
+
+/**
+ * Modbus RTU 场景帧：模拟 1 号从站（地址 0x01）的传感器数据。
+ * - 大部分 tick：fc03 读保持寄存器响应——4 个寄存器随 seq 变化（温度×10 / 电压 mV / 电流 mA / 计数），
+ *   演示解码器把 byteCount + 寄存器值解析为可读字段；
+ * - 每 5 tick 穿插一条 fc03 请求帧（起始 0x0000 读 4 个寄存器），演示请求解析路径。
+ */
+export function modbusSample(seq: number): Uint8Array {
+  const regs = [
+    2500 + (seq % 50) * 10, // 温度 25.0~29.9 ℃（×10）
+    3300 + ((seq * 7) % 20), // 电压 3300~3319 mV
+    120 + ((seq * 13) % 40), // 电流 120~159 mA
+    seq & 0xffff // 状态/计数器
+  ]
+  if (seq % 5 === 0) {
+    return modbusFrame(0x01, 0x03, [0x00, 0x00, 0x00, 0x04])
+  }
+  const data: number[] = [regs.length * 2] // byteCount
+  for (const r of regs) data.push((r >> 8) & 0xff, r & 0xff)
+  return modbusFrame(0x01, 0x03, data)
 }
 
 /** 高吞吐：一段 64 字节的可打印数据 */

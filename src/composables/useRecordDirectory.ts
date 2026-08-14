@@ -140,31 +140,38 @@ export function useRecordDirectory() {
     storage.remove(DIR_PATH_KEY)
   }
 
-  async function createFile(fileName: string): Promise<IFileWriter | null> {
+  /**
+   * 在录制目录中创建文件并返回写入器。
+   * @param streamKey 录制流键（Electron 主进程按 (窗口, streamKey) 区分写入流，
+   *   多会话并排录制时互不覆盖）。浏览器路径无流概念，忽略该参数。
+   */
+  async function createFile(fileName: string, streamKey?: string): Promise<IFileWriter | null> {
     // 等待 IDB 恢复完成
     await restoreDone
 
     // Electron 路径
     if (window.electron?.recorder?.createFile) {
       if (!dirPath.value) return null
-      const result = await window.electron.recorder.createFile(dirPath.value, fileName)
+      const result = await window.electron.recorder.createFile(dirPath.value, fileName, streamKey)
       if (!result) return null
       const rec = window.electron!.recorder!
+      // 主进程可能因同名冲突改名（返回实际文件名），显示与闭包都用返回值
+      const actualName = result.fileName
       return {
         // writeChunk 返回 false 表示流已出错 → 抛异常让 flushBuffer 走 error 分支
         write: async (chunk: Uint8Array): Promise<void> => {
-          const ok = await rec.writeChunk(chunk)
+          const ok = await rec.writeChunk(streamKey, chunk)
           if (!ok) throw new Error('主进程写入流失败')
         },
         close: async (): Promise<void> => {
-          const ok = await rec.closeFile()
+          const ok = await rec.closeFile(streamKey)
           if (!ok) {
             // 流在最后一次写入和关闭之间出错（不影响已落盘数据），
             // 仅 trace 级别记录，不抛异常——调用方（stop）已经是收尾阶段。
             console.warn('[recorder] closeFile 报告流已出错，已落盘数据不受影响')
           }
         },
-        getFileName: () => fileName
+        getFileName: () => actualName
       }
     }
 

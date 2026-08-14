@@ -1,7 +1,14 @@
 // 全局共享类型 —— 阶段 2 接入 Web Serial 时这些类型基本保持不变
+import type { DecodeInfo } from '@/decoders/types'
 
 /** 数据方向 */
 export type Direction = 'rx' | 'tx'
+
+/** 驱动/传输类型标识（serialport/webserial 是串口的两个后端，tcp 是独立传输，mock/pty 是开发后端） */
+export type DriverType = 'serialport' | 'webserial' | 'tcp' | 'mock' | 'pty' | 'unsupported'
+
+/** 用户可切换的传输类型：serial=环境解析的串口后端（serialport/webserial/mock/pty），tcp=TCP client */
+export type TransportType = 'serial' | 'tcp'
 
 /** 日志级别 */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -27,6 +34,8 @@ export interface Message {
   error?: string
   /** 校验失败标记（与 error 独立，可共存） */
   checksumFailed?: boolean
+  /** 解码结果：会话启用帧解码且本帧匹配时存在——字段块叠加在原始视图上方渲染（不替换原始字节） */
+  decoded?: DecodeInfo
   /** 消息种类：'frame'=普通帧，'file'=文件下发气泡，'divider'=分隔线（缺省 'frame' 向后兼容） */
   kind?: 'frame' | 'file' | 'divider'
   /** 文件下发时指向 transfer store 中的状态 */
@@ -59,12 +68,13 @@ export interface SerialSignals {
 }
 
 /**
- * 串口枚举项。各驱动尽力填充元数据：
+ * 传输端点枚举项。各驱动尽力填充元数据：
  * - serialport：path/manufacturer/vendorId/productId 均有
  * - Web Serial：path + vendorId/productId（厂商名按 VID 反查 usb-vendors 表，查不到则无）
  * - mock：造假的完整元数据用于开发预览
+ * - TCP：无枚举（用户手动填 host:port），listEndpoints 返回空
  */
-export interface PortInfo {
+export interface EndpointInfo {
   path: string
   manufacturer?: string
   vendorId?: string
@@ -72,23 +82,30 @@ export interface PortInfo {
 }
 
 /**
- * 串口驱动接口 —— Mock 与未来的 Web Serial 实现共享这一契约。
- * 阶段 2 只需写一个实现该接口的 WebSerialDriver，serial store 不动。
+ * 传输驱动接口（传输无关核心）：串口/TCP/pty/mock 统一契约，端点统一用字符串标识。
+ * - 串口信号线方法（getSignals/setSignals/setBreak）为可选扩展：非串口传输不实现，
+ *   store 用可选链访问、UI 按传输类型隐藏（PtyDriver 固定假值先例）。
+ * - open 的 options 为传输专属参数（串口=PortOptions；TCP/pty 忽略）。
  */
-export interface SerialDriver {
-  listPorts(): Promise<PortInfo[]>
-  /** 触发浏览器串口选择器（Web Serial 专属），返回新端口标识；用户取消返回 null */
+export interface IoTransport {
+  /** 传输类型标识（serialport/webserial/tcp/mock/pty/unsupported） */
+  readonly type: DriverType
+  listEndpoints(): Promise<EndpointInfo[]>
+  /** 触发浏览器原生选择器（Web Serial 专属），返回新端点标识；用户取消返回 null */
   requestPort?(): Promise<string | null>
-  open(path: string, options: PortOptions): Promise<void>
+  open(endpoint: string, options?: unknown): Promise<void>
   close(): Promise<void>
   write(bytes: Uint8Array): Promise<void>
-  getSignals(): SerialSignals
-  /** 设置输出控制线（DTR/RTS）。未提供的项保持当前值不变；未打开端口抛错。 */
-  setSignals(signals: { dtr?: boolean; rts?: boolean }): Promise<void>
-  /** 置/清 Break 条件（TX 拉低）。未打开端口或硬件不支持时抛错。 */
-  setBreak(active: boolean): Promise<void>
+  /** 串口信号线状态（DCD/CTS/DSR/RI）。可选：非串口传输不实现 */
+  getSignals?(): SerialSignals
+  /** 设置输出控制线（DTR/RTS）。可选：非串口传输不实现 */
+  setSignals?(signals: { dtr?: boolean; rts?: boolean }): Promise<void>
+  /** 置/清 Break 条件（TX 拉低）。可选：非串口传输不实现 */
+  setBreak?(active: boolean): Promise<void>
   /** 更新终端视口尺寸（pty 等支持 resize 的驱动；serialport/web serial 无此能力，忽略调用）。 */
   setSize?(cols: number, rows: number): Promise<void>
+  /** 销毁驱动释放本地资源（serialport/webserial/tcp 持有端口/socket 句柄；无资源者可不实现）。 */
+  destroy?(): void
   /** 订阅接收数据，返回取消订阅函数 */
   onData(cb: (bytes: Uint8Array) => void): () => void
   readonly isOpen: boolean
@@ -223,6 +240,7 @@ export type MockScenarioId =
   | 'waveform-text'
   | 'waveform-text-labeled'
   | 'buffer-flood'
+  | 'modbus'
   | 'shell'
 
 // ─── 文件下发类型（阶段 1 文件传输 UI） ───

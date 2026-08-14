@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onBeforeUnmount, ref, watch, type VNode, type VNodeChild } from 'vue'
-import { NSelect, NButton, NTooltip, NModal, NInput, useMessage } from 'naive-ui'
+import { NSelect, NButton, NTooltip, NModal, NInput, NInputNumber, useMessage } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { useSession, useOccupiedPorts } from '@/composables/useSession'
+import { storage } from '@/composables/useStorage'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { useI18n } from 'vue-i18n'
-import type { MockScenarioId, PortInfo } from '@/types'
+import type { MockScenarioId, EndpointInfo, TransportType } from '@/types'
 
 const isDev = import.meta.env.DEV
 
@@ -20,6 +21,28 @@ const tipStyle = 'font-size:12px;line-height:1.5;padding:4px 8px;max-width:280px
 
 const occupiedPorts = useOccupiedPorts()
 
+// 传输类型选择：串口 / TCP。TCP 实际收发依赖主进程 net 桥（Electron）；
+// DEV 下放开选择——浏览器开发态可预览 UI/校验流程，无桥时连接会明确报「TCP 不可用」。
+const tcpAvailable = isDev || !!window.electron?.tcp
+const transportOptions = computed(() => [
+  { label: t('transport.serial'), value: 'serial' as const },
+  ...(tcpAvailable ? [{ label: t('transport.tcp'), value: 'tcp' as const }] : [])
+])
+
+// —— 参数栏收起（默认展开）——
+// 收起隐藏端口/波特率等参数控件，腾出数据显示高度；状态按端口持久化，
+// 并排多会话各自独立、刷新后保持。收起态保留连接/录制按钮与端口名。
+const COLLAPSED_KEY = (port: string) => `connbar:collapsed:${port}`
+const collapsed = ref(false)
+watch(
+  () => serial.selectedPort,
+  (port) => { collapsed.value = storage.get(COLLAPSED_KEY(port ?? 'default'), false) },
+  { immediate: true }
+)
+watch(collapsed, (v) => {
+  storage.set(COLLAPSED_KEY(serial.selectedPort ?? 'default'), v)
+})
+
 const portOptions = computed(() =>
   serial.ports.map((p) => ({
     label: p.path,
@@ -31,7 +54,7 @@ const portOptions = computed(() =>
 )
 
 /** 端口下拉第二行：厂商名 + VID/PID。触发框（selected）只显示路径，元数据降级到菜单项。 */
-function formatPortMeta(p: PortInfo): string {
+function formatPortMeta(p: EndpointInfo): string {
   const id = p.vendorId && p.productId ? `VID:${p.vendorId} PID:${p.productId}` : p.vendorId ? `VID:${p.vendorId}` : ''
   return [p.manufacturer, id].filter(Boolean).join(' · ')
 }
@@ -297,88 +320,145 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="bar">
-    <NSelect
-      v-model:value="serial.selectedPort"
-      :options="portOptions"
-      :render-option="renderPortOption"
-      :consistent-menu-width="false"
-      size="small"
-      filterable
-      tag
-      :placeholder="t('conn.selectPort')"
-      style="width: 210px"
-      :disabled="serial.connected"
-    />
-    <NTooltip v-if="serial.driverType === 'webserial'" placement="bottom" :style="tipStyle">
-      <template #trigger>
-        <NButton size="small" :disabled="serial.connected" @click="onRequestPort">+</NButton>
-      </template>
-      {{ t('conn.requestPort') }}
-    </NTooltip>
-    <NTooltip v-if="serial.driverType !== 'webserial'" placement="bottom" :style="tipStyle">
-      <template #trigger>
-        <NButton size="small" :disabled="serial.connected" @click="serial.refreshPorts()">⟳</NButton>
-      </template>
-      {{ t('conn.refreshPorts') }}
-    </NTooltip>
+  <div class="bar" :class="{ collapsed }">
+    <!-- 展开态：完整参数控件 -->
+    <template v-if="!collapsed">
+      <!-- 传输类型选择器：串口 / TCP（TCP 仅 Electron） -->
+      <NSelect
+        :value="serial.transportType"
+        :options="transportOptions"
+        size="small"
+        style="width: 88px"
+        :disabled="serial.connected"
+        @update:value="(v: TransportType) => serial.setTransport(v)"
+      />
 
-    <NTooltip placement="bottom" :style="tipStyle">
-      <template #trigger>
+      <!-- 串口传输：端口/波特率/数据位/校验/停止位 + mock 场景 -->
+      <template v-if="serial.transportType === 'serial'">
+      <NSelect
+        v-model:value="serial.selectedPort"
+        :options="portOptions"
+        :render-option="renderPortOption"
+        :consistent-menu-width="false"
+        size="small"
+        filterable
+        tag
+        :placeholder="t('conn.selectPort')"
+        style="width: 210px"
+        :disabled="serial.connected"
+      />
+      <NTooltip v-if="serial.driverType === 'webserial'" placement="bottom" :style="tipStyle">
+        <template #trigger>
+          <NButton size="small" :disabled="serial.connected" @click="onRequestPort">+</NButton>
+        </template>
+        {{ t('conn.requestPort') }}
+      </NTooltip>
+      <NTooltip v-if="serial.driverType !== 'webserial'" placement="bottom" :style="tipStyle">
+        <template #trigger>
+          <NButton size="small" :disabled="serial.connected" @click="serial.refreshPorts()">⟳</NButton>
+        </template>
+        {{ t('conn.refreshPorts') }}
+      </NTooltip>
+
+      <NTooltip placement="bottom" :style="tipStyle">
+        <template #trigger>
+          <NSelect
+            :key="selectKey"
+            :value="serial.options.baudRate"
+            :options="baudOptions"
+            filterable
+            tag
+            :consistent-menu-width="false"
+            :render-label="renderBaudLabel"
+            :render-option="renderBaudOption"
+            size="small"
+            style="width: 120px"
+            :placeholder="t('conn.baudRate')"
+            :disabled="serial.connected"
+            @update:value="onBaudChange"
+          />
+        </template>
+        {{ t('conn.baudTip') }}
+      </NTooltip>
+      <NTooltip placement="bottom" :style="tipStyle">
+        <template #trigger>
+          <NSelect
+            v-model:value="serial.options.dataBits"
+            :options="dataBitsOptions"
+            size="small"
+            style="width: 64px"
+            :disabled="serial.connected"
+          />
+        </template>
+        {{ t('conn.dataBitsTip') }}
+      </NTooltip>
+      <NTooltip placement="bottom" :style="tipStyle">
+        <template #trigger>
+          <NSelect
+            v-model:value="serial.options.parity"
+            :options="parityOptions"
+            size="small"
+            style="width: 86px"
+            :disabled="serial.connected"
+          />
+        </template>
+        {{ t('conn.parityTip') }}
+      </NTooltip>
+      <NTooltip placement="bottom" :style="tipStyle">
+        <template #trigger>
+          <NSelect
+            v-model:value="serial.options.stopBits"
+            :options="stopBitsOptions"
+            size="small"
+            style="width: 64px"
+            :disabled="serial.connected"
+          />
+        </template>
+        {{ t('conn.stopBitsTip') }}
+      </NTooltip>
+
+      <template v-if="isDev && serial.driverType === 'mock'">
+        <div class="divider" />
+        <span class="mock-label">{{ t('conn.mockScene') }}</span>
         <NSelect
-          :key="selectKey"
-          :value="serial.options.baudRate"
-          :options="baudOptions"
-          filterable
-          tag
-          :consistent-menu-width="false"
-          :render-label="renderBaudLabel"
-          :render-option="renderBaudOption"
+          :value="serial.scenario"
+          :options="scenarioOptions"
           size="small"
-          style="width: 120px"
-          :placeholder="t('conn.baudRate')"
-          :disabled="serial.connected"
-          @update:value="onBaudChange"
+          style="width: 150px"
+          @update:value="(v: MockScenarioId) => serial.setScenario(v)"
         />
       </template>
-      {{ t('conn.baudTip') }}
-    </NTooltip>
-    <NTooltip placement="bottom" :style="tipStyle">
-      <template #trigger>
-        <NSelect
-          v-model:value="serial.options.dataBits"
-          :options="dataBitsOptions"
-          size="small"
-          style="width: 64px"
-          :disabled="serial.connected"
-        />
       </template>
-      {{ t('conn.dataBitsTip') }}
-    </NTooltip>
-    <NTooltip placement="bottom" :style="tipStyle">
-      <template #trigger>
-        <NSelect
-          v-model:value="serial.options.parity"
-          :options="parityOptions"
+
+      <!-- TCP 传输：主机 + 端口 -->
+      <template v-else>
+        <NInput
+          :value="serial.tcpOptions.host"
           size="small"
-          style="width: 86px"
+          :placeholder="t('transport.tcpHost')"
+          style="width: 130px"
           :disabled="serial.connected"
+          @update:value="(v: string) => { serial.tcpOptions.host = v }"
         />
-      </template>
-      {{ t('conn.parityTip') }}
-    </NTooltip>
-    <NTooltip placement="bottom" :style="tipStyle">
-      <template #trigger>
-        <NSelect
-          v-model:value="serial.options.stopBits"
-          :options="stopBitsOptions"
+        <NInputNumber
+          :value="serial.tcpOptions.port"
+          :min="1"
+          :max="65535"
           size="small"
-          style="width: 64px"
+          style="width: 110px"
+          :placeholder="t('transport.tcpPort')"
           :disabled="serial.connected"
+          @update:value="(v: number | null) => { serial.tcpOptions.port = v }"
         />
+        <span class="tcp-hint">{{ t('transport.tcpHint') }}</span>
       </template>
-      {{ t('conn.stopBitsTip') }}
-    </NTooltip>
+    </template>
+
+    <!-- 收起态：紧凑单行——状态点 + 端口名（数据来源可见，栏高收缩让位给数据显示区） -->
+    <template v-else>
+      <span class="status-dot" :class="{ on: serial.connected, reconnecting: serial.reconnecting }" />
+      <span class="port-label">{{ serial.selectedPort ?? t('conn.selectPort') }}</span>
+    </template>
 
     <NButton
       size="small"
@@ -388,18 +468,6 @@ onBeforeUnmount(() => {
     >
       {{ serial.connected ? t('conn.disconnect') : t('conn.connect') }}
     </NButton>
-
-    <template v-if="isDev && serial.driverType === 'mock'">
-      <div class="divider" />
-      <span class="mock-label">{{ t('conn.mockScene') }}</span>
-      <NSelect
-        :value="serial.scenario"
-        :options="scenarioOptions"
-        size="small"
-        style="width: 150px"
-        @update:value="(v: MockScenarioId) => serial.setScenario(v)"
-      />
-    </template>
 
     <!-- 录制控制 -->
     <template v-if="recorder.supported">
@@ -432,6 +500,16 @@ onBeforeUnmount(() => {
     </template>
 
     <div class="spacer" />
+
+    <!-- 参数栏收起/展开 -->
+    <NTooltip placement="bottom" :style="tipStyle">
+      <template #trigger>
+        <NButton size="small" quaternary class="collapse-btn" @click="collapsed = !collapsed">
+          {{ collapsed ? '⌄' : '⌃' }}
+        </NButton>
+      </template>
+      {{ collapsed ? t('conn.expandParams') : t('conn.collapseParams') }}
+    </NTooltip>
   </div>
 
   <NModal v-model:show="showNoteModal" preset="card" :title="t('conn.editNoteTitle')" style="width: 360px">
@@ -463,6 +541,46 @@ onBeforeUnmount(() => {
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   border-bottom: 1px solid var(--glass-border);
   box-shadow: var(--shadow-sm);
+  /* 收起/展开时栏高平滑过渡 */
+  transition: padding 0.18s ease;
+  position: relative;
+}
+/* 顶部 1px inset 高光 — 玻璃边缘反射 */
+.bar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--glass-highlight) 8%,
+    var(--glass-highlight) 92%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0.7;
+}
+/* 收起态：紧凑单行，栏高收缩让位给数据显示区 */
+.bar.collapsed {
+  padding: 2px 12px;
+}
+/* 收起态连接状态点（与会话 tab 圆点一致：灰=未连 / 绿=已连 / 橙=重连中） */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.status-dot.on {
+  background: #4caf50;
+  opacity: 1;
+}
+.status-dot.reconnecting {
+  background: #ff9800;
+  opacity: 1;
 }
 .divider {
   width: 1px;
@@ -473,6 +591,11 @@ onBeforeUnmount(() => {
 .mock-label {
   font-size: 12px;
   color: var(--text-dim);
+}
+.tcp-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.85;
 }
 
 /* —— REC 胶囊录制按钮 —— */
@@ -546,6 +669,23 @@ onBeforeUnmount(() => {
 }
 .spacer {
   flex: 1;
+}
+/* 收起态端口名（参数隐藏后保留数据来源可见性） */
+.port-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--mono-font);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+}
+.collapse-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 4px;
 }
 .note-edit {
   display: flex;

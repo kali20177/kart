@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { SerialPortManager } from './SerialPortManager'
+import { TcpManager } from './TcpManager'
 import { PtyManager } from './PtyManager'
 import { JsonStore } from './JsonStore'
 import { mainLogger } from './logger'
@@ -23,12 +24,16 @@ process.on('unhandledRejection', (reason) => {
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL
 
-// 每个窗口的活动写入流及其最近一次写盘错误（录制器用）
+// 每个录制流的活动写入流及其最近一次写盘错误（录制器用）。
+// 键为 `${winId}:${streamKey}`：多会话并排录制时（同窗口多端口 / 多窗口），
+// 每个会话的流独立管理，互不覆盖——单窗口旧实现按 win.id 键控，后起的会话
+// 会顶掉先起会话的流，导致数据写进对方的文件。
 interface ActiveStream {
   stream: fs.WriteStream
   lastError: string | null
 }
-const writeStreams = new Map<number, ActiveStream>()
+const writeStreams = new Map<string, ActiveStream>()
+const streamKeyOf = (winId: number, key?: string) => `${winId}:${key ?? ''}`
 
 function registerRecorderIpc(): void {
   // 目录选择器（替换原来的文件保存对话框）
@@ -45,15 +50,26 @@ function registerRecorderIpc(): void {
   })
 
   // 在指定目录中创建文件并打开写入流。
-  // 默认 flags:'w'（截断）——文件名按秒级时间戳唯一生成，无追加语义；
-  // 用 'a' 会让 1 秒内同名重开或残留旧文件时把新内容拼到旧文件末尾造成数据污染。
-  ipcMain.handle('recorder:create-file', async (event, dirPath: string, fileName: string) => {
+  // 默认 flags:'w'（截断）——文件名含端口 + 秒级时间戳，正常无同名；
+  // 同秒重启录制等极端情况经存在性检测追加 `-2`/`-3` 后缀避免截断旧文件。
+  // streamKey 由渲染端传入（如端口名），同一会话重启录制时替换旧流而非新建键。
+  ipcMain.handle('recorder:create-file', async (event, dirPath: string, fileName: string, streamKey?: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
 
-    const fullPath = path.join(dirPath, fileName)
+    // 同名冲突（同秒同端口重启录制）：追加序号后缀，返回实际文件名供渲染端展示
+    let fullPath = path.join(dirPath, fileName)
+    let actualName = fileName
+    const ext = path.extname(fileName)
+    const base = path.basename(fileName, ext)
+    for (let n = 2; fs.existsSync(fullPath); n++) {
+      actualName = `${base}-${n}${ext}`
+      fullPath = path.join(dirPath, actualName)
+    }
+
     const stream = fs.createWriteStream(fullPath, { flags: 'w' })
     const entry: ActiveStream = { stream, lastError: null }
+    const key = streamKeyOf(win.id, streamKey)
 
     // 流级错误（ENOSPC/EPERM 等）单向 send 无法上报到渲染进程，
     // 这里监听 error 并记录，由 write-chunk/close 时经 sender 通道回传。
@@ -66,22 +82,22 @@ function registerRecorderIpc(): void {
       }
     })
 
-    // 替换旧流（若有）：先正常关闭旧的，避免句柄泄漏
-    const prev = writeStreams.get(win.id)
+    // 替换旧流（若有）：同一 (窗口, streamKey) 重启录制时先正常关闭旧的，避免句柄泄漏
+    const prev = writeStreams.get(key)
     if (prev) {
       try { prev.stream.end() } catch { /* ignore */ }
     }
-    writeStreams.set(win.id, entry)
+    writeStreams.set(key, entry)
 
-    return { fileName }
+    return { fileName: actualName }
   })
 
   // 将块写入已打开的文件。返回 true 表示已提交到流（不代表已 fsync），
   // false 表示无打开流或流已出错——渲染进程据此把录制状态置为 error。
-  ipcMain.handle('recorder:write-chunk', async (event, chunk: Uint8Array) => {
+  ipcMain.handle('recorder:write-chunk', async (event, streamKey: string | undefined, chunk: Uint8Array) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return false
-    const entry = writeStreams.get(win.id)
+    const entry = writeStreams.get(streamKeyOf(win.id, streamKey))
     if (!entry) return false
     if (entry.lastError) return false
 
@@ -100,12 +116,13 @@ function registerRecorderIpc(): void {
   })
 
   // 刷新并关闭文件流。返回 true=正常关闭，false=流已出错。
-  ipcMain.handle('recorder:close-file', async (event) => {
+  ipcMain.handle('recorder:close-file', async (event, streamKey: string | undefined) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return true
-    const entry = writeStreams.get(win.id)
+    const key = streamKeyOf(win.id, streamKey)
+    const entry = writeStreams.get(key)
     if (!entry) return true
-    writeStreams.delete(win.id)
+    writeStreams.delete(key)
 
     const hadError = entry.lastError !== null
     await new Promise<void>((resolve) => {
@@ -193,6 +210,9 @@ const _serialManagers = new Map<number, SerialPortManager>()
 // 每个窗口对应一个管理器（用于把 pty 输出推回本窗口渲染进程）
 const _ptyManagers = new Map<number, PtyManager>()
 
+// ── TCP client（net 模块，每个窗口一个管理器，按端点管理多个连接）──
+const _tcpManagers = new Map<number, TcpManager>()
+
 /** 注册本地 pty 终端 IPC handlers */
 function registerPtyIpc(): void {
   // 启动一个本地 shell（渲染端以固定 id 连接）
@@ -222,6 +242,39 @@ function registerPtyIpc(): void {
   // 关闭 pty
   ipcMain.handle('pty:close', (event, id: string) => {
     _ptyManagers.get(BrowserWindow.fromWebContents(event.sender)?.id ?? -1)?.close(id)
+  })
+}
+
+/** 注册 TCP client 相关 IPC handlers（endpoint = "host:port"，连接以 connId 路由） */
+function registerTcpIpc(): void {
+  // 连接远端，返回主进程分配的 connId
+  ipcMain.handle('tcp:open', async (event, endpoint: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _tcpManagers.get(win.id) : null
+    if (!mgr) throw new Error('TCP 管理器不可用')
+    try {
+      const connId = await mgr.open(endpoint)
+      mainLogger.info('tcp', `connected: ${endpoint} (${connId})`)
+      return connId
+    } catch (e) {
+      mainLogger.error('tcp', `connect failed: ${endpoint}: ${e instanceof Error ? e.message : String(e)}`)
+      throw e
+    }
+  })
+
+  // 关闭指定连接（connId）
+  ipcMain.handle('tcp:close', (event, connId: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _tcpManagers.get(win.id) : null
+    mgr?.close(connId)
+  })
+
+  // 写入数据到指定连接（connId）
+  ipcMain.handle('tcp:write', async (event, connId: string, data: Uint8Array) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const mgr = win ? _tcpManagers.get(win.id) : null
+    if (!mgr) throw new Error('TCP 管理器不可用')
+    await mgr.write(connId, Buffer.from(data))
   })
 }
 
@@ -350,6 +403,8 @@ function createWindow(): void {
   _serialManagers.set(win.id, new SerialPortManager(win))
   // 创建本地 pty 管理器（本地终端验证用）
   _ptyManagers.set(win.id, new PtyManager(win))
+  // 创建 TCP 管理器（TCP client 连接，多会话按端点管理）
+  _tcpManagers.set(win.id, new TcpManager(win))
 
   // 转发渲染进程 console 到日志文件（保留源码位置便于定位）
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
@@ -368,15 +423,20 @@ function createWindow(): void {
 
   // 窗口关闭时清理录制写入流 + serialport 管理器（end 触发缓冲区最后一次刷新）
   win.on('closed', () => {
-    const entry = writeStreams.get(win.id)
-    if (entry) {
-      try { entry.stream.end() } catch { /* ignore */ }
-      writeStreams.delete(win.id)
+    // 流键为 `${winId}:${streamKey}`，按窗口前缀遍历清理该窗口的全部录制流
+    const prefix = `${win.id}:`
+    for (const [key, entry] of writeStreams) {
+      if (key.startsWith(prefix)) {
+        try { entry.stream.end() } catch { /* ignore */ }
+        writeStreams.delete(key)
+      }
     }
     _serialManagers.get(win.id)?.destroy()
     _serialManagers.delete(win.id)
     _ptyManagers.get(win.id)?.destroy()
     _ptyManagers.delete(win.id)
+    _tcpManagers.get(win.id)?.destroy()
+    _tcpManagers.delete(win.id)
   })
 
   if (devServerUrl) {
@@ -402,6 +462,7 @@ app.whenReady().then(() => {
   registerRecorderIpc()
   registerSerialPortIpc()
   registerPtyIpc()
+  registerTcpIpc()
   registerLoggerIpc()
   registerPersistIpc(jsonStore)
   configureWebSerial()

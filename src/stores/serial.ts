@@ -1,10 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, onScopeDispose } from 'vue'
-import type { MockScenarioId, PortInfo, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, SerialDriver } from '@/types'
+import type { MockScenarioId, EndpointInfo, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, IoTransport, TransportType } from '@/types'
+import type { DriverType } from '@/serial'
 import { MockSerialSource } from '@/mock/MockSerialSource'
-import { WebSerialDriver } from '@/serial/WebSerialDriver'
-import { SerialPortDriver } from '@/serial/SerialPortDriver'
-import { createSerialDriver, getDriverType, getUnsupportedReason, setDriverType, type DriverType } from '@/serial'
+import { createDriverOfType, createSerialDriver, getDriverType, getUnsupportedReason, setDriverType } from '@/serial'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
 import { computeChecksum } from '@/utils/checksum'
@@ -25,7 +24,7 @@ export interface SerialDeps {
   ingestRx: (bytes: Uint8Array) => void
   addTx: (bytes: Uint8Array, error?: string) => void
   settings: { autoReconnect: boolean }
-  createDriver: () => SerialDriver
+  createDriver: () => IoTransport
 }
 
 // 自动重连：固定 2s 间隔，不限次数；用户断开或关闭开关则停止。
@@ -42,18 +41,40 @@ const DEFAULT_OPTS: PortOptions = {
   flowControl: 'none'
 }
 
+/** TCP 默认端口（嵌入式上下文，Modbus TCP 等常用） */
+const DEFAULT_TCP_PORT = 502
+
+/** 端口号合法范围校验（1-65535 整数） */
+function isValidTcpPort(n: number): boolean {
+  return Number.isInteger(n) && n >= 1 && n <= 65535
+}
+
 export function createSerialStore(deps: SerialDeps) {
-  let driver: SerialDriver = deps.createDriver()
+  let driver: IoTransport = deps.createDriver()
   const driverType = ref<DriverType>(getDriverType())
   const unsupportedReason = ref(getUnsupportedReason())
 
-  const ports = ref<PortInfo[]>([])
+  const ports = ref<EndpointInfo[]>([])
   const selectedPort = ref<string | null>(null)
   const connected = ref(false)
   const options = reactive<PortOptions>({
     ...DEFAULT_OPTS,
     ...storage.get('portOptions', {})
   })
+  // TCP 传输参数（host/port），持久化（kart:tcpOptions），供连接与自动重连使用。
+  // port 允许 null：输入框清空时存 null（显示空），连接时校验并报「端口不能为空」。
+  const tcpOptions = reactive<{ host: string; port: number | null }>({
+    host: '',
+    port: DEFAULT_TCP_PORT,
+    ...storage.get('tcpOptions', {})
+  })
+  watch(
+    tcpOptions,
+    (val) => storage.set('tcpOptions', val),
+    { deep: true }
+  )
+  /** 用户可见的传输类型：driverType==='tcp' 即 TCP，其余（serialport/webserial/mock/pty）都是串口后端 */
+  const transportType = computed<TransportType>(() => (driverType.value === 'tcp' ? 'tcp' : 'serial'))
   const scenario = ref<MockScenarioId>('at-reply')
   const signals = ref<SerialSignals>({ dcd: false, cts: false, dsr: false, ri: false })
   // 输出控制线：记录「最后一次请求」的 DTR/RTS 电平（驱动无法读回输出线，UI 据此显示
@@ -118,7 +139,7 @@ export function createSerialStore(deps: SerialDeps) {
   })
 
   async function refreshPorts() {
-    ports.value = await driver.listPorts()
+    ports.value = await driver.listEndpoints()
     if (!selectedPort.value && ports.value.length > 0) {
       selectedPort.value = ports.value[0].path
     }
@@ -136,6 +157,17 @@ export function createSerialStore(deps: SerialDeps) {
   }
 
   async function connect() {
+    // TCP 传输：连接前从 host/port 组端点（统一写入 selectedPort——显示/录制文件名/decoder-config 键共用）。
+    // 无效端点抛错而非静默返回——ConnectionBar 的 toggle() 捕获后弹 toast，用户能感知原因。
+    if (driverType.value === 'tcp') {
+      const host = tcpOptions.host.trim()
+      if (!host) throw new Error('TCP 主机不能为空')
+      // IPv6 暂不支持：host 含 ':'（含 [::1] 方括号形式）明确拒绝，避免静默误解析成错误 host
+      if (host.includes(':')) throw new Error('暂不支持 IPv6 地址，请使用 IPv4 或主机名')
+      if (tcpOptions.port == null) throw new Error('TCP 端口不能为空')
+      if (!isValidTcpPort(tcpOptions.port)) throw new Error(`TCP 端口无效: ${tcpOptions.port}（范围 1-65535）`)
+      selectedPort.value = `${host}:${tcpOptions.port}`
+    }
     if (connected.value || !selectedPort.value) return
     if (driver instanceof MockSerialSource) {
       driver.setScenario(scenario.value)
@@ -172,10 +204,10 @@ export function createSerialStore(deps: SerialDeps) {
       logger.info('serial', `auto-reconnect succeeded: ${selectedPort.value}`)
     }
     // 重放用户此前请求的输出线电平（如 ESP32/STM32 复位组合）。失败静默——
-    // 硬件/虚拟串口可能不支持，下次 toggle 时 UI 会得到真实错误。
+    // 硬件/虚拟串口可能不支持，下次 toggle 时 UI 会得到真实错误。非串口传输无此能力（可选链）。
     if (dtr.value || rts.value) {
       try {
-        await driver.setSignals({ dtr: dtr.value, rts: rts.value })
+        await driver.setSignals?.({ dtr: dtr.value, rts: rts.value })
       } catch (e) {
         logger.warn('serial', `re-assert DTR/RTS failed: ${e instanceof Error ? e.message : String(e)}`)
       }
@@ -189,7 +221,9 @@ export function createSerialStore(deps: SerialDeps) {
         void disconnect()
         return
       }
-      signals.value = driver.getSignals()
+      // 串口信号线（可选扩展）；TCP 无调制解调器线，保持默认 false
+      const sig = driver.getSignals?.()
+      if (sig) signals.value = sig
     }, 500)
   }
 
@@ -243,8 +277,9 @@ export function createSerialStore(deps: SerialDeps) {
     } catch {
       // 列举失败不致命，继续尝试 open
     }
-    // 设备重新枚举后仍未归位（仍被拔出）→ 跳过本次，排程下一次
-    if (!ports.value.some((p) => p.path === selectedPort.value)) {
+    // 设备重新枚举后仍未归位（仍被拔出）→ 跳过本次，排程下一次。
+    // TCP 无枚举（listEndpoints 恒空），跳过在位检查直接尝试连接。
+    if (driverType.value !== 'tcp' && !ports.value.some((p) => p.path === selectedPort.value)) {
       scheduleReconnect()
       return
     }
@@ -305,7 +340,11 @@ export function createSerialStore(deps: SerialDeps) {
     driver.setScenario(id)
   }
 
-  /** 切换驱动类型（仅 DEV 模式生效） */
+  /**
+   * 切换驱动类型（含用户传输切换）。直接按目标类型构建驱动（不经环境解析单例，
+   * 使生产环境可切 tcp）；DEV 下同步 setDriverType 更新模块解析结果，让新建会话
+   * 继承当前切换（如 DEV 驱动切换工具切到 mock/pty 后新会话仍是 mock/pty）。
+   */
   async function switchDriver(type: DriverType) {
     if (type === driverType.value) return
     if (connected.value) await userDisconnect()
@@ -315,20 +354,27 @@ export function createSerialStore(deps: SerialDeps) {
     reconnectNextAt.value = null
     reconnectAttempts.value = 0
     const prevDriver = driver
-    setDriverType(type)
-    driverType.value = getDriverType()
-    unsupportedReason.value = getUnsupportedReason()
-    driver = deps.createDriver()
-    // 销毁旧驱动（serialport/webserial 都持有需要清理的本地资源）
-    if (prevDriver instanceof WebSerialDriver || prevDriver instanceof SerialPortDriver) {
-      prevDriver.destroy()
-    }
+    // DEV 下更新模块解析状态（生产 no-op）。仅串口后端持久化——tcp 是用户传输态，
+    // 写进模块级解析会让 getDriverType() 返回 'tcp'，setTransport('serial') 据此解析
+    // 串口后端时命中早退，DEV 下切不回串口（round-trip 卡死）。
+    if (type !== 'tcp') setDriverType(type)
+    driver = createDriverOfType(type)
+    driverType.value = type
+    unsupportedReason.value = type === 'unsupported' ? getUnsupportedReason() : null
+    // 销毁旧驱动（持有端口/socket 句柄的传输实现 destroy；无资源者可选链跳过）
+    prevDriver.destroy?.()
     // re-seed scenario for mock
     if (driver instanceof MockSerialSource) {
       driver.setScenario(scenario.value)
     }
     selectedPort.value = null
     await refreshPorts()
+  }
+
+  /** 用户切换传输类型（串口/TCP）。回串口 = 环境解析的串口后端（serialport/webserial/mock/pty）。 */
+  async function setTransport(t: TransportType) {
+    if (t === transportType.value) return
+    await switchDriver(t === 'tcp' ? 'tcp' : getDriverType())
   }
 
   /** 新增自定义波特率（非法值/预设档位/已存在项会被忽略） */
@@ -353,6 +399,19 @@ export function createSerialStore(deps: SerialDeps) {
       c.baud === baud ? { ...c, note: trimmed || undefined } : c
     )
     persistNow('customBaudRates', customBaudRates.value)
+  }
+
+  /**
+   * 写失败统一处理：记录 TX 气泡（record=false 时不建）；若驱动已报告物理断连
+   * （500ms 轮询尚未触发），立即走断连/自动重连——UI 即刻恢复，而不是让用户在
+   * 「已连接」下反复看到失败气泡。
+   */
+  function noteWriteFailure(bytes: Uint8Array, msg: string, record: boolean): void {
+    if (record) deps.addTx(bytes, msg)
+    if (!driver.isOpen) {
+      userInitiatedDisconnect = false
+      void disconnect()
+    }
   }
 
   /**
@@ -395,7 +454,7 @@ export function createSerialStore(deps: SerialDeps) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('serial', `write failed: ${msg}`)
-      deps.addTx(bytes, msg)
+      noteWriteFailure(bytes, msg, true)
       return { ok: false, error: msg }
     }
   }
@@ -417,7 +476,7 @@ export function createSerialStore(deps: SerialDeps) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('serial', `write failed: ${msg}`)
-      if (record) deps.addTx(bytes, msg)
+      noteWriteFailure(bytes, msg, record)
       return { ok: false, error: msg }
     }
   }
@@ -436,7 +495,7 @@ export function createSerialStore(deps: SerialDeps) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('serial', `write failed: ${msg}`)
-      deps.addTx(bytes, msg)
+      noteWriteFailure(bytes, msg, true)
       return { ok: false, error: msg }
     }
   }
@@ -450,7 +509,7 @@ export function createSerialStore(deps: SerialDeps) {
     dtr.value = on
     if (!connected.value) return
     try {
-      await driver.setSignals({ dtr: on })
+      await driver.setSignals?.({ dtr: on })
     } catch (e) {
       dtr.value = prev
       const msg = e instanceof Error ? e.message : String(e)
@@ -465,7 +524,7 @@ export function createSerialStore(deps: SerialDeps) {
     rts.value = on
     if (!connected.value) return
     try {
-      await driver.setSignals({ rts: on })
+      await driver.setSignals?.({ rts: on })
     } catch (e) {
       rts.value = prev
       const msg = e instanceof Error ? e.message : String(e)
@@ -479,9 +538,9 @@ export function createSerialStore(deps: SerialDeps) {
     if (!connected.value || breakBusy.value) return
     breakBusy.value = true
     try {
-      await driver.setBreak(true)
+      await driver.setBreak?.(true)
       await new Promise((r) => setTimeout(r, BREAK_PULSE_MS))
-      await driver.setBreak(false)
+      await driver.setBreak?.(false)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('serial', `send break failed: ${msg}`)
@@ -523,9 +582,7 @@ export function createSerialStore(deps: SerialDeps) {
     if (driver.isOpen) {
       driver.close().catch(() => {})
     }
-    if (driver instanceof WebSerialDriver || driver instanceof SerialPortDriver) {
-      driver.destroy()
-    }
+    driver.destroy?.()
   })
 
   return {
@@ -533,6 +590,8 @@ export function createSerialStore(deps: SerialDeps) {
     selectedPort,
     connected,
     options,
+    tcpOptions,
+    transportType,
     scenario,
     signals,
     dtr,
@@ -558,6 +617,7 @@ export function createSerialStore(deps: SerialDeps) {
     pulseBreak,
     setScenario,
     switchDriver,
+    setTransport,
     addCustomBaudRate,
     removeCustomBaudRate,
     updateCustomBaudNote,

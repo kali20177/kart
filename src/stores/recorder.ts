@@ -14,6 +14,8 @@ export interface RecorderDeps {
   onData: (cb: (bytes: Uint8Array) => void) => () => void
   onTxData: (cb: (bytes: Uint8Array) => void) => () => void
   connected: Ref<boolean>
+  /** 当前端口（文件名标识数据来源 + 主进程流键控区分会话）。null 表示未选端口。 */
+  port: Ref<string | null>
   settings: { recordFormat: RecordFormat }
 }
 
@@ -66,12 +68,28 @@ export function createRecorderStore(deps: RecorderDeps) {
     triggerRef(state)
   }
 
+  /**
+   * 端口名 → 文件系统安全片段。POSIX 禁 `/`，Windows 禁 `\ : * ? " < > |`，
+   * macOS(HFS+) 对 `:` 敏感——统一替换为 `-` 并裁剪首尾。
+   * 如 /dev/cu.usbserial-2430 → dev-cu.usbserial-2430。
+   */
+  function sanitizePortName(port: string): string {
+    const cleaned = port.replace(/[\\/:*?"<>|\s]+/g, '-').replace(/^-+|-+$/g, '')
+    return cleaned || 'no-port'
+  }
+
+  /** 录制流键：多会话并排录制时主进程按 (窗口, 端口) 区分写入流，避免互相覆盖 */
+  function streamKey(): string {
+    return deps.port.value ? sanitizePortName(deps.port.value) : 'no-port'
+  }
+
   function generateFileName(format: RecordFormat): string {
     const now = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
     const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
     const ext = format === 'csv' ? 'csv' : 'txt'
-    return `serial-log-${stamp}.${ext}`
+    // 文件名带端口标识：并排多会话录制时用户能分清数据来源
+    return `serial-log-${streamKey()}-${stamp}.${ext}`
   }
 
   async function start(_config?: RecordConfig) {
@@ -83,7 +101,7 @@ export function createRecorderStore(deps: RecorderDeps) {
 
     const format = _config?.format ?? deps.settings.recordFormat
     const fileName = generateFileName(format)
-    const w = await recordDir.createFile(fileName)
+    const w = await recordDir.createFile(fileName, streamKey())
     if (!w) {
       throw new Error('无法在录制目录中创建文件')
     }
@@ -307,6 +325,7 @@ export const useRecorderStore = defineStore('recorder', () => {
     onData: (cb) => serial.onData(cb),
     onTxData: (cb) => serial.onTxData(cb),
     connected: storeToRefs(serial).connected,
+    port: storeToRefs(serial).selectedPort,
     settings: settings.settings,
   })
 })

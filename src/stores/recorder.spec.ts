@@ -81,6 +81,28 @@ describe('recorder store', () => {
     expect(mockCreateFile).toHaveBeenCalledOnce()
   })
 
+  it('file name includes sanitized port, stream key passed for multi-session isolation', async () => {
+    const { serial, recorder, settings } = await setupStores()
+    settings.settings.recordFormat = 'text'
+    serial.selectedPort = '/dev/cu.usbserial-2430'
+    await recorder.start()
+    // 文件名带端口（/ 已替换为 -），createFile 第二参为 streamKey——主进程按 (窗口, streamKey) 分流的键
+    expect(mockCreateFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^serial-log-dev-cu\.usbserial-2430-\d{8}-\d{6}\.txt$/),
+      'dev-cu.usbserial-2430'
+    )
+  })
+
+  it('no port falls back to no-port in file name', async () => {
+    const { recorder, settings } = await setupStores()
+    settings.settings.recordFormat = 'text'
+    await recorder.start()
+    expect(mockCreateFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^serial-log-no-port-\d{8}-\d{6}\.txt$/),
+      'no-port'
+    )
+  })
+
   it('start() throws if no directory configured', async () => {
     mockDirName.value = null
     const { recorder } = await setupStores()

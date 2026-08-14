@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
@@ -7,15 +7,17 @@ import StatusBar from './StatusBar.vue'
 import { createSession, type Session } from '@/session'
 import { provideSession } from '@/composables/useSession'
 import { i18n } from '@/i18n'
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import { setDriverType } from '@/serial'
+import type { EndpointInfo, PortOptions, SerialSignals, IoTransport, DriverType } from '@/types'
 
 /** 记录调用痕迹的假驱动：setSignals/setBreak 写入 observable 状态供断言 */
-class FakeDriver implements SerialDriver {
+class FakeDriver implements IoTransport {
+  readonly type: DriverType = 'serialport'
   isOpen = false
   signals: { dtr?: boolean; rts?: boolean } = {}
   break: boolean | null = null
 
-  listPorts = async (): Promise<PortInfo[]> => []
+  listEndpoints = async (): Promise<EndpointInfo[]> => []
   open = async (_path: string, _options: PortOptions): Promise<void> => {
     this.isOpen = true
   }
@@ -37,7 +39,13 @@ class FakeDriver implements SerialDriver {
 let wrappers: VueWrapper[] = []
 let sessions: Session[] = []
 
-function mountStatusBar(driver: SerialDriver) {
+beforeEach(() => {
+  // 恢复环境默认驱动类型：TCP 用例经 setTransport 会把模块解析结果切成 tcp，
+  // 若不清除会污染后续用例（driverType ref 初始读 getDriverType()）。
+  setDriverType('serialport')
+})
+
+function mountStatusBar(driver: IoTransport) {
   setActivePinia(createPinia())
   const session = createSession({ createDriver: () => driver })
   sessions.push(session)
@@ -113,5 +121,24 @@ describe('StatusBar · 输出线控制（DTR/RTS/Break）', () => {
     await nextTick()
     expect(session.serial.rts).toBe(true)
     expect(driver.signals.rts).toBe(true)
+  })
+})
+
+describe('StatusBar · TCP 传输（无调制解调器线）', () => {
+  it('TCP 传输不渲染 DTR/RTS/BRK 与 CTS（串口专属控件）', async () => {
+    const { wrapper, session } = mountStatusBar(new FakeDriver())
+    // 切到 TCP：真实 TcpDriver 无 getSignals/setSignals/setBreak，UI 必须隐藏信号控件
+    await session.serial.setTransport('tcp')
+    expect(session.serial.transportType).toBe('tcp')
+    await nextTick()
+    expect(wrapper.findAll('.signal-btn').length).toBe(0)
+    expect(wrapper.find('.signal-ro').exists()).toBe(false)
+  })
+
+  it('串口传输照常渲染信号控件（对照）', () => {
+    const { wrapper } = mountStatusBar(new FakeDriver())
+    const btns = wrapper.findAll('.signal-btn')
+    expect(btns.map((b) => b.text())).toEqual(['DTR', 'RTS', 'BRK'])
+    expect(wrapper.find('.signal-ro').exists()).toBe(true)
   })
 })

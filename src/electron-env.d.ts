@@ -1,4 +1,5 @@
 import type { ElectronSerial } from '@/serial/SerialPortDriver'
+import type { ElectronTcp } from '@/serial/TcpDriver'
 
 // preload 通过 contextBridge 暴露的 Electron 桥接 API（仅 Electron 下存在）。
 // 从 env.d.ts 拆出独立模块文件，以便引用 SerialPortDriver 导出的 ElectronSerial
@@ -18,11 +19,12 @@ declare global {
         onData(handler: (data: string, id: string) => void): () => void
         onExit(handler: (id: string) => void): () => void
       }
+      tcp?: ElectronTcp
       recorder?: {
         showDirectoryPicker(): Promise<string | null>
-        createFile(dirPath: string, fileName: string): Promise<{ fileName: string } | null>
-        writeChunk(chunk: Uint8Array): Promise<boolean>
-        closeFile(): Promise<boolean>
+        createFile(dirPath: string, fileName: string, streamKey?: string): Promise<{ fileName: string } | null>
+        writeChunk(streamKey: string | undefined, chunk: Uint8Array): Promise<boolean>
+        closeFile(streamKey: string | undefined): Promise<boolean>
         onWriteError(handler: (msg: string) => void): void
       }
       log?: {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useClipboard, useDebounceFn } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, NDropdown, NModal, useDialog, useMessage } from 'naive-ui'
@@ -9,16 +9,12 @@ import MessageBubble from './MessageBubble.vue'
 import { useSession } from '@/composables/useSession'
 import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
-import type { DataMode, Direction, Message } from '@/types'
+import type { Direction, Message } from '@/types'
 import { formatMessageLine, formatTimestamp, computeDeltas } from '@/utils/message-format'
 import ExportDialog from './ExportDialog.vue'
 
-const props = defineProps<{ viewMode: DataMode }>()
-const emit = defineEmits<{
-  (e: 'resend', bytes: Uint8Array): void
-}>()
-
-const { messages: messagesStore, settings: settingsStore, pause: pauseStore } = useSession()
+const session = useSession()
+const { messages: messagesStore, settings: settingsStore, pause: pauseStore, serial } = session
 const dialog = useDialog()
 const toast = useMessage()
 const { copy } = useClipboard()
@@ -43,7 +39,11 @@ const showTimeFilter = ref(false)
 const hasNote = ref(false)
 const matchIndex = ref(0)
 /** 搜索类型跟随当前视图模式 —— ASCII 视图搜索文本，HEX 视图搜索原始字节 */
-const searchMode = computed(() => props.viewMode === 'ascii' ? 'text' : 'hex')
+const searchMode = computed(() => session.viewMode === 'ascii' ? 'text' : 'hex')
+
+function onResend(bytes: Uint8Array) {
+  serial.resend(bytes)
+}
 
 /** HH:MM:SS[.mmm] / HH:MM → 当日毫秒数；非法返回 null */
 const timeStart = computed(() => parseTimeInput(timeInputStart.value))
@@ -128,12 +128,14 @@ function scrollToBottom() {
   inst?.scrollToBottom?.()
 }
 
-onMounted(() => {
+/** scroller 随空状态条件挂载/卸载，滚动监听必须响应式跟随，否则启动空态下监听永久缺失 */
+function bindScrollerListener() {
+  scrollEl?.removeEventListener('scroll', onScroll)
   scrollEl = (scroller.value as unknown as { $el: HTMLElement } | null)?.$el ?? null
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
-})
+}
+watch(scroller, bindScrollerListener, { immediate: true, flush: 'post' })
 onBeforeUnmount(() => scrollEl?.removeEventListener('scroll', onScroll))
-
 // 新数据到达：仅"跟随最新"且"非多选"时自动滚底（多选时用户在选历史，不应被滚走）
 watch(
   () => messagesStore.messages.length,
@@ -164,6 +166,22 @@ watch(
     if (prev === 0 && n > 0) droppedBarDismissed.value = false
   }
 )
+
+/** 空状态：分四种语义 ——
+ *  idle     未连接（首次访问或断开后）
+ *  waiting  已连接但还没收到任何帧
+ *  paused   暂停期间没有任何消息
+ *  filtered 有消息但当前筛选条件下没有命中
+ *  共用同一布局，仅替换标题/提示/icon 区分。 */
+const emptyState = computed(() => {
+  if (messagesStore.messages.length > 0) {
+    if (filtered.value.length === 0) return 'filtered' as const
+    return null
+  }
+  if (messagesStore.paused) return 'paused' as const
+  if (serial.connected) return 'waiting' as const
+  return 'idle' as const
+})
 
 function jumpLatest() {
   follow.value = true
@@ -270,7 +288,7 @@ function copySelected() {
   const lines = selectedMessages()
     .map((m) =>
       formatMessageLine(m, {
-        viewMode: props.viewMode,
+        viewMode: session.viewMode,
         encoding: settingsStore.encoding,
         timeStyle: 'short'
       })
@@ -345,15 +363,22 @@ watch(
         :type="showTimeFilter || timeStart !== null || timeEnd !== null ? 'primary' : 'default'"
         :title="t('msgList.timeFilter')"
         @click="showTimeFilter = !showTimeFilter"
-        >⏱</NButton
       >
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="6.2" />
+          <path d="M8 4.5V8l2.6 1.6" />
+        </svg>
+      </NButton>
       <NButton
         size="tiny"
         :type="hasNote ? 'primary' : 'default'"
         :title="t('msgList.filterNote')"
         @click="hasNote = !hasNote"
-        >📌</NButton
       >
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 2.5h9v11L8 10.8 3.5 13.5z" />
+        </svg>
+      </NButton>
       <!-- 匹配导航 -->
       <span v-if="matchCount > 0" class="match-nav">
         <NButton size="tiny" quaternary :disabled="matchCount < 2" :title="t('msgList.prevMatch')" @click="goToMatch(-1)">↑</NButton>
@@ -397,7 +422,37 @@ watch(
         <span>{{ t('msgList.droppedFrames', { n: messagesStore.droppedFrames }) }}</span>
         <button type="button" class="dropped-dismiss" :title="t('msgList.cancel')" @click="droppedBarDismissed = true">✕</button>
       </div>
+
+      <div v-if="emptyState" class="empty-state" :data-kind="emptyState">
+        <div class="empty-glyph" aria-hidden="true">
+          <!-- 四种状态共用一个图标，仅 glyph 内的点缀元素随状态变化 -->
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="14" y="20" width="36" height="24" rx="3" />
+            <path d="M14 28 L14 36 L50 36 L50 28" />
+            <circle cx="46" cy="24" r="0.9" fill="currentColor" />
+            <path v-if="emptyState === 'idle'" class="empty-led" d="M24 44 L24 44.01" />
+            <path v-else-if="emptyState === 'waiting'" class="empty-led waiting" d="M24 44 L24 44.01" />
+            <path v-else-if="emptyState === 'paused'" d="M22 42 L26 42" />
+            <path v-else d="M22 44 L26 44 L26 40 L22 40 Z" />
+          </svg>
+        </div>
+        <div class="empty-title">
+          {{ emptyState === 'idle' ? t('msgList.emptyIdleTitle')
+            : emptyState === 'waiting' ? t('msgList.emptyWaitingTitle')
+            : emptyState === 'paused' ? t('msgList.emptyPausedTitle')
+            : t('msgList.emptyFilteredTitle') }}
+        </div>
+        <div class="empty-hint">
+          {{ emptyState === 'idle' ? t('msgList.emptyIdleHint')
+            : emptyState === 'waiting' ? t('msgList.emptyWaitingHint')
+            : emptyState === 'paused' ? t('msgList.emptyPausedHint')
+            : t('msgList.emptyFilteredHint') }}
+        </div>
+        <div v-if="emptyState === 'idle'" class="empty-step">{{ t('msgList.emptyIdleStep') }}</div>
+      </div>
+
       <DynamicScroller
+        v-else
         ref="scroller"
         :items="filtered"
         :min-item-size="46"
@@ -409,12 +464,12 @@ watch(
           <DynamicScrollerItem
             :item="item"
             :active="active"
-            :size-dependencies="[item.bytes.length, props.viewMode]"
+            :size-dependencies="[item.bytes.length, session.viewMode]"
             :data-index="index"
           >
             <MessageBubble
               :message="item"
-              :view-mode="props.viewMode"
+              :view-mode="session.viewMode"
               :encoding="settingsStore.encoding"
               :selectable="multiSelect"
               :selected="selected.has(item.id)"
@@ -424,7 +479,7 @@ watch(
               :active-match="matchIndex === index && matchCount > 0"
               :delta-ms="deltaMap.get(item.id)?.deltaMs"
               :elapsed-ms="deltaMap.get(item.id)?.elapsedMs"
-              @resend="emit('resend', $event)"
+              @resend="onResend"
               @select="onBubbleSelect(item)"
               @contextmenu="(e: MouseEvent) => onBubbleContext(item, e)"
             />
@@ -518,6 +573,9 @@ watch(
   display: flex;
   flex-direction: column;
   flex: 1;
+  /* dockview 下父容器（.dv-vue-part）是 block 非 flex，flex:1 不生效，须显式定高，
+     否则消息列表高度塌陷为内容高（空消息时 0） */
+  height: 100%;
   min-height: 0;
 }
 .toolbar {
@@ -551,6 +609,12 @@ watch(
   font-size: 11px;
   color: var(--err);
   white-space: nowrap;
+}
+/* 工具条图标按钮（时间筛选/标注过滤）：svg 尺寸随按钮行高 */
+.btn-icon {
+  width: 13px;
+  height: 13px;
+  display: block;
 }
 .match-nav {
   display: inline-flex;
@@ -660,5 +724,84 @@ watch(
 .marker-dialog-label {
   font-size: 13px;
   color: var(--text-dim);
+}
+
+/* ── 空状态 ── 屏幕中央占位，未连/等待/暂停/筛选空 四态共用布局，icon 颜色与文案随状态变化 */
+.empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px;
+  gap: 12px;
+  text-align: center;
+  /* 视觉锚点：竖向 1px 居中分隔线，让空状态与左右工具栏在视觉上对齐 */
+  color: var(--text-dim);
+  user-select: none;
+}
+.empty-glyph {
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  /* muted 颜色与边框呼应「未激活」语义 */
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  position: relative;
+}
+.empty-glyph svg {
+  width: 52px;
+  height: 52px;
+  opacity: 0.85;
+}
+.empty-state[data-kind='waiting'] .empty-glyph {
+  color: var(--accent);
+  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.empty-state[data-kind='paused'] .empty-glyph {
+  color: var(--warn);
+  border-color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+}
+.empty-state[data-kind='filtered'] .empty-glyph {
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+/* waiting 状态：图标右侧的状态灯呼吸脉动，提示「正在听」 */
+.empty-state[data-kind='waiting'] .empty-led.waiting {
+  animation: empty-pulse 1.6s ease-in-out infinite;
+}
+@keyframes empty-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1;    }
+}
+@media (prefers-reduced-motion: reduce) {
+  .empty-state[data-kind='waiting'] .empty-led.waiting { animation: none; }
+}
+.empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+.empty-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  max-width: 340px;
+}
+.empty-step {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  margin-top: 2px;
+  max-width: 340px;
+  line-height: 1.5;
 }
 </style>

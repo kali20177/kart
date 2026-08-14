@@ -1,4 +1,4 @@
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, IoTransport, PortOptions, SerialSignals, DriverType } from '@/types'
 
 /**
  * 不兼容占位驱动 -- 浏览器不支持 Web Serial / 非安全上下文时使用。
@@ -7,17 +7,18 @@ import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types
  * 用户无法触发任何串口操作,此驱动的方法不会被调用。这里的抛错/no-op 仅作防御:
  * 遮罩挂载前的竞态、单测、以及未来新增的调用入口。
  *
- * 实现 SerialDriver 接口是为了保持 serial store 的类型契约
- * (`let driver: SerialDriver = createSerialDriver()`),无需把 driver 改成可空。
+ * 实现 IoTransport 接口是为了保持 serial store 的类型契约
+ * (`let driver: IoTransport = createSerialDriver()`),无需把 driver 改成可空。
  */
-export class UnsupportedDriver implements SerialDriver {
+export class UnsupportedDriver implements IoTransport {
+  readonly type: DriverType = 'unsupported'
   private _isOpen = false
 
   get isOpen(): boolean {
     return this._isOpen
   }
 
-  async listPorts(): Promise<PortInfo[]> {
+  async listEndpoints(): Promise<EndpointInfo[]> {
     return []
   }
 

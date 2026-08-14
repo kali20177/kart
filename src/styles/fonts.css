@@ -1,0 +1,14 @@
+/* 自托管字体 ——
+ * Orbitron 用于 OLED HUD 主题的"display"字体（标题/数字等）。
+ * 自托管而非 Google Fonts 是因为 CSP 不允许外部 style-sheet 加载。
+ * 仅在 OLED 主题里通过 --display-font 引用，不污染其他主题。
+ * 源文件来自 Google Fonts v35 的可变字体（12KB，含 400-900 字重）。
+ */
+@font-face {
+  font-family: 'Orbitron Local';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('/fonts/orbitron-var.woff2') format('woff2-variations'),
+       url('/fonts/orbitron-var.woff2') format('woff2');
+}

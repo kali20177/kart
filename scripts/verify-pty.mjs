@@ -90,7 +90,7 @@ try {
   check('点击连接 → 已连接态（驱动=pty，shell 已 spawn）', true)
 
   // 切「终端」视图
-  await page.getByRole('button', { name: '终端' }).click({ timeout: 5000 })
+  await page.locator('.dv-tab', { hasText: '终端' }).click({ timeout: 5000 })
   await page.locator('.xterm-screen').waitFor({ timeout: 8000 })
   check('终端视图 xterm 挂载 (.xterm-screen)', true)
 

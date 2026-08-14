@@ -195,6 +195,9 @@ function handleSelect(key: string) {
     <NDropdown trigger="click" :options="helpMenu" @select="handleSelect">
       <NButton size="tiny" quaternary>{{ t('menu.help') }}</NButton>
     </NDropdown>
+    <!-- 右侧插槽：全局功能按钮（ASCII/设置）复用本行，不额外占行高 -->
+    <div class="menubar-spacer" />
+    <slot />
   </div>
 
   <NModal v-model:show="showAbout" preset="card" :title="t('menu.about')" style="width: 420px">
@@ -252,6 +255,26 @@ function handleSelect(key: string) {
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   border-bottom: 1px solid var(--glass-border);
   flex-shrink: 0;
+  position: relative;
+}
+/* 顶部 1px inset 高光 — 让"玻璃"在同色背景上明显 */
+.menubar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--glass-highlight) 12%,
+    var(--glass-highlight) 88%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0.7;
+}
+.menubar-spacer {
+  flex: 1;
 }
 .about,
 .license {
@@ -262,6 +285,8 @@ function handleSelect(key: string) {
 .app-name {
   font-size: 16px;
   font-weight: 600;
+  font-family: var(--display-font);
+  letter-spacing: var(--display-letter-spacing);
 }
 .desc {
   margin: 4px 0 12px;

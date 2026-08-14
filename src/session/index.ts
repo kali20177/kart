@@ -1,5 +1,8 @@
-import { effectScope, reactive, type UnwrapNestedRefs } from 'vue'
-import type { AppSettings, SerialDriver } from '@/types'
+import { effectScope, reactive, ref, watch, type UnwrapNestedRefs } from 'vue'
+import type { AppSettings, DataMode, IoTransport } from '@/types'
+import type { DecoderConfig } from '@/decoders/types'
+import { DEFAULT_DECODER_CONFIG } from '@/decoders'
+import { storage } from '@/composables/useStorage'
 import { createSerialStore } from '@/stores/serial'
 import { createMessagesStore } from '@/stores/messages'
 import { createPauseStore } from '@/stores/pause'
@@ -12,7 +15,7 @@ import { createFreshSerialDriver } from '@/serial'
 
 /** 创建会话时的可覆盖依赖（主要为测试注入 mock 驱动）。 */
 export interface SessionOverrides {
-  createDriver?: () => SerialDriver
+  createDriver?: () => IoTransport
 }
 
 /**
@@ -31,6 +34,12 @@ export interface Session {
   terminal: UnwrapNestedRefs<ReturnType<typeof createTerminalStore>>
   /** 全局设置（settings store 的同一 reactive proxy，跨会话共享） */
   settings: AppSettings
+  /** 消息/发送框共用的数据显示模式（ASCII/HEX），会话级（初始取全局 defaultView） */
+  viewMode: DataMode
+  /** 发送框草稿文本（发送框随消息面板显示/隐藏，会话级保存） */
+  composerText: string
+  /** 帧解码配置（会话级、按端口持久化；消息管线读取，SettingsModal 编辑） */
+  decoder: DecoderConfig
   /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
   dispose: () => void
 }
@@ -63,6 +72,10 @@ export function createSession(overrides: SessionOverrides = {}): Session {
   const stores = scope.run(() => {
     const s = useSettingsStore().settings
 
+    // 帧解码配置：会话级、按端口持久化。用 reactive 对象直传 messages store（与 settings 同例），
+    // SettingsModal 经 session.decoder 直接编辑同一对象；端口确定后由下方 watcher 按端口加载/保存。
+    const decoderCfg = reactive(structuredClone(DEFAULT_DECODER_CONFIG))
+
     // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
     let _clearMessages: () => void = () => {}
     let _clearWaveform: () => void = () => {}
@@ -74,6 +87,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
 
     const messages = createMessagesStore({
       settings: s,
+      decoder: decoderCfg,
       paused: pause.paused,
       pauseStartTime: pause.pauseStartTime,
       togglePause: () => pause.toggle(),
@@ -86,6 +100,42 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       settings: s,
       createDriver,
     })
+
+    // 解码器配置按端口持久化：切端口时加载该端口的配置，修改时写回当前端口。
+    // 关键语义：连接前（端口未选）的配置编辑不写进 'default' 垃圾键，而是保留在内存，
+    // 首个端口选中且无已存配置时沿用并落盘——避免「先启用再连接」被端口切换清掉。
+    const DECODER_KEY = (port: string) => `decoder-config:${port}`
+    let hasSelectedPort = false
+    watch(
+      serial.selectedPort,
+      (port) => {
+        if (!port) return
+        const stored = storage.get<Partial<DecoderConfig> | null>(DECODER_KEY(port), null)
+        const merged = {
+          ...structuredClone(DEFAULT_DECODER_CONFIG),
+          ...stored,
+          options: { ...DEFAULT_DECODER_CONFIG.options, ...(stored?.options ?? {}) }
+        }
+        if (stored || hasSelectedPort) {
+          // 该端口已有配置，或之前已选过端口 → 载入该端口配置（不同端口不同协议）
+          Object.assign(decoderCfg, merged)
+        } else {
+          // 首个端口且无已存配置：沿用内存配置（可能连接前刚启用），落盘一次
+          storage.set(DECODER_KEY(port), decoderCfg)
+        }
+        hasSelectedPort = true
+      },
+      { immediate: true }
+    )
+    watch(
+      decoderCfg,
+      (cfg) => {
+        const port = serial.selectedPort.value
+        if (port) storage.set(DECODER_KEY(port), cfg)
+      },
+      // flush:'sync'：配置体量小，立即落盘——避免同 tick 内变更后紧接 dispose 丢最后一次写
+      { deep: true, flush: 'sync' }
+    )
 
     const waveform = createWaveformStore({
       onData: (cb) => serial.onData(cb),
@@ -100,6 +150,8 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       onData: (cb) => serial.onData(cb),
       onTxData: (cb) => serial.onTxData(cb),
       connected: serial.connected,
+      // 端口进文件名与主进程录制流键（并排多会话录制区分数据来源）
+      port: serial.selectedPort,
       settings: s,
     })
 
@@ -120,9 +172,12 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       useUtf8: serial.driverType.value === 'pty',
     })
 
-    return reactive({ serial, messages, pause, waveform, recorder, transfer, terminal, settings: s })
+    return reactive({ serial, messages, pause, waveform, recorder, transfer, terminal, settings: s, viewMode: ref(s.defaultView), composerText: ref(''), decoder: decoderCfg })
   })!
 
   const id = _nextSessionId++
-  return { id, ...stores, dispose: () => scope.stop() }
+  // 整包 reactive()：让 session 自身就是响应式 proxy，不依赖调用方容器（ref 数组）
+  // 深包装。此前返回 { id, ...stores } 普通对象——spread reactive 会解包顶层 ref，
+  // 会话 2 经 dockview params 传递时拿到非响应式副本，composer 等 UI 不再随状态更新。
+  return reactive({ id, ...stores, dispose: () => scope.stop() })
 }

@@ -3,6 +3,8 @@ import { ref, shallowRef, triggerRef, watch, onScopeDispose } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
 import type { ChecksumAlgorithm, Direction, FrameConfig, Message } from '@/types'
+import type { DecoderConfig } from '@/decoders/types'
+import { DEFAULT_DECODER_CONFIG, getDecoder } from '@/decoders'
 import { FrameSplitter } from '@/composables/useFrameSplitter'
 import { useSettingsStore } from './settings'
 import { usePauseStore } from './pause'
@@ -16,6 +18,9 @@ export interface MessagesDeps {
     bufferLimit: number
     rxChecksumAlgorithm: ChecksumAlgorithm
   }
+  /** 会话级帧解码配置（按端口持久化，生产经 session 注入；单例用默认关闭配置）。
+   *  直接持有 reactive 对象（与 settings 同例），逐帧读取最新值。 */
+  decoder: DecoderConfig
   paused: Ref<boolean>
   pauseStartTime: Ref<number>
   togglePause: () => void
@@ -109,30 +114,51 @@ export function createMessagesStore(deps: MessagesDeps) {
   }
 
   /**
-   * 对单个 RX 帧做可选校验，返回带 checksumFailed 标记的消息。
+   * 对单个 RX 帧做可选校验 + 可选帧解码，返回带标记/字段视图的消息。
    * 校验失败仅打标记（由气泡渲染本地化徽章），不写死中文到 error 字段。
-   * 校验前剔除帧尾的分隔符字节（保留在 frame 校验后补回显示用 bytes 不变——
-   * 即：校验只看「真正载荷 + 校验和」），避免 \\r\\n 被当作载荷导致必败。
+   * 载荷帧 = 剔除帧尾分隔符后的部分（分隔符切分器会原样保留在帧里）；
+   * 校验与解码共用同一载荷视角——解码器字段偏移按此计算，避免 \\r\\n 被当作载荷导致必败。
    */
   function makeRxMessage(s: MessagesDeps['settings'], f: Uint8Array, timestamp: number): Message {
     const msg = makeMessage('rx', f, undefined, timestamp)
-    if (s.rxChecksumAlgorithm === 'none') return msg
-    const len = checksumByteLength(s.rxChecksumAlgorithm)
-    // 剥离帧尾可能存在的分隔符（分隔符切分器会原样保留在帧里）
-    let frame = f
+
+    let payload = f
     const delim = splitter.getDelimiter()
-    if (delim.length > 0 && frame.length > delim.length) {
+    if (delim.length > 0 && f.length > delim.length) {
       let tailMatch = true
       for (let i = 0; i < delim.length; i++) {
-        if (frame[frame.length - delim.length + i] !== delim[i]) { tailMatch = false; break }
+        if (f[f.length - delim.length + i] !== delim[i]) { tailMatch = false; break }
       }
-      if (tailMatch) frame = frame.subarray(0, frame.length - delim.length)
+      if (tailMatch) payload = f.subarray(0, f.length - delim.length)
     }
-    if (frame.length > len) {
-      const r = verifyChecksum(frame, s.rxChecksumAlgorithm)
-      if (!r.ok) {
-        msg.checksumFailed = true
-        rxErrorFrames.value++
+
+    // 接收校验（作用于载荷）
+    if (s.rxChecksumAlgorithm !== 'none') {
+      const len = checksumByteLength(s.rxChecksumAlgorithm)
+      if (payload.length > len) {
+        const r = verifyChecksum(payload, s.rxChecksumAlgorithm)
+        if (!r.ok) {
+          msg.checksumFailed = true
+          rxErrorFrames.value++
+        }
+      }
+    }
+
+    // 帧解码：启用且本帧匹配时叠加结构化字段视图；不匹配保持原始帧显示。
+    // try/catch 兜底：解码器配置是可由用户手改的持久化 JSON，解码器契约上不应抛——
+    // 一旦异常（如极端非法配置）静默丢弃本帧解码，绝不打穿 RX 管线。
+    const dc = deps.decoder
+    if (dc.enabled) {
+      const def = getDecoder(dc.id)
+      if (def) {
+        try {
+          const r = def.decode(payload, dc.options)
+          if (r.matched) {
+            msg.decoded = { decoderId: dc.id, summary: r.summary, fields: r.fields ?? [] }
+          }
+        } catch {
+          /* 解码器异常：丢弃本帧解码，保持原始帧视图 */
+        }
       }
     }
     return msg
@@ -239,6 +265,8 @@ export const useMessagesStore = defineStore('messages', () => {
   const { paused, pauseStartTime } = storeToRefs(p)
   return createMessagesStore({
     settings: s.settings,
+    // 单例无会话上下文：帧解码保持默认关闭（生产经 session 注入按端口配置）
+    decoder: structuredClone(DEFAULT_DECODER_CONFIG),
     paused,
     pauseStartTime,
     togglePause: () => p.toggle(),

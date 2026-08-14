@@ -1,10 +1,11 @@
-import type { MockScenarioId, PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, IoTransport, PortOptions, SerialSignals, DriverType, MockScenarioId } from '@/types'
 import {
   atResponse,
   binaryFrame,
   bufferFloodChunk,
   gbkSample,
   logLine,
+  modbusSample,
   throughputChunk,
   waveformTextChunk,
   waveformTextLabeledChunk,
@@ -13,7 +14,8 @@ import {
 } from './scenarios'
 
 /** 模拟串口源：用定时器代替真实硬件，提供多种调试场景 */
-export class MockSerialSource implements SerialDriver {
+export class MockSerialSource implements IoTransport {
+  readonly type: DriverType = 'mock'
   private listeners = new Set<(bytes: Uint8Array) => void>()
   private timer: ReturnType<typeof setInterval> | null = null
   private bannerTimer: ReturnType<typeof setTimeout> | null = null
@@ -29,7 +31,7 @@ export class MockSerialSource implements SerialDriver {
     return this._isOpen
   }
 
-  async listPorts(): Promise<PortInfo[]> {
+  async listEndpoints(): Promise<EndpointInfo[]> {
     // 造假的完整元数据，用于开发模式预览下拉两行效果
     return [
       { path: 'COM3', manufacturer: 'QinHeng Electronics (CH340/CH341)', vendorId: '1a86', productId: '7523' },
@@ -116,6 +118,10 @@ export class MockSerialSource implements SerialDriver {
     switch (this.scenario) {
       case 'binary-frames':
         this.timer = setInterval(() => this.emit(binaryFrame(this.seq++)), 800)
+        break
+      case 'modbus':
+        // 每 800ms 一条 Modbus RTU 帧（fc03 应答为主，穿插请求），验证 Modbus RTU 解码器
+        this.timer = setInterval(() => this.emit(modbusSample(this.seq++)), 800)
         break
       case 'high-throughput':
         // 每 8ms 吐一段，模拟高波特率连续流

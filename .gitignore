@@ -7,3 +7,4 @@ release/
 .claude/plans
 .codegraph/*
 src-tauri
+.zcode/*

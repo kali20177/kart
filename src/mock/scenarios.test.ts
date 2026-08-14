@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { MockShell, shellBanner } from './scenarios'
+import { MockShell, shellBanner, modbusSample } from './scenarios'
+import { modbusRtuDecoder } from '@/decoders/builtin/modbus-rtu'
 
 const dec = new TextDecoder()
 const enc = new TextEncoder()
@@ -85,5 +86,29 @@ describe('MockShell · 回显与命令应答', () => {
     expect(banner).toContain('root@kart:~#')
     expect(banner).toContain('\r\n')
     expect(banner).not.toMatch(/[^\r]\n/)
+  })
+})
+
+describe('modbusSample · Modbus RTU 场景帧', () => {
+  it('应答帧（seq%5!==0）：fc03 + byteCount=8 + 4 寄存器，解码器可解析', () => {
+    const r = modbusRtuDecoder.decode(modbusSample(1))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'byteCount')?.value).toBe('8')
+    const regs = r.fields?.find((f) => f.name === 'registers')?.value ?? ''
+    expect(regs.split(', ')).toHaveLength(4)
+    expect(regs).toMatch(/^0x[0-9A-F]{4}(, 0x[0-9A-F]{4}){3}$/)
+  })
+
+  it('请求帧（seq%5===0）：fc03 读起始 0x0000 数量 4', () => {
+    const r = modbusRtuDecoder.decode(modbusSample(0))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'reg')?.value).toBe('0x0000')
+    expect(r.fields?.find((f) => f.name === 'count')?.value).toBe('4')
+  })
+
+  it('寄存器值随 seq 变化（温度/电压/电流逐 tick 不同）', () => {
+    const regsOf = (seq: number) =>
+      modbusRtuDecoder.decode(modbusSample(seq)).fields?.find((f) => f.name === 'registers')?.value
+    expect(regsOf(2)).not.toBe(regsOf(3))
   })
 })

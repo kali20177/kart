@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { effectScope } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSerialStore, createSerialStore, type SerialDeps } from './serial'
-import type { PortInfo, PortOptions, SerialSignals, SerialDriver } from '@/types'
+import type { EndpointInfo, PortOptions, SerialSignals, IoTransport, DriverType } from '@/types'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
 
 const KEY = STORAGE_PREFIX + 'customBaudRates'
@@ -89,12 +89,13 @@ describe('serial store · reset', () => {
 // ── 输出线控制（DTR/RTS/Break）──
 
 /** 记录调用痕迹的假驱动：setSignals/setBreak 写入 observable 状态供断言 */
-class FakeDriver implements SerialDriver {
+class FakeDriver implements IoTransport {
+  readonly type: DriverType = 'serialport'
   isOpen = false
   signals: { dtr?: boolean; rts?: boolean } = {}
   break: boolean | null = null
 
-  listPorts = async (): Promise<PortInfo[]> => []
+  listEndpoints = async (): Promise<EndpointInfo[]> => []
   open = async (_path: string, _options: PortOptions): Promise<void> => {
     this.isOpen = true
   }
@@ -195,6 +196,65 @@ describe('serial store · 输出线控制（DTR/RTS/Break）', () => {
     await store.pulseBreak()
     expect(driver.break).toBeNull()
     expect(store.breakBusy.value).toBe(false)
+    scope.stop()
+  })
+})
+
+// ── 写失败提前断连 ──
+
+describe('serial store · 写失败提前断连（驱动已报断开，轮询未到）', () => {
+  it('write 失败且 driver.isOpen=false → 立即断连并排程重连，而非等 500ms 轮询', async () => {
+    // 自定义驱动：write 失败并报告物理断开（模拟远端断连后的窗口期）
+    class DroppedDriver extends FakeDriver {
+      override write = async (): Promise<void> => {
+        throw new Error('连接已断开')
+      }
+    }
+    const driver = new DroppedDriver()
+    const deps: SerialDeps = {
+      ingestRx: () => {},
+      addTx: () => {},
+      settings: { autoReconnect: true },
+      createDriver: () => driver
+    }
+    const scope = effectScope(true)
+    const store = scope.run(() => createSerialStore(deps))!
+    store.selectedPort.value = 'COM1'
+    await store.connect()
+    expect(store.connected.value).toBe(true)
+
+    // 模拟远端断连：驱动已报告 isOpen=false（signalTimer 500ms 轮询尚未触发）
+    driver.isOpen = false
+    const r = await store.send('hello', 'ascii', 'none', 'utf-8')
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('连接已断开')
+    // 提前断连：UI 状态立即恢复 + 自动重连已排程（disconnect 异步，flush 一次宏任务）
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(store.connected.value).toBe(false)
+    expect(store.reconnecting.value).toBe(true)
+    scope.stop()
+  })
+})
+
+// ── 驱动切换销毁（destroy?() 可选契约）──
+
+describe('serial store · 切换驱动时旧驱动销毁', () => {
+  it('旧驱动实现 destroy → 切换时被调用（不再依赖 instanceof 白名单）', async () => {
+    class DestroyableDriver extends FakeDriver {
+      destroyed = false
+      destroy = () => { this.destroyed = true }
+    }
+    const driver = new DestroyableDriver()
+    const { store, scope } = makeStore(driver)
+    await store.switchDriver('tcp')
+    expect(driver.destroyed).toBe(true)
+    scope.stop()
+  })
+
+  it('旧驱动未实现 destroy → 可选链跳过，不抛错', async () => {
+    const driver = new FakeDriver() // FakeDriver 无 destroy 方法
+    const { store, scope } = makeStore(driver)
+    await expect(store.switchDriver('tcp')).resolves.toBeUndefined()
     scope.stop()
   })
 })

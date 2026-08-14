@@ -33,6 +33,21 @@ ipcRenderer.on('pty:exit', (_e, payload: { id: string; exitCode: number; signal?
   for (const h of ptyExitHandlers) h(payload.id)
 })
 
+// ── TCP 连接数据事件 ──
+// 主进程通过 webContents.send('tcp:data'/'tcp:error', { id, ... }) 推送（id=主进程分配的 connId），
+// 形态与 serial 完全一致（Uint8Array 字节 + Set 转发），仅事件名与路由字段名不同。
+// 同一端点可开多个连接：每个连接有独立 connId，渲染端各驱动实例按自己的 connId 过滤。
+type TcpDataHandler = (data: Uint8Array, id: string) => void
+type TcpErrorHandler = (msg: string, id: string) => void
+const tcpDataHandlers = new Set<TcpDataHandler>()
+const tcpErrorHandlers = new Set<TcpErrorHandler>()
+ipcRenderer.on('tcp:data', (_e, payload: { id: string; data: Uint8Array }) => {
+  for (const h of tcpDataHandlers) h(payload.data, payload.id)
+})
+ipcRenderer.on('tcp:error', (_e, payload: { id: string; msg: string }) => {
+  for (const h of tcpErrorHandlers) h(payload.msg, payload.id)
+})
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   versions: process.versions,
@@ -125,16 +140,45 @@ contextBridge.exposeInMainWorld('electron', {
     }
   },
 
+  // ── TCP client（主进程 net 模块，仅 Electron）──
+  // 端点统一为 "host:port" 字符串；open 返回主进程分配的 connId，后续读写/事件按 connId 路由。
+  tcp: {
+    /** 连接远端（host:port），返回主进程分配的连接 id（connId） */
+    open: (endpoint: string) =>
+      ipcRenderer.invoke('tcp:open', endpoint) as Promise<string>,
+
+    /** 关闭指定连接（connId） */
+    close: (connId: string) =>
+      ipcRenderer.invoke('tcp:close', connId),
+
+    /** 写入字节到指定连接（connId） */
+    write: (connId: string, data: Uint8Array) =>
+      ipcRenderer.invoke('tcp:write', connId, data),
+
+    /** 注册数据接收回调，返回取消订阅函数 */
+    onData: (handler: TcpDataHandler) => {
+      tcpDataHandlers.add(handler)
+      return () => { tcpDataHandlers.delete(handler) }
+    },
+
+    /** 注册错误/断连回调，返回取消订阅函数 */
+    onError: (handler: TcpErrorHandler) => {
+      tcpErrorHandlers.add(handler)
+      return () => { tcpErrorHandlers.delete(handler) }
+    }
+  },
+
   recorder: {
     showDirectoryPicker: () =>
       ipcRenderer.invoke('recorder:show-directory-picker'),
-    createFile: (dirPath: string, fileName: string) =>
-      ipcRenderer.invoke('recorder:create-file', dirPath, fileName),
+    // streamKey：录制流标识（如端口名），主进程按 (窗口, streamKey) 键控写入流
+    createFile: (dirPath: string, fileName: string, streamKey?: string) =>
+      ipcRenderer.invoke('recorder:create-file', dirPath, fileName, streamKey),
     // invoke 返回 false 表示流已出错/无活动流，触发渲染进程置 error 状态
-    writeChunk: (chunk: Uint8Array) =>
-      ipcRenderer.invoke('recorder:write-chunk', chunk) as Promise<boolean>,
-    closeFile: () =>
-      ipcRenderer.invoke('recorder:close-file') as Promise<boolean>,
+    writeChunk: (streamKey: string | undefined, chunk: Uint8Array) =>
+      ipcRenderer.invoke('recorder:write-chunk', streamKey, chunk) as Promise<boolean>,
+    closeFile: (streamKey: string | undefined) =>
+      ipcRenderer.invoke('recorder:close-file', streamKey) as Promise<boolean>,
     onWriteError: (handler: (msg: string) => void) => {
       writeErrorHandler = handler
     }
