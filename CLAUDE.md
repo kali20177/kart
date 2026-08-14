@@ -16,6 +16,10 @@ npm run electron:build # 类型检查 + 构建 + electron-builder 打包（输�
 npm run electron:preview # 构建后用 electron 直接运行（不打包）
 ```
 
+## 视觉委派
+
+主模型可能不具备视觉能力。凡是涉及图片/截图/图像内容的任务，一律通过 Agent 工具调用 `vision` 子代理（frontmatter `model: haiku`，解析到具备视觉能力的模型）分析后再继续，主模型不得直接 Read 图片文件。
+
 ## 项目概览
 
 串口调试助手 —— 面向嵌入式开发调试的现代化串口工具。Vue 3 SPA，三种串口驱动可切换，同一份代码同时支持浏览器（Web Serial API）和 Electron 桌面应用（serialport npm 库），打包输出 Windows/macOS/Linux 三平台安装包。
