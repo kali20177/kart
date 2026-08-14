@@ -1,7 +1,7 @@
 import { computed, watch } from 'vue'
 import { darkTheme } from 'naive-ui'
 import { useSettingsStore } from '@/stores/settings'
-import { getTheme, applyTokens as applyThemeTokens, listThemes } from '@/themes'
+import { getTheme, applyTokens as applyThemeTokens, applyFonts as applyThemeFonts, listThemes } from '@/themes'
 import type { ThemeDefinition } from '@/themes'
 
 export function useTheme() {
@@ -21,12 +21,13 @@ export function useTheme() {
 
   const naiveOverrides = computed(() => theme.value.naiveOverrides)
 
-  // themeId 切换 → 应用 CSS 变量
+  // themeId 切换 → 应用 CSS 变量 + 主题附带字体
   watch(
     () => settingsStore.settings.themeId,
     (id) => {
       const t = getTheme(id) ?? listThemes()[0]
       applyThemeTokens(t.tokens, t.isDark)
+      applyThemeFonts(t)
     },
     { immediate: true }
   )

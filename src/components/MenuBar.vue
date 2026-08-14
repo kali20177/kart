@@ -255,6 +255,23 @@ function handleSelect(key: string) {
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   border-bottom: 1px solid var(--glass-border);
   flex-shrink: 0;
+  position: relative;
+}
+/* 顶部 1px inset 高光 — 让"玻璃"在同色背景上明显 */
+.menubar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--glass-highlight) 12%,
+    var(--glass-highlight) 88%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0.7;
 }
 .menubar-spacer {
   flex: 1;
@@ -268,6 +285,8 @@ function handleSelect(key: string) {
 .app-name {
   font-size: 16px;
   font-weight: 600;
+  font-family: var(--display-font);
+  letter-spacing: 0.4px;
 }
 .desc {
   margin: 4px 0 12px;

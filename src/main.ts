@@ -4,11 +4,13 @@ import App from './App.vue'
 import { i18n } from './i18n'
 import './styles/base.css'
 import './styles/tokens.css'
+import './styles/fonts.css'
+import './styles/glass.css'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import '@xterm/xterm/css/xterm.css'
 import 'dockview-core/dist/styles/dockview.css'
 import './styles/dockview.css'
-import { applyTokens, listThemes } from './themes'
+import { applyTokens, applyFonts, listThemes } from './themes'
 import { STORAGE_PREFIX, storage } from './composables/useStorage'
 import { logger } from './utils/logger'
 import { getDriverType } from './serial'
@@ -57,5 +59,6 @@ try {
 }
 const initialTheme = listThemes().find(t => t.id === initialThemeId) ?? listThemes()[0]
 applyTokens(initialTheme.tokens, initialTheme.isDark)
+applyFonts(initialTheme)
 
 createApp(App).use(createPinia()).use(i18n).mount('#app')

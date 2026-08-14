@@ -543,6 +543,23 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-sm);
   /* 收起/展开时栏高平滑过渡 */
   transition: padding 0.18s ease;
+  position: relative;
+}
+/* 顶部 1px inset 高光 — 玻璃边缘反射 */
+.bar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--glass-highlight) 8%,
+    var(--glass-highlight) 92%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0.7;
 }
 /* 收起态：紧凑单行，栏高收缩让位给数据显示区 */
 .bar.collapsed {

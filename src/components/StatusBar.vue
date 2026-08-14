@@ -338,6 +338,23 @@ async function onBreak() {
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   border-top: 1px solid var(--glass-border);
   color: var(--text-dim);
+  position: relative;
+}
+/* 顶部 1px inset 高光 — 玻璃反射光 */
+.status::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--glass-highlight) 8%,
+    var(--glass-highlight) 92%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0.6;
 }
 .led {
   width: 8px;

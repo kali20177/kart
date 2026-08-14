@@ -165,6 +165,22 @@ watch(
   }
 )
 
+/** 空状态：分四种语义 ——
+ *  idle     未连接（首次访问或断开后）
+ *  waiting  已连接但还没收到任何帧
+ *  paused   暂停期间没有任何消息
+ *  filtered 有消息但当前筛选条件下没有命中
+ *  共用同一布局，仅替换标题/提示/icon 区分。 */
+const emptyState = computed(() => {
+  if (messagesStore.messages.length > 0) {
+    if (filtered.value.length === 0) return 'filtered' as const
+    return null
+  }
+  if (messagesStore.paused) return 'paused' as const
+  if (serial.connected) return 'waiting' as const
+  return 'idle' as const
+})
+
 function jumpLatest() {
   follow.value = true
   nextTick(scrollToBottom)
@@ -404,7 +420,37 @@ watch(
         <span>{{ t('msgList.droppedFrames', { n: messagesStore.droppedFrames }) }}</span>
         <button type="button" class="dropped-dismiss" :title="t('msgList.cancel')" @click="droppedBarDismissed = true">✕</button>
       </div>
+
+      <div v-if="emptyState" class="empty-state" :data-kind="emptyState">
+        <div class="empty-glyph" aria-hidden="true">
+          <!-- 四种状态共用一个图标，仅 glyph 内的点缀元素随状态变化 -->
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="14" y="20" width="36" height="24" rx="3" />
+            <path d="M14 28 L14 36 L50 36 L50 28" />
+            <circle cx="46" cy="24" r="0.9" fill="currentColor" />
+            <path v-if="emptyState === 'idle'" class="empty-led" d="M24 44 L24 44.01" />
+            <path v-else-if="emptyState === 'waiting'" class="empty-led waiting" d="M24 44 L24 44.01" />
+            <path v-else-if="emptyState === 'paused'" d="M22 42 L26 42" />
+            <path v-else d="M22 44 L26 44 L26 40 L22 40 Z" />
+          </svg>
+        </div>
+        <div class="empty-title">
+          {{ emptyState === 'idle' ? t('msgList.emptyIdleTitle')
+            : emptyState === 'waiting' ? t('msgList.emptyWaitingTitle')
+            : emptyState === 'paused' ? t('msgList.emptyPausedTitle')
+            : t('msgList.emptyFilteredTitle') }}
+        </div>
+        <div class="empty-hint">
+          {{ emptyState === 'idle' ? t('msgList.emptyIdleHint')
+            : emptyState === 'waiting' ? t('msgList.emptyWaitingHint')
+            : emptyState === 'paused' ? t('msgList.emptyPausedHint')
+            : t('msgList.emptyFilteredHint') }}
+        </div>
+        <div v-if="emptyState === 'idle'" class="empty-step">{{ t('msgList.emptyIdleStep') }}</div>
+      </div>
+
       <DynamicScroller
+        v-else
         ref="scroller"
         :items="filtered"
         :min-item-size="46"
@@ -676,5 +722,82 @@ watch(
 .marker-dialog-label {
   font-size: 13px;
   color: var(--text-dim);
+}
+
+/* ── 空状态 ── 屏幕中央占位，未连/等待/暂停/筛选空 四态共用布局，icon 颜色与文案随状态变化 */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px;
+  gap: 12px;
+  text-align: center;
+  /* 视觉锚点：竖向 1px 居中分隔线，让空状态与左右工具栏在视觉上对齐 */
+  color: var(--text-dim);
+  user-select: none;
+}
+.empty-glyph {
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  /* muted 颜色与边框呼应「未激活」语义 */
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  position: relative;
+}
+.empty-glyph svg {
+  width: 52px;
+  height: 52px;
+  opacity: 0.85;
+}
+.empty-state[data-kind='waiting'] .empty-glyph {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.empty-state[data-kind='paused'] .empty-glyph {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+}
+.empty-state[data-kind='filtered'] .empty-glyph {
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+/* waiting 状态：图标右侧的状态灯呼吸脉动，提示「正在听」 */
+.empty-state[data-kind='waiting'] .empty-led.waiting {
+  animation: empty-pulse 1.6s ease-in-out infinite;
+}
+@keyframes empty-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1;    }
+}
+@media (prefers-reduced-motion: reduce) {
+  .empty-state[data-kind='waiting'] .empty-led.waiting { animation-duration: 3.2s; }
+}
+.empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+.empty-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  max-width: 340px;
+}
+.empty-step {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  margin-top: 2px;
+  max-width: 340px;
+  line-height: 1.5;
 }
 </style>

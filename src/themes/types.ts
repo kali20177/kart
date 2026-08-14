@@ -8,12 +8,12 @@ export const TOKEN_KEYS = [
   '--accent', '--accent-cyan', '--accent-teal', '--ok', '--warn', '--err',
   '--rx-bg', '--rx-border', '--rx-text', '--tx-bg', '--tx-border', '--tx-text',
   '--glass-bg', '--glass-border', '--glass-blur', '--glass-blur-sm',
-  '--shadow-sm', '--shadow-md', '--shadow-lg',
+  '--glass-highlight', '--shadow-sm', '--shadow-md', '--shadow-lg',
   '--radius', '--radius-sm', '--radius-md', '--radius-lg', '--radius-xl',
   '--gap',
   '--search-highlight-bg', '--search-highlight-text',
   '--search-active-bg', '--search-active-text',
-  '--mono-font', '--ui-font',
+  '--mono-font', '--ui-font', '--display-font',
 ] as const
 export type TokenKey = typeof TOKEN_KEYS[number]
 

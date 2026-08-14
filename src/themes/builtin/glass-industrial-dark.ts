@@ -33,6 +33,7 @@ export const glassIndustrialDark: ThemeDefinition = {
     '--search-active-text': '#ffe066',
     '--glass-bg': 'rgba(22, 27, 34, 0.75)',
     '--glass-border': 'rgba(255, 255, 255, 0.08)',
+    '--glass-highlight': 'rgba(255, 255, 255, 0.04)',
     '--glass-blur': '12px',
     '--glass-blur-sm': '8px',
     '--shadow-sm': '0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2)',
@@ -46,6 +47,7 @@ export const glassIndustrialDark: ThemeDefinition = {
     '--gap': '8px',
     '--mono-font': "'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace",
     '--ui-font': "'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+    '--display-font': "'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
   },
   naiveOverrides: {
     common: {
