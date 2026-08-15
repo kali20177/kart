@@ -32,10 +32,10 @@ export class MockSerialSource implements IoTransport {
   }
 
   async listEndpoints(): Promise<EndpointInfo[]> {
-    // 造假的完整元数据，用于开发模式预览下拉两行效果
+    // 造假的完整元数据，用于开发模式预览下拉两行效果；COM7 标记 busy 预览「被其他程序占用」提示
     return [
       { path: 'COM3', manufacturer: 'QinHeng Electronics (CH340/CH341)', vendorId: '1a86', productId: '7523' },
-      { path: 'COM7', manufacturer: 'Silicon Labs (CP210x)', vendorId: '10c4', productId: 'ea60' },
+      { path: 'COM7', manufacturer: 'Silicon Labs (CP210x)', vendorId: '10c4', productId: 'ea60', busy: true },
       { path: '/dev/ttyUSB0', manufacturer: 'FTDI (FT232R/FT2232)', vendorId: '0403', productId: '6001' }
     ]
   }

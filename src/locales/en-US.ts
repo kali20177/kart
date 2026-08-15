@@ -215,6 +215,7 @@ export default {
     connectFailed: 'Connection failed',
     reconnected: 'Serial reconnected',
     portOccupied: 'Already in use by another session',
+    portBusy: 'In use by another application',
   },
   status: {
     notConnected: 'Disconnected',

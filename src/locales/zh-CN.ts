@@ -215,6 +215,7 @@ export default {
     connectFailed: '连接失败',
     reconnected: '串口已重新连接',
     portOccupied: '已被其他会话占用',
+    portBusy: '被其他程序占用',
   },
   status: {
     notConnected: '未连接',

@@ -2,10 +2,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // mock 类与实例数组都在 vi.hoisted 中定义：hoisted 早于 vi.mock 执行，
 // 工厂可引用 MockSerialPort，测试拿到强类型实例数组（无需 any）。
-const { MockSerialPort, portInstances } = vi.hoisted(() => {
+const { MockSerialPort, portInstances, busyPaths, failingConstructPaths } = vi.hoisted(() => {
   const portInstances: MockSerialPort[] = []
+  // 需要模拟「被其他程序占用」的端口路径：open 时按此失败（探测 busy 用）
+  const busyPaths = new Set<string>()
+  // 需要模拟「探测构造失败」的端口路径：new SerialPort 时抛错（验证不阻塞枚举）
+  const failingConstructPaths = new Set<string>()
   // 最小可观察的 SerialPort 替身：EventEmitter 语义 + vi.fn 方法便于断言调用
   class MockSerialPort {
+    path: string
     _h: Record<string, Array<(...a: unknown[]) => void>> = {}
     on(ev: string, cb: (...a: unknown[]) => void) {
       (this._h[ev] ??= []).push(cb)
@@ -15,6 +20,11 @@ const { MockSerialPort, portInstances } = vi.hoisted(() => {
       (this._h[ev] ??= []).forEach((cb) => cb(...args))
     }
     open = vi.fn((cb: (e: Error | null) => void) => {
+      if (busyPaths.has(this.path)) {
+        cb(new Error('Resource busy'))
+        this.emit('error', new Error('Resource busy'))
+        return
+      }
       this.emit('open')
       cb(null)
     })
@@ -28,11 +38,13 @@ const { MockSerialPort, portInstances } = vi.hoisted(() => {
       cb(null, { cts: false, dsr: false, dcd: false })
     )
     static list = vi.fn(async () => [] as unknown[])
-    constructor() {
+    constructor(options?: { path?: string }) {
+      this.path = options?.path ?? ''
+      if (failingConstructPaths.has(this.path)) throw new Error('construct failed')
       portInstances.push(this)
     }
   }
-  return { MockSerialPort, portInstances }
+  return { MockSerialPort, portInstances, busyPaths, failingConstructPaths }
 })
 
 vi.mock('./logger', () => ({
@@ -81,11 +93,15 @@ describe('SerialPortManager · listPortsAsync', () => {
 
   beforeEach(() => {
     portInstances.length = 0
+    busyPaths.clear()
+    failingConstructPaths.clear()
     mgr = new SerialPortManager(makeWin().win)
   })
 
   afterEach(() => {
     mgr.destroy()
+    busyPaths.clear()
+    failingConstructPaths.clear()
   })
 
   it('过滤伪终端并换算成 callout 路径', async () => {
@@ -108,6 +124,44 @@ describe('SerialPortManager · listPortsAsync', () => {
     expect(list[1].manufacturer).toBe('STMicroelectronics')
   })
 
+  it('空闲端口探测为 busy:false 且探测实例立即关闭释放', async () => {
+    MockSerialPort.list.mockResolvedValue([{ path: 'COM5' }])
+    const list = await mgr.listPortsAsync()
+    expect(list[0]).toMatchObject({ path: 'COM5', busy: false })
+    // 探测打开成功后立即关闭，不留句柄
+    const probe = portInstances.find((p) => p.path === 'COM5')
+    expect(probe?.close).toHaveBeenCalled()
+  })
+
+  it('被其他程序占用的端口探测为 busy:true，空闲端口为 false', async () => {
+    busyPaths.add('COM9')
+    MockSerialPort.list.mockResolvedValue([{ path: 'COM9' }, { path: 'COM10' }])
+    const list = await mgr.listPortsAsync()
+    expect(list.find((i) => i.path === 'COM9')?.busy).toBe(true)
+    expect(list.find((i) => i.path === 'COM10')?.busy).toBe(false)
+  })
+
+  it('本应用已打开的端口跳过探测（busy:false，不新增探测实例）', async () => {
+    await mgr.open('COM5', OPTS)
+    const opened = portInstances.length
+    MockSerialPort.list.mockResolvedValue([{ path: 'COM5' }])
+    const list = await mgr.listPortsAsync()
+    expect(list[0].busy).toBe(false)
+    // 探测跳过 _ports 中已占用的端口：没有新增 SerialPort 实例
+    expect(portInstances.length).toBe(opened)
+  })
+
+  it('单端口探测构造失败不阻塞枚举（其余端口仍列出）', async () => {
+    // 回归：构造抛异常若向上传播，Promise.all 会 reject → listPortsAsync 返回 []，列表刷不出
+    failingConstructPaths.add('COM5')
+    MockSerialPort.list.mockResolvedValue([{ path: 'COM5' }, { path: 'COM6' }])
+    const list = await mgr.listPortsAsync()
+    expect(list.map((i) => i.path)).toEqual(['COM5', 'COM6'])
+    // 探测失败的端口不标记占用；正常端口照常探测为空闲
+    expect(list[0].busy).toBe(false)
+    expect(list[1].busy).toBe(false)
+  })
+
   it('枚举异常返回空数组', async () => {
     MockSerialPort.list.mockRejectedValue(new Error('boom'))
     await expect(mgr.listPortsAsync()).resolves.toEqual([])
@@ -120,6 +174,7 @@ describe('SerialPortManager · 多端口', () => {
 
   beforeEach(() => {
     portInstances.length = 0
+    busyPaths.clear()
     const ctx = makeWin()
     mgr = new SerialPortManager(ctx.win)
     send = ctx.send
@@ -132,6 +187,13 @@ describe('SerialPortManager · 多端口', () => {
   it('同端口二次 open 被拒绝（提示占用）', async () => {
     await mgr.open('COM5', OPTS)
     await expect(mgr.open('COM5', OPTS)).rejects.toThrow('串口已被占用')
+  })
+
+  it('打开被其他进程锁定的端口报可读占用提示（跨进程占用）', async () => {
+    // 另一 KART 实例/程序占用：本进程 _ports 无此端口，serialport 底层 lock 失败
+    // 应映射为「已被其他程序占用」，而非原始的技术化错误
+    busyPaths.add('COM5')
+    await expect(mgr.open('COM5', OPTS)).rejects.toThrow(/已被其他程序占用/)
   })
 
   it('不同端口可并发打开', async () => {

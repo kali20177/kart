@@ -55,13 +55,14 @@ contextBridge.exposeInMainWorld('electron', {
 
   // ── serialport 原生串口驱动（主进程 native 串口库）──
   serial: {
-    /** 枚举可用串口，返回 { path, manufacturer?, vendorId?, productId? }[] */
+    /** 枚举可用串口，返回 { path, manufacturer?, vendorId?, productId?, busy? }[] */
     listPorts: () =>
       ipcRenderer.invoke('serial:list-ports') as Promise<Array<{
         path: string
         manufacturer?: string
         vendorId?: string
         productId?: string
+        busy?: boolean
       }>>,
 
     /** 打开串口 */

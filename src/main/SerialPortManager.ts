@@ -11,9 +11,24 @@ const MACOS_PSEUDO_TERMINAL_PATTERNS = [
   /Bluetooth-Incoming-Port/i // 蓝牙串口服务
 ]
 
+/** 单端口占用探测超时（ms）：某端口 open 挂起时不阻塞整个枚举，超时视为不占用 */
+const PROBE_TIMEOUT_MS = 1000
+
 function isMacOSPseudoTerminal(path: string): boolean {
   if (process.platform !== 'darwin') return false
   return MACOS_PSEUDO_TERMINAL_PATTERNS.some((p) => p.test(path))
+}
+
+/**
+ * 把 serialport 打开失败映射为可读文案。占用类错误（端口锁/忙/访问拒绝）单独提示——
+ * 覆盖两个独立 KART 实例（进程）连同一串口、minicom/其他串口助手占用等场景；
+ * 其余保留原始错误信息，用户能区分「被其他程序占用」与真正的设备/驱动问题。
+ */
+function toFriendlyOpenError(path: string, err: Error): Error {
+  if (/lock|busy|in use|temporarily unavailable|access is denied|cannot open/i.test(err.message)) {
+    return new Error(`端口 ${path} 已被其他程序占用，请先关闭占用方再连接`)
+  }
+  return new Error(`打开串口 ${path} 失败: ${err.message}`)
 }
 
 /**
@@ -47,6 +62,8 @@ export interface SerialPortInfo {
   friendlyName?: string
   vendorId?: string
   productId?: string
+  /** 是否被其他程序占用（枚举时探测的瞬时快照；KART 自身已打开的不算） */
+  busy?: boolean
 }
 
 /** 单端口运行状态（port 实例 + 是否打开） */
@@ -86,11 +103,11 @@ export class SerialPortManager {
     return []
   }
 
-  /** 异步枚举可用串口 */
+  /** 异步枚举可用串口，并附带物理占用探测（busy）结果 */
   async listPortsAsync(): Promise<SerialPortInfo[]> {
     try {
       const infos: NativePortInfo[] = await SerialPort.list()
-      return infos
+      const ports = infos
         .filter((i) => !isMacOSPseudoTerminal(i.path))
         .map((i) => ({
           path: toCalloutPath(i.path),
@@ -98,10 +115,68 @@ export class SerialPortManager {
           vendorId: i.vendorId,
           productId: i.productId
         }))
+      // 并行探测各端口占用（serialport list 不提供 busy 状态），busy 一并返回。
+      // 逐端口兜底：单个端口探测失败（异常/超时）不影响整个枚举，缺失标记为未占用
+      const busyFlags = await Promise.all(
+        ports.map((p) => this.probePortBusy(p.path).catch(() => false))
+      )
+      return ports.map((p, idx) => ({ ...p, busy: busyFlags[idx] }))
     } catch (e) {
       mainLogger.error('serialport', `listPorts failed: ${e instanceof Error ? e.message : String(e)}`)
       return []
     }
+  }
+
+  /**
+   * 探测单端口是否被其他程序占用（物理 busy）。
+   *
+   * 策略：尝试独占打开该端口——
+   * - 打开成功：空闲（立即关闭释放，探测不留句柄）；返回 false
+   * - 打开失败（EBUSY/AccessError 等）：被占用或不可用；返回 true
+   * - 超时：视为不占用（避免误报让用户连不上）
+   *
+   * 探测以 dtr:false/rts:false 打开，尽量不扰动设备电平（Arduino 等按 DTR 复位
+   * 的设备不受影响）。KART 自身已打开的端口（_ports 中）跳过探测——本应用占用
+   * 不属「其他程序」，由渲染端 occupiedPorts 提示。
+   */
+  async probePortBusy(path: string): Promise<boolean> {
+    if (this._ports.has(path)) return false
+    return new Promise<boolean>((resolve) => {
+      let port: SerialPort
+      try {
+        // 必须传 baudRate：serialport 各平台 binding 在 open 时校验 baudRate，缺失会同步抛
+        // TypeError（且不走到真正的锁检测）——探测会漏掉所有被占用端口
+        port = new SerialPort({ path, baudRate: 9600, autoOpen: false, dtr: false, rts: false })
+      } catch {
+        // 构造失败（端口刚拔出/路径无效等）视为不占用，绝不 reject——否则会打穿整个枚举
+        resolve(false)
+        return
+      }
+      let settled = false
+      const timer = setTimeout(() => done(false), PROBE_TIMEOUT_MS)
+      function done(busy: boolean) {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(busy)
+      }
+      port.on('open', () => {
+        // 打开成功说明空闲：立即关闭释放。close 为 fire-and-forget（不阻塞返回）；
+        // 超时后再成功打开也走此路径关闭，避免句柄泄漏
+        port.close()
+        done(false)
+      })
+      port.on('error', () => done(true))
+      try {
+        port.open((err) => {
+          if (err) done(true)
+          // 成功路径由 'open' 事件收尾
+        })
+      } catch {
+        // open 同步抛异常（极端情况）：视为不占用，避免 reject 打穿枚举
+        done(false)
+      }
+    })
   }
 
   open(path: string, options: {
@@ -138,7 +213,7 @@ export class SerialPortManager {
         const entry = this._ports.get(path)
         if (!entry || !entry.isOpen) {
           // 打开阶段错误
-          reject(new Error(`打开串口 ${path} 失败: ${err.message}`))
+          reject(toFriendlyOpenError(path, err))
         } else {
           // 运行阶段错误 —— 推送并关闭
           mainLogger.error('serialport', `runtime error on ${path}: ${err.message}`)
@@ -162,7 +237,7 @@ export class SerialPortManager {
 
       port.open((err) => {
         if (err) {
-          reject(new Error(`打开串口 ${path} 失败: ${err.message}`))
+          reject(toFriendlyOpenError(path, err))
         }
         // 成功时 'open' 事件已 resolve
       })

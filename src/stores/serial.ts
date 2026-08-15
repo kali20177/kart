@@ -145,7 +145,9 @@ export function createSerialStore(deps: SerialDeps) {
   async function refreshPorts() {
     ports.value = await driver.listEndpoints()
     if (!selectedPort.value && ports.value.length > 0) {
-      selectedPort.value = ports.value[0].path
+      // 自动选中跳过被其他程序占用的端口（busy），避免默认连到不可用的口；
+      // 全部占用时不选（null），留给用户在有可用端口时手动选择
+      selectedPort.value = ports.value.find((p) => p.busy !== true)?.path ?? null
     }
   }
 

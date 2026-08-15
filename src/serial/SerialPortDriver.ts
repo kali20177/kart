@@ -34,7 +34,8 @@ export class SerialPortDriver implements IoTransport {
         path: i.path,
         manufacturer: i.manufacturer,
         vendorId: i.vendorId,
-        productId: i.productId
+        productId: i.productId,
+        busy: i.busy
       }))
     } catch {
       return []

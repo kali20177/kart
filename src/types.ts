@@ -69,9 +69,10 @@ export interface SerialSignals {
 
 /**
  * 传输端点枚举项。各驱动尽力填充元数据：
- * - serialport：path/manufacturer/vendorId/productId 均有
- * - Web Serial：path + vendorId/productId（厂商名按 VID 反查 usb-vendors 表，查不到则无）
- * - mock：造假的完整元数据用于开发预览
+ * - serialport：path/manufacturer/vendorId/productId 均有；busy 为枚举时探测结果
+ *   （true=被 KART 之外的其他程序占用，如 minicom、其他串口助手）
+ * - Web Serial：path + vendorId/productId（厂商名按 VID 反查 usb-vendors 表，查不到则无）；无 busy 探测能力，不填
+ * - mock：造假的完整元数据用于开发预览；busy 造假用于预览占用提示
  * - TCP：无枚举（用户手动填 host:port），listEndpoints 返回空
  */
 export interface EndpointInfo {
@@ -79,6 +80,8 @@ export interface EndpointInfo {
   manufacturer?: string
   vendorId?: string
   productId?: string
+  /** 是否被其他程序占用（枚举时瞬时快照，非实时）。未定义=未知/不适用。 */
+  busy?: boolean
 }
 
 /**

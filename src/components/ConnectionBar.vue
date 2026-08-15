@@ -55,9 +55,10 @@ const portOptions = computed(() =>
   serial.ports.map((p) => ({
     label: p.path,
     value: p.path,
-    // 被其他会话已连接的端口：禁用 + 下拉内红色提示（含当前选中项，防止新会话
-    // 自动选中被占用端口后静默连错；本会话已连接时整个下拉本就禁用）
-    disabled: occupiedPorts.value.has(p.path)
+    // 禁用：被其他会话已连接，或枚举探测到被其他程序占用（busy）。
+    // 两者互斥（本应用占用时探测会跳过该端口），但都不可连，统一禁用；
+    // 含当前选中项——防止新会话自动选中被占用端口后静默连错（本会话已连接时整个下拉本就禁用）
+    disabled: occupiedPorts.value.has(p.path) || p.busy === true
   }))
 )
 
@@ -69,15 +70,17 @@ function formatPortMeta(p: EndpointInfo): string {
 
 const renderPortOption: RenderOption = (info) => {
   const path = (info.option as { value: string }).value as string
-  const disabled = !!(info.option as { disabled?: boolean }).disabled
   const meta = serial.ports.find((p) => p.path === path)
   const metaText = meta ? formatPortMeta(meta) : ''
   const base = info.node as VNode
   const children = (base.children ? (Array.isArray(base.children) ? base.children : [base.children]) : []) as VNode[]
+  // 第二行提示：会话占用 / 物理占用（其他程序）红色优先，其次厂商元数据
+  const isSessionOccupied = occupiedPorts.value.has(path)
+  const isBusy = meta?.busy === true
   const lines = [
     ...children,
-    ...(disabled
-      ? [h('span', { style: 'color:var(--err);font-size:11px;line-height:1;margin-top:2px' }, t('conn.portOccupied'))]
+    ...(isSessionOccupied || isBusy
+      ? [h('span', { style: 'color:var(--err);font-size:11px;line-height:1;margin-top:2px' }, isSessionOccupied ? t('conn.portOccupied') : t('conn.portBusy'))]
       : metaText
         ? [h('span', {
             style:
