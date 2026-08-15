@@ -87,3 +87,27 @@ describe('ConnectionBar · TCP 传输输入', () => {
     await expect(session.serial.connect()).rejects.toThrow('TCP 不可用')
   })
 })
+
+describe('ConnectionBar · 自定义波特率下拉', () => {
+  it('删除当前选中的自定义波特率 → 下拉候选中立即消失（不再等重启）', async () => {
+    const { wrapper, session } = mountBar()
+    session.serial.options.baudRate = 500000
+    session.serial.addCustomBaudRate(500000)
+    await nextTick()
+    const baudOptions = () => {
+      const baud = wrapper.findAllComponents(NSelect).find((n) => n.props('value') === session.serial.options.baudRate)
+      return (baud?.props('options') ?? []) as Array<{ value: number }>
+    }
+    expect(baudOptions().some((o) => o.value === 500000)).toBe(true)
+
+    // × 删除当前值 → 立即从候选中消失（「当前值强制可选」不应把它带回来）
+    session.serial.removeCustomBaudRate(500000)
+    await nextTick()
+    expect(baudOptions().some((o) => o.value === 500000)).toBe(false)
+
+    // 重新输入同值 → 回到候选
+    session.serial.addCustomBaudRate(500000)
+    await nextTick()
+    expect(baudOptions().some((o) => o.value === 500000)).toBe(true)
+  })
+})

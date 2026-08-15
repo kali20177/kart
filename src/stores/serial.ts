@@ -100,6 +100,10 @@ export function createSerialStore(deps: SerialDeps) {
   const customBaudRates = ref<CustomBaudRate[]>(
     loadCustomBaudRates(storage.get<unknown>('customBaudRates', []))
   )
+  // 刚被用户删除的自定义波特率：若删的恰是当前选中值，ConnectionBar 的「当前值强制可选」
+  // 逻辑会把它留在下拉候选里直到重启。记录之供 baudOptions 立即排除；重新输入/选择
+  // 同值（重新加入列表）时经 addCustomBaudRate 解除。会话内存态，不持久化。
+  const removedCustomBauds = ref<number[]>([])
 
   let unsubscribe: (() => void) | null = null
   let signalTimer: ReturnType<typeof setInterval> | null = null
@@ -384,12 +388,19 @@ export function createSerialStore(deps: SerialDeps) {
     if (customBaudRates.value.some((c) => c.baud === baud)) return
     customBaudRates.value = [...customBaudRates.value, { baud }].sort((a, b) => a.baud - b.baud)
     persistNow('customBaudRates', customBaudRates.value)
+    // 重新加入列表 → 解除「删除后隐藏」状态（见 removedCustomBauds）
+    removedCustomBauds.value = removedCustomBauds.value.filter((b) => b !== baud)
   }
 
-  /** 删除自定义波特率（预设档位不在 customBaudRates 中，天然不可删） */
+  /** 删除自定义波特率（预设档位不在 customBaudRates 中，天然不可删）。
+   *  若删的是当前选中值，记录之，让下拉候选立即排除（否则「当前值强制可选」会把它
+   *  留在列表里直到重启）。当前选中值本身不变，触发框仍显示该值。 */
   function removeCustomBaudRate(baud: number) {
     customBaudRates.value = customBaudRates.value.filter((c) => c.baud !== baud)
     persistNow('customBaudRates', customBaudRates.value)
+    if (options.baudRate === baud && !removedCustomBauds.value.includes(baud)) {
+      removedCustomBauds.value.push(baud)
+    }
   }
 
   /** 更新自定义波特率的标注（空串清除标注） */
@@ -554,6 +565,7 @@ export function createSerialStore(deps: SerialDeps) {
   function reset() {
     Object.assign(options, DEFAULT_OPTS)
     customBaudRates.value = []
+    removedCustomBauds.value = []
     persistNow('customBaudRates', [])
   }
 
@@ -601,6 +613,7 @@ export function createSerialStore(deps: SerialDeps) {
     txBytes,
     sessionStartedAt,
     customBaudRates,
+    removedCustomBauds,
     summary,
     driverType,
     unsupportedReason,

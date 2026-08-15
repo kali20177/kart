@@ -97,9 +97,13 @@ const renderPortOption: RenderOption = (info) => {
 }
 
 const baudOptions = computed<SelectOption[]>(() => {
+  const removed = new Set(serial.removedCustomBauds)
   const all = new Set<number>(PRESET_BAUDS)
   for (const c of serial.customBaudRates) all.add(c.baud)
-  all.add(serial.options.baudRate) // 当前值始终可选（即便为历史遗留的超范围值）
+  // 当前值始终可选（即便为历史遗留的超范围值）；刚被 × 删除的当前值除外
+  // （见 serial store 的 removedCustomBauds）——否则删掉的值会留在下拉里直到重启。
+  const cur = serial.options.baudRate
+  if (cur && !removed.has(cur)) all.add(cur)
   return [...all]
     .sort((a, b) => a - b)
     .map((b) => ({ label: String(b), value: b }))

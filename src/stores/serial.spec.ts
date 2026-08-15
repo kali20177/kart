@@ -49,6 +49,23 @@ describe('serial store · 自定义波特率', () => {
     expect(s.customBaudRates).toEqual([{ baud: 74880 }, { baud: 500000 }])
   })
 
+  it('删除当前选中的自定义波特率 → 记录 removedCustomBauds；重新加入时解除', () => {
+    const s = useSerialStore()
+    s.options.baudRate = 500000
+    s.addCustomBaudRate(500000)
+    s.removeCustomBaudRate(500000)
+    expect(s.removedCustomBauds).toEqual([500000]) // 删除的恰是当前值 → 下拉候选应立即排除
+
+    // 删除非当前值不记录
+    s.addCustomBaudRate(300000)
+    s.removeCustomBaudRate(300000)
+    expect(s.removedCustomBauds).toEqual([500000])
+
+    // 重新输入/选择同值 → 重新加入列表并解除隐藏
+    s.addCustomBaudRate(500000)
+    expect(s.removedCustomBauds).toEqual([])
+  })
+
   it('非法 baud（0/负/小数/越界）不会被加入', () => {
     const s = useSerialStore()
     s.addCustomBaudRate(0)
