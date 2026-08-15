@@ -97,8 +97,11 @@ function ensurePanel(id: PanelId) {
 
 function saveLayout() {
   if (!api) return
+  const port = currentPort.value
   try {
-    localStorage.setItem(LAYOUT_KEY(currentPort.value), JSON.stringify(api.toJSON()))
+    localStorage.setItem(LAYOUT_KEY(port), JSON.stringify(api.toJSON()))
+    // 顺带清理 v1 布局键（无 :v2: 前缀）：升级后不再读取，避免 localStorage 遗留
+    try { localStorage.removeItem(STORAGE_PREFIX + 'view-layout:' + (port || 'default')) } catch { /* ignore */ }
   } catch {
     // 存储满等异常忽略（布局非关键数据）
   }

@@ -13,7 +13,8 @@ import { fieldStatus, type DashboardWidget, type DashboardWidgetType } from '@/s
  * 卡片支持 HTML5 拖拽排序；右上角 + 打开配置弹窗；消息气泡字段 chip 右键也可添加。
  */
 
-/** dockview 面板内容组件 props：params 内携带面板 api（激活状态/事件）。 */
+/** dockview 面板内容组件 props：params 内携带面板 api（激活状态/事件）。
+ *  数据源在 dashboard store，面板不感知激活态——数据持续更新，重渲染成本低。 */
 interface DashboardPanelParams {
   params?: unknown
   api: {
@@ -24,12 +25,7 @@ interface DashboardPanelParams {
   tabLocation: string
 }
 
-const props = defineProps<{ params: DashboardPanelParams }>()
-// 面板是否激活（dockview）：不激活时暂停刷新（同 WaveformChart 模式）
-const isActive = ref(props.params.api.isActive)
-props.params.api.onDidActiveChange((e) => {
-  isActive.value = e.isActive
-})
+defineProps<{ params: DashboardPanelParams }>()
 
 const { dashboard, decoder } = useSession()
 const { t } = useI18n()
@@ -69,7 +65,9 @@ function updatedText(w: DashboardWidget): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
 }
 
+/** 状态文本：无快照显示「—」（与占位值/灰点一致），有数据按阈值状态 */
 function statusLabel(w: DashboardWidget): string {
+  if (!snapOf(w)) return '—'
   const st = statusClass(w)
   if (st === 'alarm') return t('dashboard.statusAlarm')
   if (st === 'warn') return t('dashboard.statusWarn')
@@ -207,7 +205,7 @@ function saveWidget() {
     </div>
 
     <!-- 卡片网格（field-table 卡片通栏） -->
-    <div v-if="widgets.length > 0" class="dash-grid" :class="{ paused: !isActive }">
+    <div v-if="widgets.length > 0" class="dash-grid">
       <div
         v-for="(w, i) in widgets"
         :key="w.id"
@@ -252,6 +250,9 @@ function saveWidget() {
             <span class="led-text">{{ statusLabel(w) }}</span>
           </div>
           <div class="dash-foot">
+            <span class="dash-threshold" v-if="w.thresholdLow !== undefined || w.thresholdHigh !== undefined">
+              {{ thresholdText(w) }}
+            </span>
             <span class="dash-updated">{{ updatedText(w) }}</span>
           </div>
         </template>
@@ -276,46 +277,54 @@ function saveWidget() {
       <NButton size="small" secondary type="primary" @click="openCreate">{{ t('dashboard.addWidget') }}</NButton>
     </div>
 
-    <!-- 配置弹窗 -->
-    <NModal v-model:show="showConfig" preset="card" :title="editingId ? t('dashboard.editWidget') : t('dashboard.addWidget')" class="dash-config-modal">
-      <NForm label-placement="left" label-width="90">
-        <NFormItem :label="t('dashboard.type')">
-          <NSelect v-model:value="form.type" :options="typeOptions" />
-        </NFormItem>
-        <NFormItem :label="t('dashboard.label')" :required="true">
-          <NInput v-model:value="form.label" :placeholder="t('dashboard.labelPlaceholder')" />
-        </NFormItem>
+    <!-- 配置弹窗：窄宽 + 表单区限高滚动（内容多时纵向不铺满，按钮固定）——preset=card 下 style 落到卡片根 -->
+    <NModal
+      v-model:show="showConfig"
+      preset="card"
+      :title="editingId ? t('dashboard.editWidget') : t('dashboard.addWidget')"
+      class="dash-config-modal"
+      :style="{ width: 'min(420px, 92vw)' }"
+    >
+      <div class="dash-config-body">
+        <NForm label-placement="left" label-width="90">
+          <NFormItem :label="t('dashboard.type')">
+            <NSelect v-model:value="form.type" :options="typeOptions" />
+          </NFormItem>
+          <NFormItem :label="t('dashboard.label')" :required="true">
+            <NInput v-model:value="form.label" :placeholder="t('dashboard.labelPlaceholder')" />
+          </NFormItem>
 
-        <template v-if="needsBind">
-          <NFormItem :label="t('dashboard.decoder')">
-            <NSelect v-model:value="form.decoderId" :options="decoderOptions" />
-          </NFormItem>
-          <NFormItem :label="t('dashboard.field')">
-            <NSelect
-              v-model:value="form.fieldName"
-              :options="fieldOptions"
-              filterable
-              tag
-              :placeholder="t('dashboard.fieldPlaceholder')"
-            />
-          </NFormItem>
-          <NFormItem :label="t('dashboard.index')">
-            <NInputNumber v-model:value="form.index" :min="0" :placeholder="t('dashboard.indexPlaceholder')" class="dash-index-input" />
-          </NFormItem>
-          <NFormItem :label="t('dashboard.unit')">
-            <NInput v-model:value="form.unit" :placeholder="t('dashboard.unitPlaceholder')" />
-          </NFormItem>
-          <NFormItem v-if="form.type === 'digital'" :label="t('dashboard.thresholdLow')">
-            <NInputNumber v-model:value="form.thresholdLow" :placeholder="t('dashboard.thresholdPlaceholder')" class="dash-index-input" />
-          </NFormItem>
-          <NFormItem v-if="form.type === 'digital'" :label="t('dashboard.thresholdHigh')">
-            <NInputNumber v-model:value="form.thresholdHigh" :placeholder="t('dashboard.thresholdPlaceholder')" class="dash-index-input" />
-          </NFormItem>
-          <NFormItem v-if="form.type === 'digital'" :label="t('dashboard.decimals')">
-            <NInputNumber v-model:value="form.decimals" :min="0" :max="6" class="dash-index-input" />
-          </NFormItem>
-        </template>
-      </NForm>
+          <template v-if="needsBind">
+            <NFormItem :label="t('dashboard.decoder')">
+              <NSelect v-model:value="form.decoderId" :options="decoderOptions" />
+            </NFormItem>
+            <NFormItem :label="t('dashboard.field')">
+              <NSelect
+                v-model:value="form.fieldName"
+                :options="fieldOptions"
+                filterable
+                tag
+                :placeholder="t('dashboard.fieldPlaceholder')"
+              />
+            </NFormItem>
+            <NFormItem :label="t('dashboard.index')">
+              <NInputNumber v-model:value="form.index" :min="0" :placeholder="t('dashboard.indexPlaceholder')" class="dash-index-input" />
+            </NFormItem>
+            <NFormItem :label="t('dashboard.unit')">
+              <NInput v-model:value="form.unit" :placeholder="t('dashboard.unitPlaceholder')" />
+            </NFormItem>
+            <NFormItem v-if="form.type === 'digital' || form.type === 'led'" :label="t('dashboard.thresholdLow')">
+              <NInputNumber v-model:value="form.thresholdLow" :placeholder="t('dashboard.thresholdPlaceholder')" class="dash-index-input" />
+            </NFormItem>
+            <NFormItem v-if="form.type === 'digital' || form.type === 'led'" :label="t('dashboard.thresholdHigh')">
+              <NInputNumber v-model:value="form.thresholdHigh" :placeholder="t('dashboard.thresholdPlaceholder')" class="dash-index-input" />
+            </NFormItem>
+            <NFormItem v-if="form.type === 'digital'" :label="t('dashboard.decimals')">
+              <NInputNumber v-model:value="form.decimals" :min="0" :max="6" class="dash-index-input" />
+            </NFormItem>
+          </template>
+        </NForm>
+      </div>
       <div class="dash-config-actions">
         <NButton size="small" @click="showConfig = false">{{ t('dashboard.cancel') }}</NButton>
         <NButton size="small" type="primary" :disabled="!bindValid" @click="saveWidget">{{ t('dashboard.save') }}</NButton>
@@ -612,6 +621,12 @@ function saveWidget() {
 }
 
 /* —— 配置弹窗 —— */
+/* 表单区限高滚动：内容多时纵向不铺满视口（按钮固定在滚动区外） */
+.dash-config-body {
+  max-height: min(56vh, 420px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
 .dash-config-actions {
   display: flex;
   justify-content: flex-end;

@@ -63,6 +63,16 @@ describe('dashboard store · 解码广播更新', () => {
     expect(store.lastFrame.value?.fields.map((f) => f.name)).toEqual(['slave'])
   })
 
+  it('单值数组字段兼写无下标键（只读 1 个寄存器：省略 index 的绑定也可取到值）', () => {
+    const { store, emit } = makeStore()
+    emit(broadcast('modbus-rtu', { fields: [{ name: 'registers', value: '0x0064', offset: 3, length: 2, number: [100] }] }))
+    expect(store.latestFields.value[fieldKey('modbus-rtu', 'registers')]).toMatchObject({ number: 100 })
+    expect(store.latestFields.value[fieldKey('modbus-rtu', 'registers', 0)]).toMatchObject({ number: 100 })
+    // 无下标绑定的 widget 能读到值——覆盖单寄存器响应 + 手动配置省略 index 的路径
+    const w = store.addWidget({ type: 'digital', label: 'R', bind: { decoderId: 'modbus-rtu', fieldName: 'registers' } })
+    expect(store.widgetSnapshot(w)).toMatchObject({ value: 100 })
+  })
+
   it('clear 清空数据快照但保留 widgets，version 递增', () => {
     const { store, emit } = makeStore()
     emit(broadcast())

@@ -46,8 +46,8 @@ export interface DashboardWidget {
 export interface FieldSnapshot {
   /** 原始显示值（格式化字符串） */
   display: string
-  /** 数值；无数值语义的字段省略 */
-  number?: number | number[]
+  /** 数值；无数值语义的字段省略。恒为标量——多值字段按索引拆存，单值数组兼写无下标键 */
+  number?: number
   /** 最近一次到达时间（帧时间戳） */
   timestamp: number
 }
@@ -108,6 +108,10 @@ export function createDashboardStore(deps: DashboardDeps) {
         f.number.forEach((n, i) => {
           next[fieldKey(decoderId, f.name, i)] = { display: f.value, number: n, timestamp }
         })
+        // 单值数组（如只读 1 个寄存器）：兼写无下标键，省略 index 的绑定也可取到值
+        if (f.number.length === 1) {
+          next[fieldKey(decoderId, f.name)] = { display: f.value, number: f.number[0], timestamp }
+        }
       } else {
         const snap: FieldSnapshot = { display: f.value, timestamp }
         if (f.number !== undefined) snap.number = f.number
@@ -154,10 +158,8 @@ export function createDashboardStore(deps: DashboardDeps) {
     if (!w.bind) return undefined
     const snap = latestFields.value[fieldKey(w.bind.decoderId, w.bind.fieldName, w.bind.index)]
     if (!snap) return undefined
-    const value = snap.number !== undefined
-      ? (Array.isArray(snap.number) ? snap.number[0] : snap.number)
-      : undefined
-    return { value, display: snap.display, timestamp: snap.timestamp }
+    // 快照键上存的是标量（数组字段按索引拆存，单值数组另写无下标键），直接取用
+    return { value: snap.number, display: snap.display, timestamp: snap.timestamp }
   }
 
   /** 清空数据快照（保留 widget 配置）；联动 pause.clearAll 链 */

@@ -121,6 +121,35 @@ describe('MessageBubble · 解码字段 chip 右键添加至仪表盘', () => {
     expect(w.bind).toEqual({ decoderId: 'modbus-rtu', fieldName: 'slave' })
   })
 
+  it('右键单值数组字段（只读 1 个寄存器）：菜单列 registers[0]，选中创建 index=0 卡片', async () => {
+    const { wrapper, session } = mountBubble(
+      decodedMessage({
+        decoded: {
+          decoderId: 'modbus-rtu',
+          summary: 'MB: slave=0x01 fc=0x03',
+          fields: [
+            { name: 'slave', value: '0x01', offset: 0, length: 1, number: 1 },
+            { name: 'registers', value: '0x0064', offset: 3, length: 2, number: [100] },
+          ],
+        },
+      })
+    )
+    const chips = wrapper.findAll('.decoded-field')
+    await chips[1].trigger('contextmenu', { clientX: 120, clientY: 80 })
+    await nextTick()
+    const opt = [...document.querySelectorAll('.n-dropdown-option-body')].find((o) => o.textContent?.includes('registers[0]'))
+    expect(opt, 'registers[0] 选项存在（单值数组不再落到无下标死键）').toBeTruthy()
+    opt?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+    const w = session.dashboard.widgets[0]
+    expect(w).toMatchObject({
+      type: 'digital',
+      label: 'registers[0]',
+      bind: { decoderId: 'modbus-rtu', fieldName: 'registers', index: 0 },
+    })
+    expect(w.thresholdHigh).toBe(200) // 预填上限 = 100 × 2
+  })
+
   it('chip 右键不冒泡到行级多选菜单（stopPropagation）', async () => {
     const { wrapper } = mountBubble(decodedMessage())
     const rowContext = vi.fn()

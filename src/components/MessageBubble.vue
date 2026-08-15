@@ -230,8 +230,9 @@ const chipMenu = reactive<ChipMenuState>({ show: false, x: 0, y: 0, field: null,
 function onFieldContext(e: MouseEvent, f: DecodeField) {
   e.preventDefault()
   e.stopPropagation() // 阻止冒泡到行级右键（多选菜单）
-  if (Array.isArray(f.number) && f.number.length > 1) {
-    // 多值字段（如 Modbus 寄存器组）：每个值一个菜单项，带数值便于辨认
+  if (Array.isArray(f.number) && f.number.length > 0) {
+    // 多值字段（如 Modbus 寄存器组）：每个值一个菜单项，带数值便于辨认。
+    // 单值数组（只读 1 个寄存器）同样列出 registers[0]，避免落到无下标绑定的死键
     chipMenu.options = f.number.map((n, i) => ({
       label: `${f.name}[${i}] = ${n}`,
       key: String(i),
