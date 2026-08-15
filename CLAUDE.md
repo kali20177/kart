@@ -14,6 +14,9 @@ npm run test:watch     # 以 watch 模式运行测试
 npm run electron:dev   # 在 Electron 中以开发模式运行（含 HMR + 主/预加载自动重启）
 npm run electron:build # 类型检查 + 构建 + electron-builder 打包（输出 release/）
 npm run electron:preview # 构建后用 electron 直接运行（不打包）
+npm run verify:terminal # Playwright CDP 驱动 Electron 验证终端视图（mock shell 交互）
+npm run verify:pty     # 验证本地终端（node-pty spawn 真实 shell → vim 全屏）
+npm run verify:dockview # 验证多会话 dockview 布局（并排/关闭/新建会话）
 ```
 
 ## 视觉委派
@@ -22,84 +25,110 @@ npm run electron:preview # 构建后用 electron 直接运行（不打包）
 
 ## 项目概览
 
-串口调试助手 —— 面向嵌入式开发调试的现代化串口工具。Vue 3 SPA，三种串口驱动可切换，同一份代码同时支持浏览器（Web Serial API）和 Electron 桌面应用（serialport npm 库），打包输出 Windows/macOS/Linux 三平台安装包。
+串口调试助手 —— 面向嵌入式开发调试的现代化串口工具。Vue 3 SPA，三种传输后端可切换，同一份代码同时支持浏览器（Web Serial API）和 Electron 桌面应用（serialport npm 库），打包输出 Windows/macOS/Linux 三平台安装包。
 
 - **框架**：Vue 3（`<script setup>` Composition API）
 - **构建**：Vite 5、TypeScript strict、`@/` 路径别名 → `src/`
 - **桌面打包**：Electron 31 + vite-plugin-electron + electron-builder（详见下文「Electron 集成」）
-- **状态管理**：Pinia
+- **状态管理**：Pinia（每会话独立 store 实例，settings 全局共享）
+- **多会话布局**：dockview-core（`dockview-vue`）——会话面板可拖动停靠、并排对比多设备数据流
 - **UI 组件库**：Naive UI（zhCN 中文语言包）
-- **国际化**：vue-i18n（`@intlify/unplugin-vue-i18n` 预编译，满足 CSP 无 unsafe-eval）
+- **国际化**：vue-i18n（`@intlify/unplugin-vue-i18n` 预编译，满足 CSP 无 unsafe-eval；zh/en 结构在 `src/i18n.ts` 编译期互检）
+- **终端**：xterm.js（`@xterm/xterm` + addon-fit）+ node-pty（本地终端验证通道）
 - **波形图**：uPlot（轻量 Canvas 时序图，用于实时信号/数据流可视化）
 - **虚拟滚动**：vue-virtual-scroller（大量消息列表高性能渲染）
-- **测试**：Vitest + jsdom + `@vue/test-utils`
+- **测试**：Vitest + jsdom + `@vue/test-utils` + Playwright CDP 脚本（`verify:terminal/pty/dockview`）
 - **注册源**：国内 npm 镜像（`registry.npmmirror.com`），配置在 `.npmrc`
 - **代码质量门禁**：`vue-tsc` 类型检查 + ESLint（`npm run lint`，flat config `eslint.config.js`，lint-staged 提交时自动 `--fix`）
 
 ## 架构
 
-### 关键抽象 — SerialDriver 接口
+### 关键抽象 — IoTransport 传输接口
 
-`src/types.ts` 定义了 `SerialDriver` 接口。所有 Pinia stores 依赖此接口而非具体实现，切换驱动时 store 无需改动。
+`src/types.ts` 定义了 `IoTransport` 接口（传输无关核心）：串口 / TCP / 本地终端 / mock / 占位驱动统一契约，端点统一用字符串标识，接收用 `onData(cb)` 订阅（返回取消函数）。信号线方法（`getSignals`/`setSignals`/`setBreak`）为可选扩展，非串口传输不实现，store 用可选链访问、UI 按传输类型隐藏。
 
-**驱动实现，通过工厂 `src/serial/index.ts` 运行时自动选择：**
+所有 stores 依赖此接口而非具体实现，切换传输时 store 无需改动。**内置传输经注册表 `src/serial/registry.ts` 注册**（镜像 themes/decoders 模式），后续新传输（udp 等）追加即可。
 
-| 驱动 | 文件 | 环境 | 说明 |
+| 传输 | 文件 | 环境 | 说明 |
 | --- | --- | --- | --- |
-| `mock` | `src/mock/MockSerialSource.ts` | 浏览器 DEV | 模拟串口数据，可切换场景（AT 应答/二进制帧/压测等）；仅 `?mock` 参数触发，不兜底 |
-| `webserial` | `src/serial/WebSerialDriver.ts` | 浏览器 | Web Serial API（Chromium 89+），需 HTTPS + 用户授权 |
 | `serialport` | `src/serial/SerialPortDriver.ts` | Electron | 通过 IPC 委托主进程 serialport npm 库，返回真实 COM 口名 |
+| `webserial` | `src/serial/WebSerialDriver.ts` | 浏览器 | Web Serial API（Chromium 89+），需 HTTPS + 用户授权 |
+| `tcp` | `src/serial/TcpDriver.ts` | Electron | TCP client，主进程 `TcpManager`（Node `net`）；浏览器 DEV 放开预览但连接报「TCP 不可用」 |
+| `mock` | `src/mock/MockSerialSource.ts` | 浏览器 DEV | 模拟串口数据，可切换场景（AT 应答/二进制帧/压测/modbus/shell 等）；仅 `?mock` 参数触发，不兜底 |
+| `pty` | `src/serial/PtyDriver.ts` | Electron | 本地终端（node-pty spawn 真实 shell），开发验证用；`?pty` 参数触发 |
 | `unsupported` | `src/serial/UnsupportedDriver.ts` | 不兼容浏览器 | 占位驱动（方法抛错/no-op）；配合 `IncompatibleBrowser` 全屏遮罩引导用户 |
 
-**驱动选择优先级：** Electron 环境 → serialport；DEV 模式 `?mock` 查询参数 → mock；非安全上下文 → unsupported（全屏遮罩提示改用 HTTPS / localhost）；浏览器有 Web Serial → webserial；兜底 → unsupported（全屏遮罩提示切换/升级浏览器）。运行环境自动确定驱动，无需用户手动选择。
+**用户可切换的是「传输类型」**（`TransportType = 'serial' | 'tcp'`，见 ConnectionBar 下拉），`serial` 内部再按环境解析具体后端驱动。**驱动判定优先级**（`resolveDriverType` 纯函数，有单测）：Electron+`?pty` → pty；Electron → serialport；DEV `?mock` → mock；非安全上下文 → unsupported(insecure-context)；浏览器有 Web Serial → webserial；兜底 → unsupported(no-web-serial)。
 
-> mock 仅 DEV 调试用，不对普通用户暴露。浏览器不兼容时**不再兜底 mock**，而是由 `src/components/IncompatibleBrowser.vue` 全屏阻断遮罩引导用户切换/升级浏览器或改用 HTTPS，避免普通用户误把模拟数据当成真实串口流量。判定逻辑见 `resolveDriverType`（纯函数，有单测）。
+> mock 仅 DEV 调试用，不对普通用户暴露。浏览器不兼容时**不再兜底 mock**，而是由 `src/components/IncompatibleBrowser.vue` 全屏阻断遮罩引导用户切换/升级浏览器或改用 HTTPS，避免普通用户误把模拟数据当成真实串口流量。
+
+### 会话架构（session）
+
+`src/session/index.ts` 的 `createSession()` 组装一个自包含会话：每会话独立驱动实例 + **store 八件套**（serial/messages/pause/waveform/recorder/transfer/terminal/dashboard），`settings` 为全局共享的同一 proxy。整个创建包在 detached `effectScope` 中，`dispose()` 统一清理 watcher 与各 store 的 `onScopeDispose` 资源（定时器/订阅/驱动句柄）。
+
+- **视图**：`App.vue` 用根级 dockview 承载会话面板（id `session:<id>`），面板可拖动停靠并排；聚焦哪个面板，全局操作就作用于哪个会话（`useActiveSession`）。
+- **端口占用提示**：`provideOccupiedPorts` 收集已连接端口，其他会话 ConnectionBar 下拉禁用+红色提示，防误连。
+- **对话框绑定**：根层对话框（设置/文件传输/ASCII 表）记录 opener 会话，切 tab 不影响已打开的对话框。
+- **按端口持久化**：帧解码配置（`decoder-config:<port>`）与仪表盘 widget（`dashboard-config:<port>`）按 `serial.selectedPort` 载入/写回；首个端口且无已存配置时沿用内存态并落盘（避免「先选解码器再连接」被端口切换清掉）。
 
 ### 数据流
 
 所有串口字节数据以 `Uint8Array` 格式存储一次。ASCII/HEX 视图按需计算（切换视图无需重建数据）。高频数据通过 `requestAnimationFrame` 批处理摄入到 messages store，避免压垮 Vue 响应式系统。
 
+帧解码链路：`serial.onData → messages.makeRxMessage`，解码器（`decoders/` 注册表，内置 `field` 字段布局 + `modbus-rtu`）对剥离帧尾分隔符的载荷解码，匹配成功则 `msg.decoded.fields` 叠加字段块渲染，并经 `messages.onDecode` 广播给仪表盘 store（字段最新值表 + 最近一帧快照）。
+
 ### 层次结构
 
 ```
-src/types.ts              — 共享类型（Message、PortOptions、SerialDriver、QuickCommand、AppSettings、LogLevel 等）
-src/utils/                — 纯工具函数（hex、encoding、checksum、byte-parser、search、export-*、message-format、ascii-table、baud、download、log-level）—— 无框架依赖
+src/types.ts              — 共享类型（Message、EndpointInfo、IoTransport、QuickCommand、AppSettings、LogLevel、DecoderConfig 等）
+src/i18n.ts               — vue-i18n 实例 + 编译期 zh/en 结构互检
+src/session/              — 会话工厂：createSession 组装每会话 store 八件套 + 按端口持久化解码/仪表盘配置
+src/decoders/             — 帧解码器注册表 + 内置解码器（field / modbus-rtu），decode 为纯函数可单测
+src/utils/                — 纯工具函数（hex、encoding、checksum、composer、search、export-*、message-format、
+                             ascii-table、baud、download、fonts、knowledge-base、persist、reconnect、size、
+                             terminal-hint、text-parser、usb-vendors、waveform-parser、log-level）—— 无框架依赖
 src/utils/logger.ts       — 渲染进程 Logger 单例（IDB 持久化 + console 劫持 + window 全局错误兜底 + 日志导出）
 src/mock/                 — MockSerialSource + 场景生成器
-src/serial/               — 串口驱动工厂 + WebSerialDriver + SerialPortDriver（Electron IPC）
-src/main/                 — Electron 主进程（SerialPortManager — 封装 serialport 库；logger.ts — 按日轮转的文件日志）
-src/preload/              — Electron 预加载（contextBridge 暴露 serial/recorder/platform API）
-src/composables/          — Vue composables（useFrameSplitter、useSendHistory、useStorage、useMessageSearch、useTheme、useFileWriter、useRecordDirectory）
-src/stores/               — Pinia stores（serial、messages、commands、settings、recorder、transfer、waveform）
+src/serial/               — 传输驱动工厂 + 注册表 + WebSerialDriver + SerialPortDriver + TcpDriver + PtyDriver
+src/main/                 — Electron 主进程（SerialPortManager、TcpManager、PtyManager、JsonStore、logger）
+src/preload/              — Electron 预加载（contextBridge 暴露 serial/tcp/recorder/platform API）
+src/composables/          — Vue composables（useFrameSplitter、useSendHistory、useStorage、useMessageSearch、
+                             useTheme、useFileWriter、useRecordDirectory、useSession）
+src/stores/               — Pinia stores（serial、messages、pause、waveform、recorder、transfer、terminal、dashboard、commands、settings）
 src/themes/               — 主题注册表 + 内置主题（glass-industrial-dark/light、oled-hud）
 src/locales/              — 国际化文案（zh-CN、en-US）
-src/components/           — 14 个 Vue 组件（ConnectionBar、MenuBar、MessageList、MessageBubble、
-                            InputComposer、SendHistoryPopover、QuickCommandsPanel、SettingsModal、
-                            StatusBar、AsciiTable、ExportDialog、FileTransferDialog、FileTransferBubble、
-                            WaveformChart）
-src/styles/               — CSS 自定义属性（亮/暗主题令牌 + 基础重置）
-src/App.vue               — 根布局 + 主题切换 + 双栏/三栏布局
-src/main.ts               — createApp + Pinia + i18n + 挂载
+src/components/           — 25 个 Vue 组件（ConnectionBar、SessionPanel、SessionTab、MessagePanel、MessageBubble、
+                             FileTransferBubble、TerminalPane、DashboardPane、DecoderSettingsModal、WaveformChart、
+                             InputComposer、QuickCommandsPanel、SettingsModal、StatusBar、MenuBar、KnowledgeBaseModal、
+                             AsciiTable、ExportDialog、FileTransferDialog、SendHistoryPopover、MessageList、
+                             IncompatibleBrowser、ViewTab、TerminalInput、SessionPane）
+src/styles/               — CSS 变量（tokens.css）、基础重置（base.css）、玻璃质感（glass.css）、字体（fonts.css）、dockview 覆写（dockview.css）
+src/App.vue               — 根布局：dockview 多会话 + 主题切换 + 右侧快速命令侧栏
+src/main.ts               — createApp + Pinia + i18n + 日志初始化 + 主题首帧应用 + 挂载
 ```
 
 ### 组件 ↔ Store 依赖关系
 
 ```
-App.vue → 所有 stores + useTheme
-MenuBar         → settings store（亮/暗切换、i18n 语言切换）
-ConnectionBar   → serial store、recorder store
-MessageList     → messages store、settings store、useMessageSearch
-  └─ MessageBubble → hex/utils、encoding/utils、checksum/utils、search/utils
+App.vue → 会话管理（dockview）+ 所有 stores + useTheme
+SessionPanel/SessionTab → useSession（活动会话 + 会话列表）
+ConnectionBar   → serial store、recorder store、decoder config
+MessagePanel    → messages store、settings store、useMessageSearch、useSession
+  └─ MessageBubble → hex/utils、encoding/utils、checksum/utils、search/utils、decoders
   └─ FileTransferBubble → transfer store
+  └─ DashboardPane → dashboard store
+TerminalPane    → terminal store、serial store、settings store
 InputComposer   → serial store、settings store、useSendHistory
   └─ SendHistoryPopover → useSendHistory
 QuickCommandsPanel → commands store、serial store
 SettingsModal   → settings store、serial store
+DecoderSettingsModal → decoder registry、session.decoder
 StatusBar       → serial store、messages store、transfer store
 WaveformChart   → waveform store、messages store、settings store
 ExportDialog    → messages store、settings store
 FileTransferDialog → transfer store、settings store
 AsciiTable      → ascii-table/utils
+KnowledgeBaseModal → knowledge-base/utils
 ```
 
 ### 帧分割
@@ -108,37 +137,46 @@ AsciiTable      → ascii-table/utils
 
 ### 存储抽象
 
-`useStorage.ts` 封装 localStorage，暴露 `{ get, set, remove }` 接口（同步读源，首次加载零闪烁）。用户数据（设置/命令/波特率/导出偏好/录制目录）经 `src/utils/persist.ts` 的 `persistNow` 直写落盘：同步写 localStorage + 异步镜像（浏览器 → IndexedDB `kart-persist`；Electron → 主进程 `JsonStore` 的 `userData/kart-settings.json`）+ 容量自检（≥1.5MB 快照导出提醒）。布局/临时键（rightWidth/inputHeight/sendHistory）仍走同步 `useStorage`。
+`useStorage.ts` 封装 localStorage，暴露 `{ get, set, remove }` 接口（同步读源，首次加载零闪烁）。用户数据（设置/命令/波特率/导出偏好/录制目录/解码与仪表盘配置）经 `src/utils/persist.ts` 的 `persistNow` 直写落盘：同步写 localStorage + 异步镜像（浏览器 → IndexedDB `kart-persist`；Electron → 主进程 `JsonStore` 的 `userData/kart-settings.json`）+ 容量自检（≥1.5MB 快照导出提醒）。布局/临时键（rightWidth/inputHeight/sendHistory）仍走同步 `useStorage`。
 
 ## 功能总览
 
-- **收发气泡**：RX 左/TX 左右分色，时间戳精确到毫秒、字节数、帧间 Δt、校验失败标记，悬停可复制/复制为 HEX/重发/添加标注，暂停时数据不缓冲并显示缺失区间。
+- **多会话并排**：dockview 可停靠布局，每会话独立驱动 + store 八件套，可同时连接多设备并排对比；末会话不可关闭；被占用端口下拉禁用提示。
+- **收发气泡**：RX 左/TX 左右分色，时间戳精确到毫秒、字节数、帧间 Δt、校验失败标记，悬停可复制/复制为 HEX/重发/添加标注/插入分隔线，暂停时数据不缓冲并显示缺失区间。超长帧两档截断（>4096B 折叠仅预览 512B，展开/收起）。
 - **ASCII ↔ HEX 切换**：原始字节只存一份，切视图即时重排。HEX 视图 16 字节/行 + ASCII 透视列。
 - **搜索**：文本/HEX 双模式、命中高亮（原生配对）、上一项/下一项导航、当日时间范围筛选。不支持正则。
-- **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32）。
-- **接收校验**：独立 RX 校验算法（不耦合发送侧），支持收发不对称协议，分隔符前自动校验。
-- **信号控制（DTR/RTS/Break）**：StatusBar 信号区可切换 DTR/RTS 电平、发送 Break 脉冲（250ms，TX 拉低），用于 ESP32/STM32 bootloader / 复位 / ISP。断开时禁用，自动重连后重放上次电平。链路：`SerialDriver.setSignals/setBreak` → Web Serial `port.setSignals` / Electron IPC → 主进程 `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言。
-- **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表，连通 Web Serial 的断插重连）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示「重连中…」，重连成功弹一次 toast。判定集中在纯函数 `src/utils/reconnect.ts`（有单测），store 与组件共用同一套。
+- **帧解码器**：内置字段布局解析器（u8/u16/u32 等格式、偏移/长度校验防越界）+ Modbus RTU（请求/响应判别按 byteCount 一致性优先、异常响应解析），帧上叠加字段块；解码器注册表可扩展（未来 JS 脚本解码器可复用同一契约）。配置会话级按端口持久化，ConnectionBar 弹窗编辑，`id=''` 表示不启用。
+- **仪表盘**：解码器字段驱动（`decoderId:fieldName:index` 绑定），widget 类型 digital（数字表+阈值着色）/led（状态灯）/field-table（最近一帧字段总览），阈值判定为纯函数 `fieldStatus`（alarm 优先 warn，可单测）；widget 拖拽排序、按端口持久化，暂停时自动冻结。
+- **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析（`AA 55`/`0xAA,0x55`/`aa55`）、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32）。
+- **接收校验**：独立 RX 校验算法（不耦合发送侧），支持收发不对称协议，校验前自动剥离帧尾分隔符。
+- **信号控制（DTR/RTS/Break）**：StatusBar 信号区可切换 DTR/RTS 电平、发送 Break 脉冲（250ms，TX 拉低），用于 ESP32/STM32 bootloader / 复位 / ISP。断开时禁用，自动重连后重放上次电平。链路：`IoTransport.setSignals/setBreak` → Web Serial `port.setSignals` / Electron IPC → 主进程 `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言。
+- **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示，重连成功弹一次 toast。判定集中在纯函数 `src/utils/reconnect.ts`（有单测）。
+- **TCP 传输**：Electron 主进程 `TcpManager`（Node `net`）经 IPC 暴露，TcpDriver 实现 `IoTransport`；支持 IPv6 校验、同端点并发用 connId 区分、断连窗口处理。终端直通提示仅 TCP 传输渲染（设备回显无歧义，串口不提示）。
+- **终端模式**：xterm.js 渲染（cell 网格/光标/ANSI/alt-screen/滚动区域等全能力，vim/nano 全屏可用）。传输模式 line（本地行编辑 Enter 发送）/char（按键直通设备侧回显），本地回显/退格字节（del 0x7F/bs 0x08）/行尾符/回滚上限可配；pty 数据源强制 UTF-8（忽略用户编码设置）。设置：字号缩放、终端字体。
 - **快速命令**：增删改、拖拽排序、JSON 导入导出、点击直发、调到发送框；每条命令可独立配置校验和（inherit 全局或覆盖）。
-- **文件发送**：分包切片、三种协议封装（raw/len-prefix/seq-crc）、限速、ACK 流控、循环下发、断点续传、错误注入。`FileTransferDialog` 预设（原始整包/STM32-ISP/ESP32/压测/自定义）+ 拖拽。
-- **波形图**：实时 Canvas 时序图（uPlot），多通道色相均分，支持暂停/恢复、时间范围选择、CSV 导出。
-- **录制**：原始字节流目录式录制成文件（格式/位置可配），支持开始/停止，pagehide 自动落盘。
+- **文件发送**：分包切片、三种协议封装（raw/len-prefix/seq-crc）、限速（字节速率 + 包间延时，取更严者）、ACK 流控（any/byte/echo-crc + 超时/NACK 重试）、循环下发、断点续传、错误注入（破坏 CRC/跳过 ACK）、断线自动中止。`FileTransferDialog` 预设（原始整包/STM32-ISP/ESP32/压测/自定义）+ 拖拽；限速输入框实时显示波特率对应物理层上限。
+- **波形图**：实时 Canvas 时序图（uPlot），多通道自动检测（无标签数值行按 token 扩容 / `label:value` 按标签分配），游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看、CSV 导出。仅文本行解析（Arduino Serial.println 风格），无二进制解析模式。
+- **录制**：原始字节流目录式录制成文件（txt 带时间戳 HEX 行 / csv 四列），格式/位置可配，断线自动停止，pagehide 自动落盘；文件名含端口（多会话并排区分数据来源）。
+- **标注与导出**：帧标注 📌、分隔线（可带标签）；导出 TXT/CSV/JSON/Binary 四种格式 + 筛选 + hex/ascii 双列 + 「包含分隔线/标注」选项。波形 CSV、快速命令 JSON 导入导出。
 - **ASCII 对照表**：右侧抽屉，点击行插入到发送框。
-- **设置**：编码（UTF-8/ASCII/GBK）、帧策略、缓冲上限、默认视图、主题（亮/暗）、字号、终端字体（Local Font Access 枚举系统字体）与字号缩放、发送/接收校验算法、录制格式与目录。
-- **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数。
-- **导出**：消息列表 CSV/JSON 导出、波形 CSV 导出、快速命令 JSON 导入导出。
-- **应用日志**：面向用户报障。浏览器端写 IndexedDB；Electron 下主进程按日轮转文件日志（`userData/logs/YYYY-MM-DD.log`，保留 30 天）并汇聚渲染端全部 console（`console-message` 事件转发）。文件菜单「导出日志」一键下载：Electron 优先取主进程文件（权威来源，含主进程事件），浏览器取 IDB，导出文件头自动附带版本/平台/驱动等环境信息。关键生命周期均有埋点：驱动选择、连接/断连（含会话时长与流量）、写入失败、录制、文件传输、全局错误。级别/行格式/level 映射集中在纯函数 `src/utils/log-level.ts`（两端共用、有单测）。
-- **状态栏**：连接态、端口参数概要、RX/TX/帧/ERR 统计、CTS 只读指示（状态圆点，表示对端允许发送）、DTR/RTS/BRK 控制、活跃文件下发紧凑条。
+- **帮助**：知识库（常见问题/百科，i18n 驱动）、快捷键面板、应用日志导出。
+- **设置**：编码（UTF-8/ASCII/GBK）、帧策略、缓冲上限、默认视图、主题（亮/暗）、字号、终端字体（Local Font Access 枚举系统字体）与字号缩放、发送/接收校验算法、录制格式与目录、暂停恢复提示开关。
+- **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数、丢弃帧/采样提示。
+- **应用日志**：面向用户报障。浏览器端写 IndexedDB；Electron 下主进程按日轮转文件日志（`userData/logs/YYYY-MM-DD.log`，保留 30 天）并汇聚渲染端全部 console。文件菜单「导出日志」一键下载：Electron 优先取主进程文件（权威来源），浏览器取 IDB，导出文件头自动附带版本/平台/驱动等环境信息。级别/行格式/level 映射集中在纯函数 `src/utils/log-level.ts`（两端共用、有单测）。
+- **状态栏**：连接态、传输参数概要、RX/TX/帧/ERR 统计、CTS 只读指示（状态圆点）、DTR/RTS/BRK 控制、活跃文件下发紧凑条。
 - **主题**：多主题注册表 + 3 套内置主题（glass-industrial-dark、glass-industrial-light、oled-hud），明暗二元，无"跟随系统"。
 
 ## Electron 集成
 
 桌面打包基于 **vite-plugin-electron**（单 vite 配置，由环境变量 `ELECTRON=true` 开关）。普通 `npm run dev` / `npm run build` 不设该变量，插件完全惰性，浏览器构建产物与无 Electron 时一致。
 
-- `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`；初始化 `SerialPortManager` 并注册 IPC handlers（`serial:list-ports`、`serial:open`、`serial:close`、`serial:write`、`serial:get-signals`、`serial:set-signals`、`serial:set-break`）。
-- `src/main/SerialPortManager.ts` — 封装 serialport npm 库：枚举串口（返回真实 COM 口名如 `COM5`、`/dev/cu.usbserial-1420`；macOS 上 serialport 枚举的是 dialin 节点 `/dev/tty.*`，已换算为惯例的 callout 节点 `/dev/cu.*`）、打开/关闭/写入/信号状态（`getSignals` + `setSignals`/`setBreak`）。读取事件驱动（`SerialPort 'data'` 事件），通过 `webContents.send` 推送到渲染进程。相比手写 C++ addon：无需本机工具链、prebuilt native bindings、跨平台。
-- `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/setSignals/setBreak/onData/onError）、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
-- `src/serial/SerialPortDriver.ts` — 渲染端驱动：实现 `SerialDriver` 接口，通过 `window.electron.serial` 与主进程 IPC 通信。信号轮询 500ms。
+- `src/main/index.ts` — 主进程：创建 `BrowserWindow`（`contextIsolation: true`、`nodeIntegration: false`）；dev 下 `loadURL(VITE_DEV_SERVER_URL)`，prod 下 `loadFile(dist/index.html)`；初始化 `SerialPortManager`/`TcpManager`/`PtyManager`/`JsonStore` 并注册 IPC handlers（`serial:*`、`tcp:*`、`pty:*`、`recorder:*`）。
+- `src/main/SerialPortManager.ts` — 封装 serialport npm 库：枚举串口（返回真实 COM 口名如 `COM5`、`/dev/cu.usbserial-1420`；macOS 上 serialport 枚举的是 dialin 节点 `/dev/tty.*`，已换算为惯例的 callout 节点 `/dev/cu.*`）、多端口并发（`Map<path, PortEntry>`，同端口二次 open 拒绝）、打开/关闭/写入/信号状态。读取事件驱动（`SerialPort 'data'` 事件），通过 `webContents.send` 推送到渲染进程。
+- `src/main/TcpManager.ts` — TCP 客户端（Node `net`），IPv6 校验、`connId` 区分同端点并发连接。
+- `src/main/PtyManager.ts` — node-pty 封装，spawn 本地 shell 作为「串口设备」。
+- `src/main/JsonStore.ts` — 持久化后备（`userData/kart-settings.json`）：防抖 500ms + 原子写 + will-quit 同步刷盘。
+- `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/setSignals/setBreak/onData/onError）、`tcp`、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
+- `src/serial/SerialPortDriver.ts` — 渲染端驱动：实现 `IoTransport` 接口，通过 `window.electron.serial` 与主进程 IPC 通信。信号轮询 500ms。
 - `vite.config.ts` — `base` 在 Electron 目标下设为 `'./'`（file:// 加载需相对路径），浏览器下为 `'/'`。
 - `tsconfig.node.json` — 主/预加载的 Node 上下文类型检查（无 DOM lib），`electron:build` 中以 `tsc -p tsconfig.node.json --noEmit` 作为门禁。
 - `electron-builder.json` — 打包配置，输出到 `release/`（三平台：Windows NSIS、macOS DMG/ZIP、Linux AppImage/deb）。
@@ -193,7 +231,7 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 
 - **手动体验**：`KART_PTY=1 npm run electron:dev`。主进程给 URL 追加 `?pty`，渲染端 `resolveDriverType` 命中 `pty` 驱动（端口下拉出现「本地终端」，连接即 spawn 本地 shell）。
 - **自动化验证**：`ELECTRON=true vite build && npm run verify:pty`（`scripts/verify-pty.mjs`，Playwright CDP 驱动 Electron，连接 → 终端视图 → `ls` 回显 → `vim` 全屏 → 无 console 错误，截图在 `/tmp/pty-verify/`）。
-- **驱动链路**：主进程 `PtyManager`（node-pty spawn）→ IPC `pty:data` → 预加载 → 渲染端 `PtyDriver`（实现 `SerialDriver`，`setSize` 同步窗口尺寸给 shell 的 stty）→ serial store → terminal store（xterm 薄桥）。
+- **驱动链路**：主进程 `PtyManager`（node-pty spawn）→ IPC `pty:data` → 预加载 → 渲染端 `PtyDriver`（实现 `IoTransport`，`setSize` 同步窗口尺寸给 shell 的 stty）→ serial store → terminal store（xterm 薄桥）。
 
 **node-pty 需本地编译**：npm 发布的 prebuilt 与当前 macOS 不兼容，`spawn` 报 `posix_spawnp failed`（无 errno）。解决：`cd node_modules/node-pty && npx node-gyp rebuild`。node-pty 用 N-API，编译产物 Node/Electron 通用（Electron 31 直接可用）。已自动化：`postinstall` 钩子 `scripts/check-node-pty.mjs` 会真实 spawn 探测一次 binding，损坏/缺失时自动 rebuild——新 clone 后 `npm install` 无需手动干预。手动路径仍可用作兜底。
 
@@ -218,7 +256,10 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 
 1. 将 Blob 下载替换为 Electron `dialog` + `fs`（快照导出已走 dialog，其余下载路径未接）
 2. 文件发送引擎内联工具（crc/chunk-framer/rate-limit）拆分为独立 `utils/*.ts` + 单测
+3. 快速命令变量/宏替换（计数器、时间戳、CRC 占位）未实现（`QuickCommand.payload` 静态）
+4. 端口占用提示（serialport 无 busy 状态，需独占打开探测）未实现
+5. 波形二进制解析模式已移除（仅文本行解析），未来重引入时重新评估时间对齐
 
 ## 生产环境缺失功能与已知问题
 
-生产化待补功能（按优先级分层）与已知技术问题汇总在 [docs/production-gaps.md](docs/production-gaps.md)，供后续任务规划参考。
+生产化待补功能（按优先级分层）与已知技术问题汇总在 [docs/production-gaps.md](docs/production-gaps.md)，供后续任务规划参考。设计文档见 [docs/](./docs/)（multi-session-ui、terminal-mode、dashboard、file-transfer、multi-port、theme-system）。

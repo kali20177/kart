@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-08-06。已完成项标注 ✅。
+> 最近更新：2026-08-15。已完成项标注 ✅。
 
 ## 一、生产环境缺失功能
 
@@ -19,7 +19,7 @@
    - **UX 层**：`FileTransferDialog`（预设：原始整包/STM32-ISP/ESP32/压测/自定义 + 文件拖拽与移除）、`FileTransferBubble`（消息流内单条文件气泡：进度条/速率/ETA/暂停继续中止重试详情，按 `Message.kind==='file'` 委托渲染）、`InputComposer` 📎 按钮 + 拖拽入口、`StatusBar` 活跃下发紧凑条。
    - **限速语义可视化**：字节速率输入框实时显示当前波特率对应的物理层上限（按 `dataBits/parity/stopBits` 推算 bit/字节），超限橙色警告。明确「有效速度 = min(波特率 B/s, 字节速率)」，二者作用层不同（物理硬天花板 vs 应用软节流保护设备缓冲）。
    - **Mock 阶段局限**：`MockSerialSource.write()` 立即返回不按波特率节流，当前传输速率纯属 `sleep()` 软节流，波特率暂无真实约束。阶段 2 接入 Web Serial 后波特率才成为真实物理天花板，届时 UI 提示即准确生效（前端已按未来行为设计，后端切换零改动）。
-   - **待补**：① 纯逻辑工具（crc/chunk-framer/rate-limit）当前内联在 transfer.ts，设计稿规划的独立 `utils/*.ts` + 单测尚未拆分；② ACK `echo-crc` 策略暂简化为「收到任意字节即 ACK」，未做 CRC 回吐比对；③ 真实 Web Serial 驱动接入（阶段 2）；④ 大文件流式读（v1 用 `File.arrayBuffer()`，数百 MB 内 OK）。
+   - **待补**：① 纯逻辑工具（crc/chunk-framer/rate-limit）当前内联在 transfer.ts，设计稿规划的独立 `utils/*.ts` + 单测尚未拆分；② ACK `echo-crc` 策略暂简化为「收到任意字节即 ACK」，未做 CRC 回吐比对；④ 大文件流式读（v1 用 `File.arrayBuffer()`，数百 MB 内 OK）。③ ✅ 真实 Web Serial 驱动接入已完成（`WebSerialDriver`，Chromium 89+，HTTPS + 用户授权）。
 5. ✅ **DTR/RTS/Break 控制** — 已完成。`SerialDriver` 新增 `setSignals({ dtr?, rts? })` 与 `setBreak(active)`，四种驱动实现：Web Serial 走 `port.setSignals({ dataTerminalReady, requestToSend, break })`（`env.d.ts` 补充输出线字段）；Electron 走 IPC → 主进程 serialport `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言；unsupported 抛错。serial store 新增 `dtr`/`rts` 状态与 `setDtr`/`setRts`/`pulseBreak`（250ms 脉冲，`breakBusy` 防连点），连接后自动重放上次电平（断线重连不丢意图）。UI 在 StatusBar 信号区放置 DTR/RTS 切换 chips + BRK 脉冲按钮，并保留 CTS 只读指示（状态圆点样式、非按钮，hover 注明「只读」；DCD/DSR/RI 指示已移除），断开时禁用+灰度。Web Serial 与 serialport 均原生支持，不再属「待驱动」项。
 6. ✅ **暂停时数据直接丢弃** — 暂停时数据仍不缓冲保留（波形追加缓冲无意义：恢复瞬间刷新长段 + 超缓冲区截断后数据不全），恢复时通过 warning toast 提示用户缺失数据的时间段（`HH:MM:SS.mmm – HH:MM:SS.mmm (Xs)`），消息列表与波形图均有各自独立提示。
 7. ✅ **布局与发送历史不持久化** — 已完成：右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM 拖拽高度）、发送历史（`useSendHistory`）三项均通过 `useStorage` 持久化到 localStorage。发送历史限制最近 50 条，避免 localStorage 撑爆。
@@ -31,7 +31,7 @@
 10. ✅ **标记/注释/分隔** — 已完成：支持两种操作——① 右键帧气泡「添加标注」可在该帧上附带 📌 注释文本，导出时该行携带 Note 字段；② 右键帧气泡「在此前插入分隔线」可在消息流任意位置插入视觉分隔线（可选标签），导出时列为单独分隔行。上下文菜单含「多选」入口。四种导出格式（TXT/CSV/JSON/Binary）均已适配，导出对话框新增「包含分隔线」「包含标注」选项（默认不勾选）。
 11. ✅ **会话录制与回放** — 无此需求，不实现。
 12. ✅ **导出格式单一** — 已完成：支持 TXT/CSV/JSON/Binary 四种导出格式，含筛选导出、hex+ascii 双列等选项。
-13. **结构化协议解析器** — 帧切分解决了切帧，无"帧内字段（header/len/cmd/payload/crc）可配置渲染"。无 Modbus 等通用协议解码。
+13. ✅ **结构化协议解析器** — 已完成（帧解码器，commit `220cc5c` 起）。`src/decoders/` 注册表 + 内置解码器：**字段布局解析器**（`field`，u8/u16/u32 等格式、偏移/长度精确校验防越界）+ **Modbus RTU**（`modbus-rtu`，请求/响应按 byteCount 一致性判别、寄存器组多值字段、异常响应解析）。解码成功的帧叠加字段块（概要行 + 逐字段十六进制/数值），不替换原始字节；解码配置会话级按端口持久化（`decoder-config:<port>`，`id=''` 即不启用）。解码器注册表为可扩展点（未来 JS 脚本解码器可复用同一契约，CSP 禁 eval 需 vm/worker 沙箱）。其上构建**仪表盘**（数字表/状态灯/字段总览 widget、阈值告警、拖拽排序，见 [docs/dashboard-design.md](./dashboard-design.md)）。
 14. ✅ **单连接，不支持多端口并发** — 已完成（commit `4f792ca`/`31dfb06`/`7503179`）。Electron 主进程 `SerialPortManager` 由单端口实例改为 `Map<path, PortEntry>`，支持并发打开多个端口，同端口二次 open 拒绝并提示占用；IPC 事件 payload 携带端口路径，渲染端按 `_openPath` 过滤分发。UI 层多会话 tab 布局（`SessionPane`）：每 tab 一个 Session（独立驱动 + store 六件套），`v-show` 切换保留隐藏会话存活，可同时盯多设备；根层对话框按 opener 会话绑定，全局组件走 `useActiveSession`。Web Serial 侧 `_entries[]` 亦支持多端口。注意：`portOptions` 不再自动落盘（多会话无法区分意图，仅存会话内存）。
 15. **快速命令不支持变量/宏替换** — `QuickCommand.payload` 静态。缺计数器、时间戳、CRC 占位；无每命令独立循环发送。
 16. ✅ **波形缺测量与导出** — 已完成：`WaveformChart` 支持游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看，支持 CSV 导出波形数据。
@@ -47,7 +47,7 @@
 19. ~~**清空无确认/无撤销**~~ — **已决定不实现**（2026-08 产品决策）：`messages.clear` 直接清空；每次确认反而影响操作体验，保持现状。
 20. ✅ **缓冲满无感知** — 已完成：messages store 环形裁剪时累计 `droppedFrames`，波形 history 裁剪累计 `droppedSamples`，均在 `clear()` 重置。MessageList 列表顶部显示可关闭的「已丢弃 N 帧」提示条，WaveformChart 工具栏显示可关闭的「已丢弃 N 采样」标签；关闭后新一轮丢弃（计数 0→正数）重新出现。新增 mock `buffer-flood` 灌满压测场景（高频数值行，配合「分隔符 \n」帧策略数秒触发），供快速验证。
 21. ✅ **全局快捷键缺失** — 已有快捷键（`Ctrl/Cmd+Enter` 发送、`Alt/Ctrl+↑↓` 翻历史）已在帮助菜单新增「快捷键」面板展示，不额外添加显式 UI 已有操作的快捷键。
-22. **关键字告警** — 收到特定模式无声音/通知。
+22. ~~**关键字告警**~~ — **已决定不实现**（2026-08 产品决策）：收到特定模式声音/通知告警需求不明确、ROI 低，不做。需要验证数据特征时用「搜索 + 标注」替代。
 23. ✅ **端口元信息缺失（VID/PID/厂商）** — 已完成：`SerialDriver.listPorts()` 返回结构化 `PortInfo[]`（path/manufacturer/vendorId/productId），不再只给字符串数组。serialport 驱动透传主进程 `SerialPortInfo` 富数据；Web Serial 用 `getInfo()` 取 VID/PID，并按 `src/utils/usb-vendors.ts` 常见厂商表反查厂商名（查不到显示裸 ID）；mock 提供造假完整元数据供开发预览。UI 采用渐进披露：端口下拉触发框仍只显示路径，菜单项第二行灰色小字显示「厂商 · VID:xxxx PID:xxxx」。**待补：占用提示** — serialport 的 `list()` 不提供 busy 状态，需额外探测（如尝试独占打开），属驱动能力，未实现。
 24. **复制能力弱** — 单帧复制带时间戳/方向 ✅；多选批量复制 / 导出 txt / 删除 ✅（全选即"复制全部可见"）；仍缺 CSV 行。
 25. ✅ **`useStorage` 同步无容量保护** — 已完成。`useStorage` 同步 API（`{get,set,remove}`）保持不变，新增直写落盘层 `src/utils/persist.ts`（`persistNow`）：用户数据（settings/commands/customBaudRates/autoSave/export-preferences/record-dir-*）变更即同步写 localStorage + 异步镜像（浏览器 → IndexedDB `kart-persist`；Electron → 主进程 `JsonStore` 落盘 `userData/kart-settings.json`，防抖 500ms + 原子写 + will-quit 同步刷盘）。容量监控：落盘时按 `estimateJsonSize` 累计占用，≥1.5MB 触发全量快照导出（浏览器 Blob 下载 / Electron 系统对话框），每会话限一次并 toast 提醒。布局/临时键（rightWidth/inputHeight/sendHistory）仍走同步 localStorage（vueuse `useStorage`），量级小无需镜像。`clear()` 的 `storage.remove` 语义保留（镜像仅作备份不删除）。
