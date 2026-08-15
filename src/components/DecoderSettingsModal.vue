@@ -104,7 +104,11 @@ function setFieldFormat(i: number, v: FieldFormat) {
 
 <style scoped>
 .decoder-modal {
-  padding: 2px 0 4px;
+  /* 固定内容区高度：切换解码类型（无/字段布局/Modbus）时弹窗尺寸不跳动，
+     内部设置项多时纵向滚动；右侧留白避免字段行贴着滚动条 */
+  height: 240px;
+  overflow-y: auto;
+  padding: 2px 8px 4px 0;
 }
 .decoder-fields {
   width: 100%;
