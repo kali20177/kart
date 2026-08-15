@@ -25,6 +25,7 @@ const VIEW_META: Record<string, { color: string }> = {
   messages: { color: 'var(--accent)' },
   waveform: { color: 'var(--accent-teal)' },
   terminal: { color: 'var(--accent-cyan)' },
+  dashboard: { color: 'var(--accent-violet)' },
 }
 const meta = computed(() => VIEW_META[api.id] ?? VIEW_META.messages)
 const title = computed(() => api.title ?? '')
@@ -61,6 +62,21 @@ function onClose() {
     >
       <path d="M2 2.5v11h11.5" />
       <path d="M3.5 10.2l2.8-3.2 2.2 2 3.5-4.2" />
+    </svg>
+    <svg
+      v-else-if="api.id === 'dashboard'"
+      class="tab-icon"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.3"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <rect x="2" y="2" width="5" height="5" rx="0.5" />
+      <rect x="9" y="2" width="5" height="5" rx="0.5" />
+      <rect x="2" y="9" width="5" height="5" rx="0.5" />
+      <rect x="9" y="9" width="5" height="5" rx="0.5" />
     </svg>
     <svg
       v-else

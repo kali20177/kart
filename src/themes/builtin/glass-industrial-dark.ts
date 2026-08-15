@@ -18,6 +18,7 @@ export const glassIndustrialDark: ThemeDefinition = {
     '--accent': '#58a6ff',
     '--accent-cyan': '#22d3ee',
     '--accent-teal': '#14b8a6',
+    '--accent-violet': '#a78bfa',
     '--rx-bg': 'rgba(56, 139, 253, 0.12)',
     '--rx-border': 'rgba(56, 139, 253, 0.30)',
     '--rx-text': '#e6edf3',

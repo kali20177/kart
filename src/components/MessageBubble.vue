@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
+import { computed, reactive, ref, watchEffect } from 'vue'
 import { useClipboard } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
-import { useMessage } from 'naive-ui'
+import { useMessage, NDropdown } from 'naive-ui'
 import type { DataMode, Encoding, Message } from '@/types'
+import type { DecodeField } from '@/decoders/types'
 import { bytesToHex, hexDump } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
 import { formatMessageLine, formatTimestamp, formatDelta, formatElapsed } from '@/utils/message-format'
+import { useSession } from '@/composables/useSession'
 import FileTransferBubble from './FileTransferBubble.vue'
 
 interface Range {
@@ -210,6 +212,64 @@ function onRowContext(e: MouseEvent) {
   e.preventDefault()
   emit('contextmenu', e)
 }
+
+// ── 解码字段 chip 右键 →「添加至仪表盘」──
+// 在字段 chip 上右键弹出菜单（多值字段列出每个值的子项，标量字段单项）。
+// 菜单项经 NDropdown manual 模式定位到鼠标处；选中后直接往会话仪表盘加数字表卡片。
+const session = useSession()
+
+interface ChipMenuState {
+  show: boolean
+  x: number
+  y: number
+  field: DecodeField | null
+  options: Array<{ label: string; key: string }>
+}
+const chipMenu = reactive<ChipMenuState>({ show: false, x: 0, y: 0, field: null, options: [] })
+
+function onFieldContext(e: MouseEvent, f: DecodeField) {
+  e.preventDefault()
+  e.stopPropagation() // 阻止冒泡到行级右键（多选菜单）
+  if (Array.isArray(f.number) && f.number.length > 1) {
+    // 多值字段（如 Modbus 寄存器组）：每个值一个菜单项，带数值便于辨认
+    chipMenu.options = f.number.map((n, i) => ({
+      label: `${f.name}[${i}] = ${n}`,
+      key: String(i),
+    }))
+  } else {
+    chipMenu.options = [{ label: t('dashboard.addToDashboard'), key: '' }]
+  }
+  chipMenu.field = f
+  chipMenu.x = e.clientX
+  chipMenu.y = e.clientY
+  chipMenu.show = true
+}
+
+function onChipMenuSelect(key: string) {
+  const f = chipMenu.field
+  chipMenu.show = false
+  if (!f || !props.message.decoded) return
+  const decoderId = props.message.decoded.decoderId
+  const index = key !== '' ? Number(key) : undefined
+  // 多值字段按选中下标取值；标量字段取本身；无数值语义字段（hex/ascii）为 undefined
+  const value =
+    index !== undefined && Array.isArray(f.number)
+      ? f.number[index]
+      : !Array.isArray(f.number) && typeof f.number === 'number'
+        ? f.number
+        : undefined
+  session.dashboard.addWidget({
+    type: 'digital',
+    // 多值字段标签带下标（registers[2]），避免同名卡片不可区分
+    label: index !== undefined ? `${f.name}[${index}]` : f.name,
+    bind: { decoderId, fieldName: f.name, ...(index !== undefined ? { index } : {}) },
+    unit: '',
+    // 预填上限 = 当前值 ×2（无数值/非有限不设阈值）
+    thresholdHigh: value !== undefined && Number.isFinite(value) ? value * 2 : undefined,
+    decimals: 0,
+  })
+  toast.success(t('dashboard.added'))
+}
 </script>
 
 <template>
@@ -263,6 +323,7 @@ function onRowContext(e: MouseEvent) {
             :key="fi"
             class="decoded-field"
             :title="`${f.name} @ ${f.offset}+${f.length}`"
+            @contextmenu.prevent.stop="onFieldContext($event, f)"
           >
             <span class="fname">{{ f.name }}</span>
             <span class="fval">{{ f.value }}</span>
@@ -322,6 +383,20 @@ function onRowContext(e: MouseEvent) {
       </div>
       </template>
     </div>
+
+    <!-- 字段 chip 右键菜单：添加至仪表盘（manual 定位到鼠标处） -->
+    <NDropdown
+      trigger="manual"
+      placement="bottom-start"
+      :show="chipMenu.show"
+      :options="chipMenu.options"
+      :x="chipMenu.x"
+      :y="chipMenu.y"
+      @select="onChipMenuSelect"
+      @clickoutside="chipMenu.show = false"
+    >
+      <div />
+    </NDropdown>
   </div>
 </template>
 
@@ -456,6 +531,12 @@ function onRowContext(e: MouseEvent) {
   padding: 1px 6px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   white-space: nowrap;
+  /* 右键可添加至仪表盘：以 context-menu 光标暗示可操作 */
+  cursor: context-menu;
+}
+.decoded-field:hover {
+  border-color: var(--accent-violet);
+  background: color-mix(in srgb, var(--accent-violet) 12%, transparent);
 }
 .decoded-field .fname {
   color: var(--text-dim);

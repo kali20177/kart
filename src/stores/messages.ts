@@ -3,12 +3,20 @@ import { ref, shallowRef, triggerRef, watch, onScopeDispose } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
 import type { ChecksumAlgorithm, Direction, FrameConfig, Message } from '@/types'
-import type { DecoderConfig } from '@/decoders/types'
+import type { DecodeField, DecoderConfig } from '@/decoders/types'
 import { DEFAULT_DECODER_CONFIG, getDecoder } from '@/decoders'
 import { FrameSplitter } from '@/composables/useFrameSplitter'
 import { useSettingsStore } from './settings'
 import { usePauseStore } from './pause'
 import { verifyChecksum, checksumByteLength } from '@/utils/checksum'
+
+/** 帧解码成功后的广播负载：字段（含数值）喂给仪表盘等数值消费方 */
+export interface DecodeBroadcast {
+  decoderId: string
+  fields: DecodeField[]
+  /** 帧到达时间（与消息时间戳一致） */
+  timestamp: number
+}
 
 /** messages store 的外部依赖——帧配置/缓冲上限来自全局设置，暂停状态与清空来自 pause。
  *  设置对象是全局 settings store 的同一 reactive proxy（窄化为本 store 实际读取的字段）。 */
@@ -40,6 +48,14 @@ export function createMessagesStore(deps: MessagesDeps) {
 
   let nextId = 1
   const splitter = new FrameSplitter(deps.settings.frame)
+
+  // 解码结果订阅者：帧解码成功（matched）后 fan-out 字段，供仪表盘等数值消费方订阅。
+  // 与 serial.onData 同款 Set 订阅者模式；暂停时 ingestRx 提前 return，广播天然冻结。
+  const decodeListeners = new Set<(info: DecodeBroadcast) => void>()
+  function onDecode(cb: (info: DecodeBroadcast) => void): () => void {
+    decodeListeners.add(cb)
+    return () => decodeListeners.delete(cb)
+  }
 
   // 待刷入的帧队列 + rAF 批处理句柄
   let pending: Message[] = []
@@ -155,6 +171,12 @@ export function createMessagesStore(deps: MessagesDeps) {
           const r = def.decode(payload, dc.options)
           if (r.matched) {
             msg.decoded = { decoderId: dc.id, summary: r.summary, fields: r.fields ?? [] }
+            const fields = msg.decoded.fields
+            if (fields.length > 0 && decodeListeners.size > 0) {
+              for (const cb of decodeListeners) {
+                try { cb({ decoderId: dc.id, fields, timestamp }) } catch { /* 忽略订阅者异常 */ }
+              }
+            }
           }
         } catch {
           /* 解码器异常：丢弃本帧解码，保持原始帧视图 */
@@ -245,6 +267,7 @@ export function createMessagesStore(deps: MessagesDeps) {
 
   // 会话销毁清理：取消挂起的 rAF 批处理与 gap-timeout 尾帧定时器，避免回调打到已销毁状态。
   onScopeDispose(() => {
+    decodeListeners.clear()
     if (rafHandle != null) {
       cancelAnimationFrame(rafHandle)
       rafHandle = null
@@ -255,7 +278,7 @@ export function createMessagesStore(deps: MessagesDeps) {
     }
   })
 
-  return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, droppedFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause }
+  return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, droppedFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause, onDecode }
 }
 
 /** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */

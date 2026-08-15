@@ -22,6 +22,27 @@ describe('modbus-rtu decoder', () => {
     expect(r.fields?.find((f) => f.name === 'registers')?.value).toBe('0x0064, 0x0001')
   })
 
+  it('数值字段输出 number（仪表盘数据源）', () => {
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x03, [0x04, 0x00, 0x64, 0x00, 0x01]))
+    expect(r.matched).toBe(true)
+    const byName = new Map((r.fields ?? []).map((f) => [f.name, f]))
+    expect(byName.get('slave')?.number).toBe(0x01)
+    expect(byName.get('fc')?.number).toBe(0x03)
+    expect(byName.get('byteCount')?.number).toBe(4)
+    // 寄存器组按 u16 BE 逐值输出数值数组，与 value 串顺序一致
+    expect(byName.get('registers')?.number).toEqual([100, 1])
+    // crc 无数值语义
+    expect(byName.get('crc')?.number).toBeUndefined()
+  })
+
+  it('异常响应 number：fc=0x83, exception=0x02', () => {
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x83, [0x02]))
+    expect(r.matched).toBe(true)
+    const byName = new Map((r.fields ?? []).map((f) => [f.name, f]))
+    expect(byName.get('fc')?.number).toBe(0x83)
+    expect(byName.get('exception')?.number).toBe(0x02)
+  })
+
   it('fc06 写单寄存器：reg + value 回显', () => {
     const r = modbusRtuDecoder.decode(modbusFrame(0x11, 0x06, [0x00, 0x01, 0x00, 0x03]))
     expect(r.matched).toBe(true)

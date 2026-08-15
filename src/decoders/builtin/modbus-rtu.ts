@@ -69,8 +69,8 @@ export const modbusRtuDecoder: DecoderDefinition = {
     const dataStart = 2
 
     const fields: DecodeField[] = [
-      { name: 'slave', value: `0x${hex2(addr)}`, offset: 0, length: 1 },
-      { name: 'fc', value: fcLabel(fc), offset: 1, length: 1 },
+      { name: 'slave', value: `0x${hex2(addr)}`, offset: 0, length: 1, number: addr },
+      { name: 'fc', value: fcLabel(fc), offset: 1, length: 1, number: fc },
     ]
 
     if (fc >= 0x80) {
@@ -80,7 +80,8 @@ export const modbusRtuDecoder: DecoderDefinition = {
         name: 'exception',
         value: code >= 0 ? exceptionLabel(code) : '(无数据)',
         offset: dataStart,
-        length: data.length
+        length: data.length,
+        ...(code >= 0 ? { number: code } : {})
       })
     } else if (fc >= 0x01 && fc <= 0x04) {
       // 请求/响应判别：byteCount 一致性（data[0] === len-1）优先视为响应——
@@ -92,7 +93,7 @@ export const modbusRtuDecoder: DecoderDefinition = {
       const isResponse =
         len >= 2 && byteCount === len - 1 && (fc === 0x01 || fc === 0x02 || byteCount % 2 === 0)
       if (isResponse) {
-        fields.push({ name: 'byteCount', value: String(byteCount), offset: dataStart, length: 1 })
+        fields.push({ name: 'byteCount', value: String(byteCount), offset: dataStart, length: 1, number: byteCount })
         if (fc === 0x01 || fc === 0x02) {
           // 线圈/离散输入响应：位图字节（bit 位，非寄存器），按 hex 呈现
           fields.push({
@@ -102,19 +103,22 @@ export const modbusRtuDecoder: DecoderDefinition = {
             length: byteCount
           })
         } else {
-          // 寄存器响应：u16 BE
+          // 寄存器响应：u16 BE，同时输出数值数组（仪表盘按索引绑定第 N 个寄存器）
           const regs: string[] = []
+          const regNums: number[] = []
           for (let i = 1; i + 1 < data.length; i += 2) {
-            regs.push(`0x${hex4((data[i] << 8) | data[i + 1])}`)
+            const v = (data[i] << 8) | data[i + 1]
+            regs.push(`0x${hex4(v)}`)
+            regNums.push(v)
           }
-          fields.push({ name: 'registers', value: regs.join(', '), offset: dataStart + 1, length: byteCount })
+          fields.push({ name: 'registers', value: regs.join(', '), offset: dataStart + 1, length: byteCount, number: regNums })
         }
       } else if (len === 4) {
         // 请求帧：起始地址 + 数量
         const reg = (data[0] << 8) | data[1]
         const count = (data[2] << 8) | data[3]
-        fields.push({ name: 'reg', value: `0x${hex4(reg)}`, offset: dataStart, length: 2 })
-        fields.push({ name: 'count', value: String(count), offset: dataStart + 2, length: 2 })
+        fields.push({ name: 'reg', value: `0x${hex4(reg)}`, offset: dataStart, length: 2, number: reg })
+        fields.push({ name: 'count', value: String(count), offset: dataStart + 2, length: 2, number: count })
       } else if (len > 0) {
         fields.push({ name: 'data', value: bytesToHex(data), offset: dataStart, length: data.length })
       }
@@ -123,8 +127,8 @@ export const modbusRtuDecoder: DecoderDefinition = {
       if (data.length === 4) {
         const reg = (data[0] << 8) | data[1]
         const value = (data[2] << 8) | data[3]
-        fields.push({ name: 'reg', value: `0x${hex4(reg)}`, offset: dataStart, length: 2 })
-        fields.push({ name: 'value', value: `0x${hex4(value)}`, offset: dataStart + 2, length: 2 })
+        fields.push({ name: 'reg', value: `0x${hex4(reg)}`, offset: dataStart, length: 2, number: reg })
+        fields.push({ name: 'value', value: `0x${hex4(value)}`, offset: dataStart + 2, length: 2, number: value })
       } else {
         fields.push({ name: 'data', value: bytesToHex(data), offset: dataStart, length: data.length })
       }
@@ -133,8 +137,8 @@ export const modbusRtuDecoder: DecoderDefinition = {
       if (data.length >= 5) {
         const reg = (data[0] << 8) | data[1]
         const count = (data[2] << 8) | data[3]
-        fields.push({ name: 'reg', value: `0x${hex4(reg)}`, offset: dataStart, length: 2 })
-        fields.push({ name: 'count', value: String(count), offset: dataStart + 2, length: 2 })
+        fields.push({ name: 'reg', value: `0x${hex4(reg)}`, offset: dataStart, length: 2, number: reg })
+        fields.push({ name: 'count', value: String(count), offset: dataStart + 2, length: 2, number: count })
         fields.push({ name: 'data', value: bytesToHex(data.subarray(4)), offset: dataStart + 4, length: data.length - 4 })
       } else {
         fields.push({ name: 'data', value: bytesToHex(data), offset: dataStart, length: data.length })

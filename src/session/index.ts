@@ -10,6 +10,8 @@ import { createWaveformStore } from '@/stores/waveform'
 import { createRecorderStore } from '@/stores/recorder'
 import { createTransferStore } from '@/stores/transfer'
 import { createTerminalStore } from '@/stores/terminal'
+import { createDashboardStore } from '@/stores/dashboard'
+import type { DashboardWidget } from '@/stores/dashboard'
 import { useSettingsStore } from '@/stores/settings'
 import { createFreshSerialDriver } from '@/serial'
 
@@ -32,6 +34,7 @@ export interface Session {
   recorder: UnwrapNestedRefs<ReturnType<typeof createRecorderStore>>
   transfer: UnwrapNestedRefs<ReturnType<typeof createTransferStore>>
   terminal: UnwrapNestedRefs<ReturnType<typeof createTerminalStore>>
+  dashboard: UnwrapNestedRefs<ReturnType<typeof createDashboardStore>>
   /** 全局设置（settings store 的同一 reactive proxy，跨会话共享） */
   settings: AppSettings
   /** 消息/发送框共用的数据显示模式（ASCII/HEX），会话级（初始取全局 defaultView） */
@@ -48,11 +51,11 @@ export interface Session {
 let _nextSessionId = 0
 
 /**
- * 创建一个自包含的串口会话：serial/messages/pause/waveform/recorder/transfer/terminal
+ * 创建一个自包含的串口会话：serial/messages/pause/waveform/recorder/transfer/terminal/dashboard
  * 互相通过注入的 deps 接线，共享同一个全局 settings（编码/主题/波特率等跨会话统一）。
  *
  * 创建顺序严格遵循依赖关系：pause → messages → (回填 clearMessages) → serial →
- * waveform → (回填 clearWaveform) → recorder → transfer → terminal。
+ * waveform → (回填 clearWaveform) → dashboard → recorder → transfer → terminal。
  *
  * 循环依赖（pause.clearAll 需要 messages.clear 与 waveform.clear）通过 closure
  * indirection 延迟绑定：先以空回调创建 pause，待目标 store 建好后回填真实引用。
@@ -79,10 +82,12 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
     let _clearMessages: () => void = () => {}
     let _clearWaveform: () => void = () => {}
+    let _clearDashboard: () => void = () => {}
 
     const pause = createPauseStore({
       clearMessages: () => _clearMessages(),
       clearWaveform: () => _clearWaveform(),
+      clearDashboard: () => _clearDashboard(),
     })
 
     const messages = createMessagesStore({
@@ -146,6 +151,38 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     })
     _clearWaveform = () => waveform.clear()
 
+    const dashboard = createDashboardStore({
+      onDecode: (cb) => messages.onDecode(cb),
+    })
+    _clearDashboard = () => dashboard.clear()
+
+    // 仪表盘 widget 配置按端口持久化（与 decoder-config 同构：切端口载入，变更写回）。
+    // 首端口且无已存配置时沿用内存配置并落盘——连接前添加的 widget 不被端口切换清掉。
+    const DASH_KEY = (port: string) => `dashboard-config:${port}`
+    let dashHasSelectedPort = false
+    watch(
+      serial.selectedPort,
+      (port) => {
+        if (!port) return
+        const stored = storage.get<DashboardWidget[] | null>(DASH_KEY(port), null)
+        if (stored || dashHasSelectedPort) {
+          dashboard.setWidgets(stored ?? [])
+        } else {
+          storage.set(DASH_KEY(port), dashboard.widgets.value)
+        }
+        dashHasSelectedPort = true
+      },
+      { immediate: true }
+    )
+    watch(
+      dashboard.widgets,
+      (list) => {
+        const port = serial.selectedPort.value
+        if (port) storage.set(DASH_KEY(port), list)
+      },
+      { deep: true, flush: 'sync' }
+    )
+
     const recorder = createRecorderStore({
       onData: (cb) => serial.onData(cb),
       onTxData: (cb) => serial.onTxData(cb),
@@ -172,7 +209,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       useUtf8: serial.driverType.value === 'pty',
     })
 
-    return reactive({ serial, messages, pause, waveform, recorder, transfer, terminal, settings: s, viewMode: ref(s.defaultView), composerText: ref(''), decoder: decoderCfg })
+    return reactive({ serial, messages, pause, waveform, dashboard, recorder, transfer, terminal, settings: s, viewMode: ref(s.defaultView), composerText: ref(''), decoder: decoderCfg })
   })!
 
   const id = _nextSessionId++

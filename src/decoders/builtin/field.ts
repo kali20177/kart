@@ -49,6 +49,21 @@ function formatField(frame: Uint8Array, def: FieldDef, start: number): string {
   }
 }
 
+/** 读取字段数值：仅数值格式有语义，返回 undefined 表示无数值（hex/ascii/utf8） */
+function fieldNumber(frame: Uint8Array, def: FieldDef, start: number): number | undefined {
+  if (!NUMERIC_FORMATS.has(def.format)) return undefined
+  const slice = frame.subarray(start, start + def.length)
+  // subarray 与底层 buffer 共享，需带 byteOffset 构造 DataView
+  const view = new DataView(slice.buffer, slice.byteOffset, slice.byteLength)
+  switch (def.format) {
+    case 'u8': return view.getUint8(0)
+    case 'u16le': return view.getUint16(0, true)
+    case 'u16be': return view.getUint16(0, false)
+    case 'u32le': return view.getUint32(0, true)
+    case 'u32be': return view.getUint32(0, false)
+  }
+}
+
 /** header 前缀匹配：空/非法配置不拦截（宽容配置），否则要求 frame 以此开头 */
 function matchesHeader(frame: Uint8Array, headerHex?: string): boolean {
   if (!headerHex) return true
@@ -79,7 +94,14 @@ export const fieldDecoder: DecoderDefinition<FieldDecoderOptions> = {
       if (NUMERIC_FORMATS.has(def.format) && def.length !== minLen) return { matched: false }
       const start = def.offset ?? cursor
       if (start < 0 || start + def.length > frame.length) return { matched: false }
-      out.push({ name: def.name, value: formatField(frame, def, start), offset: start, length: def.length })
+      const n = fieldNumber(frame, def, start)
+      out.push({
+        name: def.name,
+        value: formatField(frame, def, start),
+        offset: start,
+        length: def.length,
+        ...(n !== undefined ? { number: n } : {})
+      })
       cursor = start + def.length
     }
     return { matched: true, fields: out }

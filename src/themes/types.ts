@@ -5,7 +5,7 @@ import type { GlobalThemeOverrides } from 'naive-ui'
  */
 export const TOKEN_KEYS = [
   '--bg', '--bg-panel', '--bg-elevated', '--text', '--text-dim', '--border',
-  '--accent', '--accent-cyan', '--accent-teal', '--ok', '--warn', '--err',
+  '--accent', '--accent-cyan', '--accent-teal', '--accent-violet', '--ok', '--warn', '--err',
   '--rx-bg', '--rx-border', '--rx-text', '--tx-bg', '--tx-border', '--tx-text',
   '--glass-bg', '--glass-border', '--glass-blur', '--glass-blur-sm',
   '--glass-highlight', '--shadow-sm', '--shadow-md', '--shadow-lg',

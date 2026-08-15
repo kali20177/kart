@@ -8,6 +8,7 @@ import ConnectionBar from './ConnectionBar.vue'
 import MessagePanel from './MessagePanel.vue'
 import WaveformChart from './WaveformChart.vue'
 import TerminalPane from './TerminalPane.vue'
+import DashboardPane from './DashboardPane.vue'
 import StatusBar from './StatusBar.vue'
 import ViewTab from './ViewTab.vue'
 import { provideOpenFileTransfer, provideSession, useOpenFileTransferHandler } from '@/composables/useSession'
@@ -26,15 +27,16 @@ const openFileTransferHandler = useOpenFileTransferHandler()
 provideOpenFileTransfer((file?: File) => openFileTransferHandler(session, file))
 
 // —— dockview 可停靠布局 ——
-// 三个面板（消息/波形/终端）作为 dockview 面板注册。面板内容组件经 Teleport
+// 四个面板（消息/波形/终端/仪表盘）作为 dockview 面板注册。面板内容组件经 Teleport
 // 保留在 SessionPane 子树中，useSession() 注入依然有效（与 v-show 时代一致）。
-const PANEL_IDS = ['messages', 'waveform', 'terminal'] as const
+const PANEL_IDS = ['messages', 'waveform', 'terminal', 'dashboard'] as const
 type PanelId = (typeof PANEL_IDS)[number]
 
 const components: Record<string, VueComponent> = {
   messages: MessagePanel as unknown as VueComponent,
   waveform: WaveformChart as unknown as VueComponent,
   terminal: TerminalPane as unknown as VueComponent,
+  dashboard: DashboardPane as unknown as VueComponent,
 }
 
 /** 视图 tab 组件（自定义 tab：图标 + 视图主题色）。default-tab-component 对
@@ -42,7 +44,7 @@ const components: Record<string, VueComponent> = {
 const viewTabComponent = ViewTab as unknown as VueComponent
 
 const panelTitle = (id: PanelId): string =>
-  id === 'messages' ? t('app.msg') : id === 'waveform' ? t('app.waveform') : t('app.terminal')
+  id === 'messages' ? t('app.msg') : id === 'waveform' ? t('app.waveform') : id === 'terminal' ? t('app.terminal') : t('app.dashboard')
 
 type SerializedLayout = ReturnType<DockviewApi['toJSON']>
 
@@ -51,7 +53,9 @@ let api: DockviewApi | null = null
 const openPanels = ref<Set<PanelId>>(new Set(PANEL_IDS))
 
 const currentPort = computed(() => session.serial.selectedPort ?? '')
-const LAYOUT_KEY = (port: string) => STORAGE_PREFIX + 'view-layout:' + (port || 'default')
+// v2：仪表盘不再默认打开（默认三面板），作废 v1 时代保存的含仪表盘 4-tab 布局，回到干净默认。
+// 此后的布局（含用户主动打开仪表盘）照常持久化。
+const LAYOUT_KEY = (port: string) => STORAGE_PREFIX + 'view-layout:v2:' + (port || 'default')
 
 /** 读取指定端口的持久化布局。JSON 解析失败或结构非法（损坏/跨版本）时清除并返回 null。 */
 function loadLayout(port: string): SerializedLayout | null {
@@ -109,7 +113,8 @@ function refreshOpenPanels() {
 function onReady(event: DockviewReadyEvent) {
   api = event.api
   if (!restoreLayout(currentPort.value)) {
-    // 无保存布局（或坏布局已清除）：建默认三面板，并恢复「消息」为默认活动视图。
+    // 无保存布局（或坏布局已清除）：建默认三面板（消息/波形/终端），并恢复「消息」为默认活动视图。
+    // 仪表盘不默认打开——默认占满视图区过大，按需从「＋」菜单打开。
     // addPanel 会激活最后添加的面板（默认落到终端），须显式切回消息，与旧 view-tabs 默认一致。
     ensurePanel('messages')
     ensurePanel('waveform')

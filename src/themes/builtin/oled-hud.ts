@@ -18,6 +18,7 @@ export const oledHud: ThemeDefinition = {
     '--accent': '#00E676',
     '--accent-cyan': '#00D4FF',
     '--accent-teal': '#00E676',
+    '--accent-violet': '#B388FF',
     '--ok': '#00E676',
     '--warn': '#FFB000',
     '--err': '#FF3366',

@@ -35,6 +35,7 @@
   --accent: #2563eb;
   --accent-cyan: #0891b2;
   --accent-teal: #0d9488;
+  --accent-violet: #7c3aed;
 
   --rx-bg: rgba(59, 130, 246, 0.08);
   --rx-border: rgba(59, 130, 246, 0.25);
@@ -64,6 +65,7 @@
   --accent: #58a6ff;
   --accent-cyan: #22d3ee;
   --accent-teal: #14b8a6;
+  --accent-violet: #a78bfa;
 
   --rx-bg: rgba(56, 139, 253, 0.12);
   --rx-border: rgba(56, 139, 253, 0.30);

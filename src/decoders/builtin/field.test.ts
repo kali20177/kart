@@ -48,6 +48,15 @@ describe('field decoder · 字段布局', () => {
     expect(r.fields?.map((f) => f.value)).toEqual(['4660', '2018915346']) // 0x1234 / 0x78563412
   })
 
+  it('数值格式输出 number（供仪表盘消费），hex/ascii 无 number', () => {
+    const r = fieldDecoder.decode(new Uint8Array([0xaa, 0x55, 0x03, 0x01, 0x00, 0x64]), opts())
+    const byName = new Map((r.fields ?? []).map((f) => [f.name, f]))
+    expect(byName.get('hdr')?.number).toBeUndefined() // hex 无数值
+    expect(byName.get('len')?.number).toBe(3)
+    expect(byName.get('cmd')?.number).toBe(1)
+    expect(byName.get('val')?.number).toBe(100) // 0x0064 u16be
+  })
+
   it('ascii / utf8 字段解码', () => {
     const r = fieldDecoder.decode(new Uint8Array([0x48, 0x69, 0x21]), {
       fields: [{ name: 's', length: 3, format: 'ascii' }]

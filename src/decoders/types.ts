@@ -10,6 +10,12 @@ export interface DecodeField {
   offset: number
   /** 字段字节长度 */
   length: number
+  /**
+   * 数值型字段的原始数值（供仪表盘等数值消费方，无需再回解字节）。
+   * 标量字段为 number；多值字段（如 Modbus 寄存器组）为 number[]，按序号对应 value 中的值。
+   * 无数值语义的字段（hex/ascii/utf8 等）省略。
+   */
+  number?: number | number[]
 }
 
 /** 解码结果：matched=false 表示本帧不适用该解码器（保持原始帧显示） */
