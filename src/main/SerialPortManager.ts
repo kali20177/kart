@@ -20,12 +20,23 @@ function isMacOSPseudoTerminal(path: string): boolean {
 }
 
 /**
+ * 判断 serialport 打开失败是否属于「端口被其他程序锁定」类错误。
+ * 仅锁定类判占用（lock/busy/in use/temporarily unavailable/access is denied）——
+ * EACCES 权限不足、ENOENT/ENXIO 设备不存在/拔出等不判占用，让用户能选中端口
+ * 尝试连接并看到真实错误，而不是被误标「被其他程序占用」后无法选择。
+ */
+function isPortLockedError(err: Error): boolean {
+  return /lock|busy|in use|temporarily unavailable|access is denied/i.test(err.message)
+}
+
+/**
  * 把 serialport 打开失败映射为可读文案。占用类错误（端口锁/忙/访问拒绝）单独提示——
  * 覆盖两个独立 KART 实例（进程）连同一串口、minicom/其他串口助手占用等场景；
- * 其余保留原始错误信息，用户能区分「被其他程序占用」与真正的设备/驱动问题。
+ * 其余（权限不足/设备拔出等）保留原始错误信息，用户能区分「被其他程序占用」与
+ * 真正的设备/权限/驱动问题。
  */
 function toFriendlyOpenError(path: string, err: Error): Error {
-  if (/lock|busy|in use|temporarily unavailable|access is denied|cannot open/i.test(err.message)) {
+  if (isPortLockedError(err)) {
     return new Error(`端口 ${path} 已被其他程序占用，请先关闭占用方再连接`)
   }
   return new Error(`打开串口 ${path} 失败: ${err.message}`)
@@ -132,7 +143,9 @@ export class SerialPortManager {
    *
    * 策略：尝试独占打开该端口——
    * - 打开成功：空闲（立即关闭释放，探测不留句柄）；返回 false
-   * - 打开失败（EBUSY/AccessError 等）：被占用或不可用；返回 true
+   * - 打开失败且为锁定类错误（lock/busy/access is denied 等）：被其他程序占用；返回 true
+   * - 打开失败但非锁定类（EACCES 权限不足、设备不存在/拔出等）：不判占用，返回 false——
+   *   让用户能选中端口尝试连接并看到真实错误，避免把权限问题误报成「被其他程序占用」
    * - 超时：视为不占用（避免误报让用户连不上）
    *
    * 探测以 dtr:false/rts:false 打开，尽量不扰动设备电平（Arduino 等按 DTR 复位
@@ -166,10 +179,10 @@ export class SerialPortManager {
         port.close()
         done(false)
       })
-      port.on('error', () => done(true))
+      port.on('error', (err: Error) => done(isPortLockedError(err)))
       try {
         port.open((err) => {
-          if (err) done(true)
+          if (err) done(isPortLockedError(err))
           // 成功路径由 'open' 事件收尾
         })
       } catch {

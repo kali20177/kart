@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // mock 类与实例数组都在 vi.hoisted 中定义：hoisted 早于 vi.mock 执行，
 // 工厂可引用 MockSerialPort，测试拿到强类型实例数组（无需 any）。
-const { MockSerialPort, portInstances, busyPaths, failingConstructPaths } = vi.hoisted(() => {
+const { MockSerialPort, portInstances, openFailPaths, failingConstructPaths } = vi.hoisted(() => {
   const portInstances: MockSerialPort[] = []
-  // 需要模拟「被其他程序占用」的端口路径：open 时按此失败（探测 busy 用）
-  const busyPaths = new Set<string>()
+  // 需要模拟「打开失败」的端口路径：open 时按此 Error 失败（探测 busy / 连接报错用）。
+  // key=路径，value=失败 Error；是否判为「被占用」由错误信息是否命中锁定类决定
+  const openFailPaths = new Map<string, Error>()
   // 需要模拟「探测构造失败」的端口路径：new SerialPort 时抛错（验证不阻塞枚举）
   const failingConstructPaths = new Set<string>()
   // 最小可观察的 SerialPort 替身：EventEmitter 语义 + vi.fn 方法便于断言调用
@@ -20,9 +21,10 @@ const { MockSerialPort, portInstances, busyPaths, failingConstructPaths } = vi.h
       (this._h[ev] ??= []).forEach((cb) => cb(...args))
     }
     open = vi.fn((cb: (e: Error | null) => void) => {
-      if (busyPaths.has(this.path)) {
-        cb(new Error('Resource busy'))
-        this.emit('error', new Error('Resource busy'))
+      const failErr = openFailPaths.get(this.path)
+      if (failErr) {
+        cb(failErr)
+        this.emit('error', failErr)
         return
       }
       this.emit('open')
@@ -44,7 +46,7 @@ const { MockSerialPort, portInstances, busyPaths, failingConstructPaths } = vi.h
       portInstances.push(this)
     }
   }
-  return { MockSerialPort, portInstances, busyPaths, failingConstructPaths }
+  return { MockSerialPort, portInstances, openFailPaths, failingConstructPaths }
 })
 
 vi.mock('./logger', () => ({
@@ -93,14 +95,14 @@ describe('SerialPortManager · listPortsAsync', () => {
 
   beforeEach(() => {
     portInstances.length = 0
-    busyPaths.clear()
+    openFailPaths.clear()
     failingConstructPaths.clear()
     mgr = new SerialPortManager(makeWin().win)
   })
 
   afterEach(() => {
     mgr.destroy()
-    busyPaths.clear()
+    openFailPaths.clear()
     failingConstructPaths.clear()
   })
 
@@ -134,11 +136,22 @@ describe('SerialPortManager · listPortsAsync', () => {
   })
 
   it('被其他程序占用的端口探测为 busy:true，空闲端口为 false', async () => {
-    busyPaths.add('COM9')
+    openFailPaths.set('COM9', new Error('Resource busy'))
     MockSerialPort.list.mockResolvedValue([{ path: 'COM9' }, { path: 'COM10' }])
     const list = await mgr.listPortsAsync()
     expect(list.find((i) => i.path === 'COM9')?.busy).toBe(true)
     expect(list.find((i) => i.path === 'COM10')?.busy).toBe(false)
+  })
+
+  it('非锁定类打开失败（无权限/设备不存在）不判 busy——端口保持可选', async () => {
+    // 回归：EACCES 权限不足不是「被其他程序占用」，判 busy 会把端口禁用，
+    // 用户连选中查看真实错误的机会都没有。错误信息含 "cannot open" 也不应触发
+    openFailPaths.set('COM5', new Error('Permission denied, cannot open /dev/ttyUSB0'))
+    openFailPaths.set('COM6', new Error('Cannot open /dev/ttyUSB0: No such file or directory'))
+    MockSerialPort.list.mockResolvedValue([{ path: 'COM5' }, { path: 'COM6' }])
+    const list = await mgr.listPortsAsync()
+    expect(list[0].busy).toBe(false)
+    expect(list[1].busy).toBe(false)
   })
 
   it('本应用已打开的端口跳过探测（busy:false，不新增探测实例）', async () => {
@@ -174,7 +187,7 @@ describe('SerialPortManager · 多端口', () => {
 
   beforeEach(() => {
     portInstances.length = 0
-    busyPaths.clear()
+    openFailPaths.clear()
     const ctx = makeWin()
     mgr = new SerialPortManager(ctx.win)
     send = ctx.send
@@ -192,8 +205,15 @@ describe('SerialPortManager · 多端口', () => {
   it('打开被其他进程锁定的端口报可读占用提示（跨进程占用）', async () => {
     // 另一 KART 实例/程序占用：本进程 _ports 无此端口，serialport 底层 lock 失败
     // 应映射为「已被其他程序占用」，而非原始的技术化错误
-    busyPaths.add('COM5')
+    openFailPaths.set('COM5', new Error('Resource busy'))
     await expect(mgr.open('COM5', OPTS)).rejects.toThrow(/已被其他程序占用/)
+  })
+
+  it('打开无权限/设备不存在的端口报真实错误而非占用提示', async () => {
+    // 回归：错误信息含 "cannot open" 但并非端口被锁（Linux 设备不存在时
+    // serialport 报 Cannot open <path>: No such file...），不能误映射为占用
+    openFailPaths.set('COM6', new Error('Cannot open /dev/ttyUSB0: No such file or directory'))
+    await expect(mgr.open('COM6', OPTS)).rejects.toThrow(/打开串口 COM6 失败: Cannot open/)
   })
 
   it('不同端口可并发打开', async () => {
