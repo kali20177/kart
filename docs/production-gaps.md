@@ -13,6 +13,7 @@
 3. ✅ **发送自动计算校验和 + 接收可选校验** — 已完成：
    - **发送侧**：`serial.send` 在拼行尾前自动追加指定校验和（CRC16-Modbus/SUM8/XOR8/CRC32），覆盖 Modbus RTU、舵机/云台、传感器、基站/DTU 常见嵌入式协议。快速命令可独立配置校验和（inherit 全局或覆盖），循环发送/文件发送均受益（文件引擎 CRC16 已复用 `checksum.ts`）。
    - **接收侧**：新增 `rxChecksumAlgorithm` 独立设置（不再耦合 sendChecksum），支持收发不对称协议。校验前自动剥离帧尾分隔符，避免 `\r\n` 被当作载荷导致必败。校验失败帧气泡标记 `✗ {t('bubble.checksumFailed')}`，StatusBar 增加 ERR 帧错误计数。
+   - **2026-08-15 更新**：发送/接收校验从全局设置移出，改为会话级 `session.checksum`（`ChecksumConfig`）按端口持久化——多会话可各配各的校验方式，ConnectionBar 弹窗编辑（`ChecksumSettingsModal`），旧全局值经 settings store 七次迁移播种首端口；快速命令的「inherit」语义随之变为继承会话默认（不再有全局默认）。
    - **架构**：四种算法集中维护在 `src/utils/checksum.ts`，所有调用方都引用同一实现，消除原 `transfer.ts` 内联 CRC16 重复。
 4. ✅ **文件发送（二进制整包下发）** - 已完成 UI 交互与引擎（基于 Mock 驱动）。详细设计见 [docs/file-transfer-design.md](./file-transfer-design.md)。落地内容：
    - **引擎层**（`src/stores/transfer.ts`）：async pump 调度循环 + 状态机（queued/sending/paused/completed/aborted/error）、分包切片、三种协议封装（raw / len-prefix / seq-crc，CRC16-Modbus 内联）、限速（包间延时 + 字节速率令牌桶，取更严者）、ACK 流控（any/byte/echo-crc 三策略 + 超时/NACK 重试）、循环下发（`repeat`）、断点续传（`startOffset` + seq 对齐）、错误注入（破坏 CRC / 跳过 ACK）、断线自动中止。

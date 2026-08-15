@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { effectScope } from 'vue'
+import { effectScope, reactive } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSettingsStore } from './settings'
 import { useMessagesStore, createMessagesStore, type MessagesDeps } from './messages'
@@ -194,6 +194,7 @@ describe('messages store · 帧解码', () => {
     const store = scope.run(() =>
       createMessagesStore({
         settings: settings.settings,
+        checksum: reactive({ send: 'none' as const, rx: 'none' as const }),
         decoder,
         paused,
         pauseStartTime,

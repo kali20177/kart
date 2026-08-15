@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
-import type { AppSettings, WaveformSettings } from '@/types'
+import type { AppSettings, ChecksumAlgorithm, WaveformSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
 import { persistNow } from '@/utils/persist'
 import { getTheme } from '@/themes'
@@ -37,15 +37,22 @@ const DEFAULTS: AppSettings = {
   autoReconnect: false,
   showPauseNotification: true,
   recordFormat: 'text' as const,
-  sendChecksum: 'none',
-  rxChecksumAlgorithm: 'none'
 }
 
 /** 全局共享 store：应用设置跨会话统一（组件经 session.settings 或单例均可读同一 proxy）。 */
 export const useSettingsStore = defineStore('settings', () => {
   // 从存储读取持久化数据
-  // 注：rxVerifyChecksum 为已废弃旧字段（迁移后删除），仅读取时保留以做迁移
-  const persisted = storage.get<Partial<AppSettings & { theme?: string; themeMode?: string; rxVerifyChecksum?: boolean }>>('settings', {})
+  // 注：rxVerifyChecksum 为已废弃旧字段（迁移后删除），仅读取时保留以做迁移；
+  // sendChecksum/rxChecksumAlgorithm 为七次迁移前的旧全局校验字段（见下方迁移逻辑）。
+  const persisted = storage.get<
+    Partial<AppSettings> & {
+      theme?: string
+      themeMode?: string
+      rxVerifyChecksum?: boolean
+      sendChecksum?: ChecksumAlgorithm
+      rxChecksumAlgorithm?: ChecksumAlgorithm
+    }
+  >('settings', {})
 
   // 迁移：旧版 theme → themeId
   if ('theme' in persisted) {
@@ -99,6 +106,18 @@ export const useSettingsStore = defineStore('settings', () => {
       dirty = true
     }
     if (dirty) persistNow('settings', persisted)
+  }
+  // 七次迁移：校验和设置移出全局 → 会话级按端口持久化（见 session/index.ts）。
+  // 旧全局值提取到 legacy-checksum 键，供会话创建时播种首端口配置；随后从全局设置删除，
+  // 避免残留键经 spread 混入 reactive settings 又被深 watcher 写回。
+  if ('sendChecksum' in persisted || 'rxChecksumAlgorithm' in persisted) {
+    storage.set('legacy-checksum', {
+      send: persisted.sendChecksum ?? 'none',
+      rx: persisted.rxChecksumAlgorithm ?? 'none'
+    })
+    delete persisted.sendChecksum
+    delete persisted.rxChecksumAlgorithm
+    persistNow('settings', persisted)
   }
 
   const settings = reactive<AppSettings>(

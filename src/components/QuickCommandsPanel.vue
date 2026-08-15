@@ -24,11 +24,11 @@ const emit = defineEmits<{
 }>()
 
 const store = useCommandsStore()
-// useActiveSession 返回活动会话 ref，用 computed 派生 serial/settings：切 tab 时
-// 快速命令从当前活动 tab 的串口发出（settings 为全局共享，引用一致）。
+// useActiveSession 返回活动会话 ref，用 computed 派生 serial/checksum：切 tab 时
+// 快速命令从当前活动 tab 的串口发出，校验继承该会话的默认发送校验（会话级）。
 const activeSession = useActiveSession()
 const serial = computed(() => activeSession.value.serial)
-const settings = computed(() => activeSession.value.settings)
+const checksum = computed(() => activeSession.value.checksum)
 const message = useMessage()
 const { t } = useI18n()
 
@@ -44,7 +44,7 @@ const endingOptions = [
   { label: '\\r\\n', value: 'crlf' }
 ]
 const checksumOptions = computed(() => [
-  { label: t('checksum.inheritGlobal'), value: 'inherit' },
+  { label: t('checksum.inheritDefault'), value: 'inherit' },
   { label: t('checksum.algo.none'), value: 'none' },
   { label: t('checksum.algo.sum8'), value: 'sum8' },
   { label: t('checksum.algo.xor8'), value: 'xor8' },
@@ -88,7 +88,7 @@ function saveEdit() {
 
 async function sendCmd(c: QuickCommand) {
   const ending: LineEnding = c.appendNewline === 'inherit' ? 'crlf' : c.appendNewline
-  const cs = !c.checksum || c.checksum === 'inherit' ? settings.value.sendChecksum : c.checksum
+  const cs = !c.checksum || c.checksum === 'inherit' ? checksum.value.send : c.checksum
   const r = await serial.value.send(c.payload, c.mode, ending, 'utf-8', cs)
   if (!r.ok) message.error(r.error ?? t('commands.sendFailed'))
   else sendHistory.add(c.payload)

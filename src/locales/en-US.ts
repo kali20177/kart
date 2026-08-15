@@ -368,7 +368,6 @@ export default {
     baudNote: 'Note (optional)',
     delete: 'Delete',
     record: 'Recording',
-    checksum: 'Checksum',
   },
   commands: {
     title: 'Quick Commands',
@@ -428,9 +427,12 @@ export default {
   },
   checksum: {
     title: 'Checksum',
-    txDefault: 'Send Checksum (Default)',
+    txDefault: 'Send Checksum (Session Default)',
     rxAlgorithm: 'Receive Checksum Algorithm',
-    inheritGlobal: 'Use Global Default',
+    inheritDefault: 'Use Session Default',
+    sessionHint: 'Saved per port — different devices can use different checksums.',
+    tooltipEnabled: 'Checksum on: send {send} · receive {rx}',
+    tooltipDisabled: 'Checksum off, click to configure',
     algo: {
       none: 'None',
       sum8: 'SUM8 (Byte Sum)',

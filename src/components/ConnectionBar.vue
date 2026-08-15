@@ -8,14 +8,15 @@ import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { listDecoders } from '@/decoders'
 import DecoderSettingsModal from './DecoderSettingsModal.vue'
+import ChecksumSettingsModal from './ChecksumSettingsModal.vue'
 import { useI18n } from 'vue-i18n'
-import type { MockScenarioId, EndpointInfo, TransportType } from '@/types'
+import type { MockScenarioId, EndpointInfo, TransportType, ChecksumAlgorithm } from '@/types'
 
 const isDev = import.meta.env.DEV
 
 const { t } = useI18n()
 
-const { serial, recorder, decoder } = useSession()
+const { serial, recorder, decoder, checksum } = useSession()
 const message = useMessage()
 
 // 悬浮提示统一紧凑样式：更小字体与留白，气泡小一号，避免大块遮挡
@@ -28,6 +29,18 @@ const occupiedPorts = useOccupiedPorts()
 // 按钮上的小圆点提示当前启用态，tooltip 显示当前解码器名，收起态下同样可见。
 const showDecoderModal = ref(false)
 const decoderLabel = computed(() => listDecoders().find((d) => d.id === decoder.id)?.name ?? decoder.id)
+
+// —— 校验和入口（会话级）——
+// 校验配置为每会话独立、按端口持久化（session.checksum）；弹窗内直改同一 reactive 对象。
+// 按钮小圆点提示当前启用态（发送或接收任一非 none 即亮），tooltip 显示具体算法。
+const showChecksumModal = ref(false)
+const checksumEnabled = computed(() => checksum.send !== 'none' || checksum.rx !== 'none')
+const checksumTip = computed(() => {
+  const algo = (a: ChecksumAlgorithm) => t(`checksum.algo.${a}`) as string
+  return checksumEnabled.value
+    ? t('checksum.tooltipEnabled', { send: algo(checksum.send), rx: algo(checksum.rx) })
+    : t('checksum.tooltipDisabled')
+})
 
 // 传输类型选择：串口 / TCP。TCP 实际收发依赖主进程 net 桥（Electron）；
 // DEV 下放开选择——浏览器开发态可预览 UI/校验流程，无桥时连接会明确报「TCP 不可用」。
@@ -527,6 +540,17 @@ onBeforeUnmount(() => {
       {{ decoder.id ? t('decoder.tooltipEnabled', { name: decoderLabel }) : t('decoder.tooltipDisabled') }}
     </NTooltip>
 
+    <!-- 校验和：会话级配置入口（每会话独立，见 ChecksumSettingsModal） -->
+    <NTooltip placement="bottom" :style="tipStyle">
+      <template #trigger>
+        <NButton size="small" quaternary class="decoder-btn" @click="showChecksumModal = true">
+          <span class="decoder-btn-dot" :class="{ on: checksumEnabled }" />
+          {{ t('checksum.title') }}
+        </NButton>
+      </template>
+      {{ checksumTip }}
+    </NTooltip>
+
     <!-- 参数栏收起/展开 -->
     <NTooltip placement="bottom" :style="tipStyle">
       <template #trigger>
@@ -557,6 +581,9 @@ onBeforeUnmount(() => {
 
   <!-- 帧解码配置（会话级）：ConnectionBar 属于具体会话，弹窗经 useSession 编辑该会话的 decoder -->
   <DecoderSettingsModal v-model:show="showDecoderModal" />
+
+  <!-- 校验和配置（会话级）：与帧解码同构，弹窗经 useSession 编辑该会话的 checksum -->
+  <ChecksumSettingsModal v-model:show="showChecksumModal" />
 </template>
 
 <style scoped>
@@ -716,7 +743,7 @@ onBeforeUnmount(() => {
   line-height: 1;
   padding: 0 4px;
 }
-/* —— 帧解码入口按钮 —— */
+/* —— 会话级配置入口按钮（帧解码 / 校验和共用） —— */
 .decoder-btn {
   flex-shrink: 0;
   font-size: 12px;

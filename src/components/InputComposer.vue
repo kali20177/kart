@@ -18,7 +18,7 @@ const emit = defineEmits<{
   (e: 'open-file-transfer', file?: File): void
 }>()
 
-const { serial, settings } = useSession()
+const { serial, settings, checksum } = useSession()
 const message = useMessage()
 const { t } = useI18n()
 const history = useSendHistory()
@@ -59,7 +59,7 @@ async function sendOnce(): Promise<boolean> {
     message.warning(t('composer.needConnect'))
     return false
   }
-  const r = await serial.send(text.value, mode.value, lineEnding.value, settings.encoding, settings.sendChecksum)
+  const r = await serial.send(text.value, mode.value, lineEnding.value, settings.encoding, checksum.send)
   if (!r.ok) {
     message.error(r.error ?? t('composer.sendFailed'))
     return false

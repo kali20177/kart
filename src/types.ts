@@ -226,11 +226,17 @@ export interface AppSettings {
   showPauseNotification: boolean
   // 录制
   recordFormat: RecordFormat
-  // 校验和
-  /** 发送侧追加的校验和算法（全局默认，快速命令可 inherit 此值或覆盖） */
-  sendChecksum: ChecksumAlgorithm
+}
+
+/**
+ * 会话级校验和配置（按端口持久化，见 session/index.ts）。
+ * 从全局设置移出：多会话并排时每个会话可配不同校验方式。
+ */
+export interface ChecksumConfig {
+  /** 发送侧追加的校验和算法（会话默认，快速命令可 inherit 此值或覆盖） */
+  send: ChecksumAlgorithm
   /** 接收侧使用的校验和算法；'none' 即关闭接收校验，无需独立开关 */
-  rxChecksumAlgorithm: ChecksumAlgorithm
+  rx: ChecksumAlgorithm
 }
 
 /** 模拟场景标识（阶段 1 专属） */

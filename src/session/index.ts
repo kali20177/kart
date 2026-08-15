@@ -1,8 +1,9 @@
 import { effectScope, reactive, ref, watch, type UnwrapNestedRefs } from 'vue'
-import type { AppSettings, DataMode, IoTransport } from '@/types'
+import type { AppSettings, ChecksumConfig, DataMode, IoTransport } from '@/types'
 import type { DecoderConfig } from '@/decoders/types'
 import { DEFAULT_DECODER_CONFIG } from '@/decoders'
 import { storage } from '@/composables/useStorage'
+import { defaultChecksumConfig } from '@/session/checksum'
 import { createSerialStore } from '@/stores/serial'
 import { createMessagesStore } from '@/stores/messages'
 import { createPauseStore } from '@/stores/pause'
@@ -41,6 +42,8 @@ export interface Session {
   viewMode: DataMode
   /** 发送框草稿文本（发送框随消息面板显示/隐藏，会话级保存） */
   composerText: string
+  /** 校验和配置（会话级、按端口持久化；发送/接收管线读取，ChecksumSettingsModal 编辑） */
+  checksum: ChecksumConfig
   /** 帧解码配置（会话级、按端口持久化；消息管线读取，DecoderSettingsModal 编辑） */
   decoder: DecoderConfig
   /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
@@ -80,6 +83,10 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     // 端口确定后由下方 watcher 按端口加载/保存。
     const decoderCfg = reactive(structuredClone(DEFAULT_DECODER_CONFIG))
 
+    // 校验和配置：会话级、按端口持久化（语义与 decoder 同构）。默认值以旧版全局设置播种
+    // （settings store 七次迁移提取的 legacy-checksum 键），未配置端口回归该默认。
+    const checksumCfg = reactive(defaultChecksumConfig())
+
     // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
     let _clearMessages: () => void = () => {}
     let _clearWaveform: () => void = () => {}
@@ -93,6 +100,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
 
     const messages = createMessagesStore({
       settings: s,
+      checksum: checksumCfg,
       decoder: decoderCfg,
       paused: pause.paused,
       pauseStartTime: pause.pauseStartTime,
@@ -144,6 +152,36 @@ export function createSession(overrides: SessionOverrides = {}): Session {
         if (port) storage.set(DECODER_KEY(port), cfg)
       },
       // flush:'sync'：配置体量小，立即落盘——避免同 tick 内变更后紧接 dispose 丢最后一次写
+      { deep: true, flush: 'sync' }
+    )
+
+    // 校验和配置按端口持久化（与 decoder-config 同构：切端口载入，变更写回）。
+    // 首端口且无已存配置时沿用内存配置（含旧全局播种值）并落盘——升级后首次连接
+    // 用户此前的全局校验设置不丢失，之后每个端口独立配置。
+    const CHECKSUM_KEY = (port: string) => `checksum-config:${port}`
+    let checksumHasSelectedPort = false
+    watch(
+      serial.selectedPort,
+      (port) => {
+        if (!port) return
+        const stored = storage.get<Partial<ChecksumConfig> | null>(CHECKSUM_KEY(port), null)
+        if (stored || checksumHasSelectedPort) {
+          // 该端口已有配置，或之前已选过端口 → 载入该端口配置（不同端口不同校验方式）
+          Object.assign(checksumCfg, { ...defaultChecksumConfig(), ...stored })
+        } else {
+          // 首个端口且无已存配置：沿用内存配置（含旧全局播种值），落盘一次
+          storage.set(CHECKSUM_KEY(port), checksumCfg)
+        }
+        checksumHasSelectedPort = true
+      },
+      { immediate: true }
+    )
+    watch(
+      checksumCfg,
+      (cfg) => {
+        const port = serial.selectedPort.value
+        if (port) storage.set(CHECKSUM_KEY(port), cfg)
+      },
       { deep: true, flush: 'sync' }
     )
 
@@ -214,7 +252,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       useUtf8: serial.driverType.value === 'pty',
     })
 
-    return reactive({ serial, messages, pause, waveform, dashboard, recorder, transfer, terminal, settings: s, viewMode: ref(s.defaultView), composerText: ref(''), decoder: decoderCfg })
+    return reactive({ serial, messages, pause, waveform, dashboard, recorder, transfer, terminal, settings: s, viewMode: ref(s.defaultView), composerText: ref(''), checksum: checksumCfg, decoder: decoderCfg })
   })!
 
   const id = _nextSessionId++

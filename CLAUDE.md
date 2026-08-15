@@ -148,20 +148,20 @@ KnowledgeBaseModal → knowledge-base/utils
 - **搜索**：文本/HEX 双模式、命中高亮（原生配对）、上一项/下一项导航、当日时间范围筛选。不支持正则。
 - **帧解码器**：内置字段布局解析器（u8/u16/u32 等格式、偏移/长度校验防越界）+ Modbus RTU（请求/响应判别按 byteCount 一致性优先、异常响应解析），帧上叠加字段块；解码器注册表可扩展（未来 JS 脚本解码器可复用同一契约）。配置会话级按端口持久化，ConnectionBar 弹窗编辑，`id=''` 表示不启用。
 - **仪表盘**：解码器字段驱动（`decoderId:fieldName:index` 绑定），widget 类型 digital（数字表+阈值着色）/led（状态灯）/field-table（最近一帧字段总览），阈值判定为纯函数 `fieldStatus`（alarm 优先 warn，可单测）；widget 拖拽排序、按端口持久化，暂停时自动冻结。
-- **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析（`AA 55`/`0xAA,0x55`/`aa55`）、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32）。
-- **接收校验**：独立 RX 校验算法（不耦合发送侧），支持收发不对称协议，校验前自动剥离帧尾分隔符。
+- **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析（`AA 55`/`0xAA,0x55`/`aa55`）、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32，取会话默认）。
+- **校验和**：发送/接收校验配置会话级按端口持久化（`session.checksum`，`ChecksumConfig`），ConnectionBar 弹窗编辑（ChecksumSettingsModal），多会话可各配各的校验方式；RX 校验算法独立于发送侧（支持收发不对称协议），校验前自动剥离帧尾分隔符。旧全局设置经 settings store 七次迁移播种首端口。
 - **信号控制（DTR/RTS/Break）**：StatusBar 信号区可切换 DTR/RTS 电平、发送 Break 脉冲（250ms，TX 拉低），用于 ESP32/STM32 bootloader / 复位 / ISP。断开时禁用，自动重连后重放上次电平。链路：`IoTransport.setSignals/setBreak` → Web Serial `port.setSignals` / Electron IPC → 主进程 `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言。
 - **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示，重连成功弹一次 toast。判定集中在纯函数 `src/utils/reconnect.ts`（有单测）。
 - **TCP 传输**：Electron 主进程 `TcpManager`（Node `net`）经 IPC 暴露，TcpDriver 实现 `IoTransport`；支持 IPv6 校验、同端点并发用 connId 区分、断连窗口处理。终端直通提示仅 TCP 传输渲染（设备回显无歧义，串口不提示）。
 - **终端模式**：xterm.js 渲染（cell 网格/光标/ANSI/alt-screen/滚动区域等全能力，vim/nano 全屏可用）。传输模式 line（本地行编辑 Enter 发送）/char（按键直通设备侧回显），本地回显/退格字节（del 0x7F/bs 0x08）/行尾符/回滚上限可配；pty 数据源强制 UTF-8（忽略用户编码设置）。设置：字号缩放、终端字体。
-- **快速命令**：增删改、拖拽排序、JSON 导入导出、点击直发、调到发送框；每条命令可独立配置校验和（inherit 全局或覆盖）。
+- **快速命令**：增删改、拖拽排序、JSON 导入导出、点击直发、调到发送框；每条命令可独立配置校验和（inherit 会话默认或覆盖）。
 - **文件发送**：分包切片、三种协议封装（raw/len-prefix/seq-crc）、限速（字节速率 + 包间延时，取更严者）、ACK 流控（any/byte/echo-crc + 超时/NACK 重试）、循环下发、断点续传、错误注入（破坏 CRC/跳过 ACK）、断线自动中止。`FileTransferDialog` 预设（原始整包/STM32-ISP/ESP32/压测/自定义）+ 拖拽；限速输入框实时显示波特率对应物理层上限。
 - **波形图**：实时 Canvas 时序图（uPlot），多通道自动检测（无标签数值行按 token 扩容 / `label:value` 按标签分配），游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看、CSV 导出。仅文本行解析（Arduino Serial.println 风格），无二进制解析模式。
 - **录制**：原始字节流目录式录制成文件（txt 带时间戳 HEX 行 / csv 四列），格式/位置可配，断线自动停止，pagehide 自动落盘；文件名含端口（多会话并排区分数据来源）。
 - **标注与导出**：帧标注 📌、分隔线（可带标签）；导出 TXT/CSV/JSON/Binary 四种格式 + 筛选 + hex/ascii 双列 + 「包含分隔线/标注」选项。波形 CSV、快速命令 JSON 导入导出。
 - **ASCII 对照表**：右侧抽屉，点击行插入到发送框。
 - **帮助**：知识库（常见问题/百科，i18n 驱动）、快捷键面板、应用日志导出。
-- **设置**：编码（UTF-8/ASCII/GBK）、帧策略、缓冲上限、默认视图、主题（亮/暗）、字号、终端字体（Local Font Access 枚举系统字体）与字号缩放、发送/接收校验算法、录制格式与目录、暂停恢复提示开关。
+- **设置**：编码（UTF-8/ASCII/GBK）、帧策略、缓冲上限、默认视图、主题（亮/暗）、字号、终端字体（Local Font Access 枚举系统字体）与字号缩放、录制格式与目录、暂停恢复提示开关。校验算法已移出全局设置（会话级，见上方「校验和」）。
 - **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数、丢弃帧/采样提示。
 - **应用日志**：面向用户报障。浏览器端写 IndexedDB；Electron 下主进程按日轮转文件日志（`userData/logs/YYYY-MM-DD.log`，保留 30 天）并汇聚渲染端全部 console。文件菜单「导出日志」一键下载：Electron 优先取主进程文件（权威来源），浏览器取 IDB，导出文件头自动附带版本/平台/驱动等环境信息。级别/行格式/level 映射集中在纯函数 `src/utils/log-level.ts`（两端共用、有单测）。
 - **状态栏**：连接态、传输参数概要、RX/TX/帧/ERR 统计、CTS 只读指示（状态圆点）、DTR/RTS/BRK 控制、活跃文件下发紧凑条。

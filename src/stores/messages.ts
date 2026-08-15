@@ -2,13 +2,14 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, watch, onScopeDispose } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
-import type { ChecksumAlgorithm, Direction, FrameConfig, Message } from '@/types'
+import type { ChecksumConfig, Direction, FrameConfig, Message } from '@/types'
 import type { DecodeField, DecoderConfig } from '@/decoders/types'
 import { DEFAULT_DECODER_CONFIG, getDecoder } from '@/decoders'
 import { FrameSplitter } from '@/composables/useFrameSplitter'
 import { useSettingsStore } from './settings'
 import { usePauseStore } from './pause'
 import { verifyChecksum, checksumByteLength } from '@/utils/checksum'
+import { defaultChecksumConfig } from '@/session/checksum'
 
 /** 帧解码成功后的广播负载：字段（含数值）喂给仪表盘等数值消费方 */
 export interface DecodeBroadcast {
@@ -24,8 +25,10 @@ export interface MessagesDeps {
   settings: {
     frame: FrameConfig
     bufferLimit: number
-    rxChecksumAlgorithm: ChecksumAlgorithm
   }
+  /** 会话级校验和配置（按端口持久化，生产经 session 注入；单例用默认配置）。
+   *  直接持有 reactive 对象（与 settings 同例），逐帧读取最新值。 */
+  checksum: ChecksumConfig
   /** 会话级帧解码配置（按端口持久化，生产经 session 注入；单例用默认关闭配置）。
    *  直接持有 reactive 对象（与 settings 同例），逐帧读取最新值。 */
   decoder: DecoderConfig
@@ -104,24 +107,22 @@ export function createMessagesStore(deps: MessagesDeps) {
     // 否则消息时间会系统性偏晚一个 gapMs（与波形差 ~20ms）。
     const arrived = Date.now()
     const frames = splitter.push(bytes, arrived)
-    const s = deps.settings
     for (const f of frames) {
-      pending.push(makeRxMessage(s, f, arrived))
+      pending.push(makeRxMessage(f, arrived))
       rxFrames.value++
     }
     if (frames.length > 0) scheduleFlush()
 
     // gap-timeout：安排尾帧在静默 gapMs 后刷新
-    const frameCfg = s.frame
+    const frameCfg = deps.settings.frame
     if (frameCfg.strategy === 'gap-timeout') {
       if (gapTimer) clearTimeout(gapTimer)
       gapTimer = setTimeout(() => {
-        // 读最新设置：用户可能在 ingest 与 flush 之间改了配置
-        const cur = deps.settings
+        // 读最新设置：用户可能在 ingest 与 flush 之间改了配置（deps.settings 为 live proxy）
         const tail = splitter.flush()
         for (const f of tail) {
           // 时间戳用本批字节到达时间（arrived），而非定时器触发时刻
-          pending.push(makeRxMessage(cur, f, arrived))
+          pending.push(makeRxMessage(f, arrived))
           rxFrames.value++
         }
         if (tail.length > 0) scheduleFlush()
@@ -135,7 +136,7 @@ export function createMessagesStore(deps: MessagesDeps) {
    * 载荷帧 = 剔除帧尾分隔符后的部分（分隔符切分器会原样保留在帧里）；
    * 校验与解码共用同一载荷视角——解码器字段偏移按此计算，避免 \\r\\n 被当作载荷导致必败。
    */
-  function makeRxMessage(s: MessagesDeps['settings'], f: Uint8Array, timestamp: number): Message {
+  function makeRxMessage(f: Uint8Array, timestamp: number): Message {
     const msg = makeMessage('rx', f, undefined, timestamp)
 
     let payload = f
@@ -149,10 +150,10 @@ export function createMessagesStore(deps: MessagesDeps) {
     }
 
     // 接收校验（作用于载荷）
-    if (s.rxChecksumAlgorithm !== 'none') {
-      const len = checksumByteLength(s.rxChecksumAlgorithm)
+    if (deps.checksum.rx !== 'none') {
+      const len = checksumByteLength(deps.checksum.rx)
       if (payload.length > len) {
-        const r = verifyChecksum(payload, s.rxChecksumAlgorithm)
+        const r = verifyChecksum(payload, deps.checksum.rx)
         if (!r.ok) {
           msg.checksumFailed = true
           rxErrorFrames.value++
@@ -288,7 +289,8 @@ export const useMessagesStore = defineStore('messages', () => {
   const { paused, pauseStartTime } = storeToRefs(p)
   return createMessagesStore({
     settings: s.settings,
-    // 单例无会话上下文：帧解码保持默认关闭（生产经 session 注入按端口配置）
+    // 单例无会话上下文：校验/帧解码保持默认（生产经 session 注入按端口配置）
+    checksum: defaultChecksumConfig(),
     decoder: structuredClone(DEFAULT_DECODER_CONFIG),
     paused,
     pauseStartTime,

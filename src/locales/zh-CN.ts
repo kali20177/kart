@@ -374,7 +374,6 @@ export default {
     baudNote: '标注（可选）',
     delete: '删除',
     record: '录制',
-    checksum: '校验',
   },
   commands: {
     title: '快速命令',
@@ -434,9 +433,12 @@ export default {
   },
   checksum: {
     title: '校验和',
-    txDefault: '发送校验和（全局默认）',
+    txDefault: '发送校验和（会话默认）',
     rxAlgorithm: '接收校验算法',
-    inheritGlobal: '继承全局',
+    inheritDefault: '继承会话默认',
+    sessionHint: '校验配置按端口独立保存，不同设备可配置不同校验方式。',
+    tooltipEnabled: '校验已开启：发送 {send} · 接收 {rx}',
+    tooltipDisabled: '校验未开启，点击配置',
     algo: {
       none: '无',
       sum8: 'SUM8（累加和）',
