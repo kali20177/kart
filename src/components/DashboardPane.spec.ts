@@ -67,7 +67,6 @@ describe('DashboardPane · 渲染与数据流', () => {
 
   it('数字表卡片显示解码字段最新值（Modbus 寄存器第 N 个）', async () => {
     const { wrapper, session } = mountDash()
-    session.decoder.enabled = true
     session.decoder.id = 'modbus-rtu'
     // 绑定 registers[1] = 0x0001
     session.dashboard.addWidget({
@@ -87,7 +86,6 @@ describe('DashboardPane · 渲染与数据流', () => {
 
   it('超上限阈值 → 卡片标 alarm', async () => {
     const { wrapper, session } = mountDash()
-    session.decoder.enabled = true
     session.decoder.id = 'modbus-rtu'
     session.dashboard.addWidget({
       type: 'digital',
@@ -103,7 +101,6 @@ describe('DashboardPane · 渲染与数据流', () => {
 
   it('字段总览表渲染最近一帧全部字段', async () => {
     const { wrapper, session } = mountDash()
-    session.decoder.enabled = true
     session.decoder.id = 'modbus-rtu'
     session.dashboard.addWidget({ type: 'field-table', label: '帧字段' })
     await pumpModbusResponse(session, [0x0064, 0x0001])

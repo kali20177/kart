@@ -41,7 +41,7 @@ export interface Session {
   viewMode: DataMode
   /** 发送框草稿文本（发送框随消息面板显示/隐藏，会话级保存） */
   composerText: string
-  /** 帧解码配置（会话级、按端口持久化；消息管线读取，SettingsModal 编辑） */
+  /** 帧解码配置（会话级、按端口持久化；消息管线读取，DecoderSettingsModal 编辑） */
   decoder: DecoderConfig
   /** 销毁会话：停止 scope 内全部 watcher/computed，并触发各 store 的 onScopeDispose 清理（定时器/订阅/驱动）。 */
   dispose: () => void
@@ -76,7 +76,8 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     const s = useSettingsStore().settings
 
     // 帧解码配置：会话级、按端口持久化。用 reactive 对象直传 messages store（与 settings 同例），
-    // SettingsModal 经 session.decoder 直接编辑同一对象；端口确定后由下方 watcher 按端口加载/保存。
+    // ConnectionBar 的帧解码弹窗（DecoderSettingsModal）经 session.decoder 直接编辑同一对象；
+    // 端口确定后由下方 watcher 按端口加载/保存。
     const decoderCfg = reactive(structuredClone(DEFAULT_DECODER_CONFIG))
 
     // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
@@ -108,24 +109,28 @@ export function createSession(overrides: SessionOverrides = {}): Session {
 
     // 解码器配置按端口持久化：切端口时加载该端口的配置，修改时写回当前端口。
     // 关键语义：连接前（端口未选）的配置编辑不写进 'default' 垃圾键，而是保留在内存，
-    // 首个端口选中且无已存配置时沿用并落盘——避免「先启用再连接」被端口切换清掉。
+    // 首个端口选中且无已存配置时沿用并落盘——避免「先选解码器再连接」被端口切换清掉。
     const DECODER_KEY = (port: string) => `decoder-config:${port}`
     let hasSelectedPort = false
     watch(
       serial.selectedPort,
       (port) => {
         if (!port) return
-        const stored = storage.get<Partial<DecoderConfig> | null>(DECODER_KEY(port), null)
+        // 旧版配置（v0）带 enabled 开关，新版以 id='' 表示不启用；读入时做迁移
+        const stored = storage.get<Partial<DecoderConfig> & { enabled?: boolean } | null>(DECODER_KEY(port), null)
         const merged = {
           ...structuredClone(DEFAULT_DECODER_CONFIG),
           ...stored,
           options: { ...DEFAULT_DECODER_CONFIG.options, ...(stored?.options ?? {}) }
         }
+        // 旧版 enabled=false 等价于 id=''（无解码器）；删除残留开关字段避免写回脏键
+        if (stored?.enabled === false) merged.id = ''
+        delete (merged as { enabled?: boolean }).enabled
         if (stored || hasSelectedPort) {
           // 该端口已有配置，或之前已选过端口 → 载入该端口配置（不同端口不同协议）
           Object.assign(decoderCfg, merged)
         } else {
-          // 首个端口且无已存配置：沿用内存配置（可能连接前刚启用），落盘一次
+          // 首个端口且无已存配置：沿用内存配置（可能连接前刚选了解码器），落盘一次
           storage.set(DECODER_KEY(port), decoderCfg)
         }
         hasSelectedPort = true

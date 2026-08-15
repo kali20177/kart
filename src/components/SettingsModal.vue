@@ -16,8 +16,6 @@ import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
 import { listThemes } from '@/themes'
-import { listDecoders } from '@/decoders'
-import type { DecoderConfig, FieldDecoderOptions, FieldFormat } from '@/decoders'
 import { listSystemFonts } from '@/utils/fonts'
 import type { Session } from '@/session'
 
@@ -32,51 +30,6 @@ const message = useMessage()
 const s = settingsStore.settings
 // 自定义波特率属于会话级端口参数；对话框打开那一刻绑定的会话可能已关闭，此时降级为空列表
 const serial = computed(() => props.session?.serial ?? { customBaudRates: [] })
-
-// 帧解码配置：会话级（按端口持久化，见 session/index.ts），经本弹窗打开的会话编辑
-const decoderCfg = computed(() => props.session?.decoder ?? null)
-const fieldOptions = computed<FieldDecoderOptions | null>(() =>
-  decoderCfg.value?.id === 'field' ? (decoderCfg.value.options as unknown as FieldDecoderOptions) : null
-)
-const decoderOptions = computed(() => listDecoders().map((d) => ({ label: d.name, value: d.id })))
-const fieldFormatOptions: Array<{ label: string; value: FieldFormat }> = [
-  { label: 'u8', value: 'u8' },
-  { label: 'u16 LE', value: 'u16le' },
-  { label: 'u16 BE', value: 'u16be' },
-  { label: 'u32 LE', value: 'u32le' },
-  { label: 'u32 BE', value: 'u32be' },
-  { label: 'ASCII', value: 'ascii' },
-  { label: 'UTF-8', value: 'utf8' },
-  { label: 'HEX', value: 'hex' }
-]
-function patchDecoder(patch: Partial<DecoderConfig>) {
-  if (decoderCfg.value) Object.assign(decoderCfg.value, patch)
-}
-function addField() {
-  const f = fieldOptions.value
-  if (!f) return
-  f.fields.push({ name: '', length: 1, format: 'u8' })
-}
-function removeField(i: number) {
-  const f = fieldOptions.value
-  if (f) f.fields.splice(i, 1)
-}
-function setFieldName(i: number, v: string) {
-  const f = fieldOptions.value
-  if (f) f.fields[i].name = v
-}
-function setFieldOffset(i: number, v: number | null) {
-  const f = fieldOptions.value
-  if (f) f.fields[i].offset = v ?? undefined
-}
-function setFieldLength(i: number, v: number | null) {
-  const f = fieldOptions.value
-  if (f && v != null) f.fields[i].length = v
-}
-function setFieldFormat(i: number, v: FieldFormat) {
-  const f = fieldOptions.value
-  if (f) f.fields[i].format = v
-}
 
 const activeTab = ref('receive')
 
@@ -286,46 +239,6 @@ const navItems = computed<NavItem[]>(() => [
           <NFormItem :label="t('settings.bufferLimit')">
             <NInputNumber v-model:value="s.bufferLimit" :min="100" :max="100000" :step="500" style="width: 100%" />
           </NFormItem>
-
-          <!-- 帧解码：会话级配置（按端口持久化），需经打开的会话编辑 -->
-          <div class="section-divider" />
-          <div class="section-title">{{ t('decoder.title') }}</div>
-          <div v-if="!decoderCfg" class="empty-hint">{{ t('decoder.noSession') }}</div>
-          <template v-else>
-            <NFormItem :label="t('decoder.enable')">
-              <NSwitch :value="decoderCfg.enabled" @update:value="(v: boolean) => patchDecoder({ enabled: v })" />
-            </NFormItem>
-            <template v-if="decoderCfg.enabled">
-              <NFormItem :label="t('decoder.kind')">
-                <NSelect :value="decoderCfg.id" :options="decoderOptions" @update:value="(v: string) => patchDecoder({ id: v })" />
-              </NFormItem>
-              <!-- 字段布局解析器配置 -->
-              <template v-if="decoderCfg.id === 'field' && fieldOptions">
-                <NFormItem :label="t('decoder.headerHex')">
-                  <NInput
-                    size="small"
-                    :value="fieldOptions.header ?? ''"
-                    :placeholder="t('decoder.headerHexPlaceholder')"
-                    @update:value="(v: string) => { const o = fieldOptions; if (o) o.header = v.trim() || undefined }"
-                  />
-                </NFormItem>
-                <NFormItem :label="t('decoder.fields')">
-                  <div class="decoder-fields">
-                    <div v-for="(f, i) in fieldOptions.fields" :key="i" class="decoder-field-row">
-                      <NInput size="small" :value="f.name" :placeholder="t('decoder.fieldName')" style="width: 92px" @update:value="(v: string) => setFieldName(i, v)" />
-                      <NInputNumber size="small" :value="f.offset ?? null" :placeholder="t('decoder.fieldOffset')" style="width: 66px" @update:value="(v: number | null) => setFieldOffset(i, v)" />
-                      <NInputNumber size="small" :value="f.length" :min="1" :max="4096" style="width: 66px" @update:value="(v: number | null) => setFieldLength(i, v)" />
-                      <NSelect size="small" :value="f.format" :options="fieldFormatOptions" style="width: 100px" @update:value="(v: FieldFormat) => setFieldFormat(i, v)" />
-                      <NButton size="small" quaternary type="error" @click="removeField(i)">{{ t('decoder.deleteField') }}</NButton>
-                    </div>
-                    <NButton size="small" dashed class="add-field-btn" @click="addField">+ {{ t('decoder.addField') }}</NButton>
-                    <div class="decoder-field-hint">{{ t('decoder.fieldHint') }}</div>
-                  </div>
-                </NFormItem>
-              </template>
-              <div v-else-if="decoderCfg.id === 'modbus-rtu'" class="empty-hint">{{ t('decoder.modbusHint') }}</div>
-            </template>
-          </template>
         </NForm>
 
         <!-- ========== 显示 ========== -->
@@ -586,32 +499,6 @@ const navItems = computed<NavItem[]>(() => [
   margin-bottom: 16px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
-}
-
-/* 帧解码配置 */
-.section-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 20px 0 16px;
-}
-.decoder-fields {
-  width: 100%;
-}
-.decoder-field-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-.add-field-btn {
-  margin-top: 2px;
-}
-.decoder-field-hint {
-  margin-top: 6px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-dim);
-  opacity: 0.85;
 }
 
 /* ===== 波特率列表 ===== */

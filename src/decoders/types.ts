@@ -45,8 +45,7 @@ export interface DecodeInfo {
 
 /** 会话级解码器配置（按端口持久化，见 session/index.ts） */
 export interface DecoderConfig {
-  enabled: boolean
-  /** 注册表 id（如 'field' / 'modbus-rtu'） */
+  /** 注册表 id（如 'field' / 'modbus-rtu'）；空串 = 不启用解码 */
   id: string
   /** 解码器专属选项（JSON 可持久化，类型由各解码器解释） */
   options: Record<string, unknown>

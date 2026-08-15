@@ -203,12 +203,11 @@ describe('messages store · 帧解码', () => {
     return { store, scope }
   }
 
-  it('启用字段解码且帧匹配 → 消息带 decoded 字段视图', () => {
+  it('选字段解码器且帧匹配 → 消息带 decoded 字段视图', () => {
     const settings = useSettingsStore()
     settings.settings.frame.strategy = 'delimiter'
     settings.settings.frame.delimiterHex = '0A'
     const decoder: DecoderConfig = {
-      enabled: true,
       id: 'field',
       options: {
         header: 'AA55',
@@ -243,7 +242,6 @@ describe('messages store · 帧解码', () => {
     settings.settings.frame.strategy = 'delimiter'
     settings.settings.frame.delimiterHex = '0A'
     const decoder: DecoderConfig = {
-      enabled: true,
       id: 'field',
       options: {
         header: 'AA55',
@@ -261,11 +259,11 @@ describe('messages store · 帧解码', () => {
     }
   })
 
-  it('解码器禁用 → 所有帧无 decoded', () => {
+  it('未选解码器（id 为空）→ 所有帧无 decoded', () => {
     const settings = useSettingsStore()
     settings.settings.frame.strategy = 'delimiter'
     settings.settings.frame.delimiterHex = '0A'
-    const decoder = structuredClone(DEFAULT_DECODER_CONFIG) // enabled=false
+    const decoder = structuredClone(DEFAULT_DECODER_CONFIG) // id=''（下拉「无」）
     const { store, scope } = makeStore(decoder)
     try {
       store.ingestRx(new Uint8Array([0xaa, 0x55, 0x12, 0x34, 0x0a]))
@@ -282,7 +280,6 @@ describe('messages store · 帧解码', () => {
     settings.settings.frame.strategy = 'delimiter'
     settings.settings.frame.delimiterHex = '0A'
     const decoder: DecoderConfig = {
-      enabled: true,
       id: 'field',
       options: {
         header: 'BB55',

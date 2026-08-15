@@ -5,6 +5,7 @@ import { createSession, type Session } from '@/session'
 import { setDriverType } from '@/serial'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { binaryFrame } from '@/mock/scenarios'
+import { storage } from '@/composables/useStorage'
 
 // 每个测试创建的会话，afterEach 统一 dispose 清理（定时器/订阅/驱动）
 let sessions: Session[] = []
@@ -143,13 +144,13 @@ describe('createSession · 会话接线', () => {
 })
 
 describe('createSession · 帧解码（会话级配置 + 端口持久化）', () => {
-  it('连接后启用帧解码 → 二进制连续帧显示字段块', async () => {
+  it('连接后选字段解码器 → 二进制连续帧显示字段块', async () => {
     const mock = new MockSerialSource()
     const session = makeSession(mock)
     await session.serial.refreshPorts()
     await session.serial.connect()
     // 默认模板（AA55 帧头 + 字段布局）匹配 mock 二进制帧：AA 55 06 <payload6> <xor>
-    session.decoder.enabled = true
+    session.decoder.id = 'field'
     mock.inject(binaryFrame(0))
     await waitForMessages(session, 1)
     const m = session.messages.messages[0]
@@ -159,14 +160,14 @@ describe('createSession · 帧解码（会话级配置 + 端口持久化）', ()
     await session.serial.disconnect()
   })
 
-  it('先启用帧解码再连接（端口未选）→ 配置不丢失仍生效', async () => {
+  it('先选解码器再连接（端口未选）→ 配置不丢失仍生效', async () => {
     const mock = new MockSerialSource()
     const session = makeSession(mock)
-    // 端口尚未选择时就启用（对应「先打开设置启用，再连 mock」的用户流程）
-    session.decoder.enabled = true
+    // 端口尚未选择时就选好解码器（对应「先打开设置配置，再连 mock」的用户流程）
+    session.decoder.id = 'field'
     await session.serial.refreshPorts() // 此刻 selectedPort 变为 COM3，触发端口 watcher
     await session.serial.connect()
-    expect(session.decoder.enabled).toBe(true)
+    expect(session.decoder.id).toBe('field')
     mock.inject(binaryFrame(0))
     await waitForMessages(session, 1)
     expect(session.messages.messages[0].decoded).toBeDefined()
@@ -177,12 +178,27 @@ describe('createSession · 帧解码（会话级配置 + 端口持久化）', ()
     const a = makeSession(new MockSerialSource())
     await a.serial.refreshPorts()
     await a.serial.connect() // COM3
-    a.decoder.enabled = true // 持久化到 decoder-config:COM3
+    a.decoder.id = 'field' // 持久化到 decoder-config:COM3
     await a.serial.disconnect()
 
     const b = makeSession(new MockSerialSource())
-    await b.serial.refreshPorts() // COM3 → 应载入 enabled=true
-    expect(b.decoder.enabled).toBe(true)
+    await b.serial.refreshPorts() // COM3 → 应载入 id='field'
+    expect(b.decoder.id).toBe('field')
+    b.dispose()
+  })
+
+  it('旧版 enabled=false 配置迁移为 id 空串（不启用）', async () => {
+    const a = makeSession(new MockSerialSource())
+    await a.serial.refreshPorts()
+    await a.serial.connect() // COM3
+    a.decoder.id = 'modbus-rtu' // 先写一份新格式配置
+    await a.serial.disconnect()
+    // 手工模拟旧格式：仅存 enabled 字段的残留配置
+    storage.set('decoder-config:COM3', { enabled: false })
+
+    const b = makeSession(new MockSerialSource())
+    await b.serial.refreshPorts()
+    expect(b.decoder.id).toBe('')
     b.dispose()
   })
 })
