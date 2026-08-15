@@ -149,7 +149,7 @@ KnowledgeBaseModal → knowledge-base/utils
 - **帧解码器**：内置字段布局解析器（u8/u16/u32 等格式、偏移/长度校验防越界）+ Modbus RTU（请求/响应判别按 byteCount 一致性优先、异常响应解析），帧上叠加字段块；解码器注册表可扩展（未来 JS 脚本解码器可复用同一契约）。配置会话级按端口持久化，ConnectionBar 弹窗编辑，`id=''` 表示不启用。
 - **仪表盘**：解码器字段驱动（`decoderId:fieldName:index` 绑定），widget 类型 digital（数字表+阈值着色）/led（状态灯）/field-table（最近一帧字段总览），阈值判定为纯函数 `fieldStatus`（alarm 优先 warn，可单测）；widget 拖拽排序、按端口持久化，暂停时自动冻结。
 - **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析（`AA 55`/`0xAA,0x55`/`aa55`）、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32，取会话默认）。
-- **校验和**：发送/接收校验配置会话级按端口持久化（`session.checksum`，`ChecksumConfig`），ConnectionBar 弹窗编辑（ChecksumSettingsModal），多会话可各配各的校验方式；RX 校验算法独立于发送侧（支持收发不对称协议），校验前自动剥离帧尾分隔符。旧全局设置经 settings store 七次迁移播种首端口。
+- **校验和**：发送/接收校验配置会话级按端口持久化（`session.checksum`，`ChecksumConfig`），ConnectionBar 弹窗编辑（ChecksumSettingsModal），多会话可各配各的校验方式；RX 校验算法独立于发送侧（支持收发不对称协议），校验前自动剥离帧尾分隔符。未配置端口默认不启用校验。
 - **信号控制（DTR/RTS/Break）**：StatusBar 信号区可切换 DTR/RTS 电平、发送 Break 脉冲（250ms，TX 拉低），用于 ESP32/STM32 bootloader / 复位 / ISP。断开时禁用，自动重连后重放上次电平。链路：`IoTransport.setSignals/setBreak` → Web Serial `port.setSignals` / Electron IPC → 主进程 `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言。
 - **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示，重连成功弹一次 toast。判定集中在纯函数 `src/utils/reconnect.ts`（有单测）。
 - **TCP 传输**：Electron 主进程 `TcpManager`（Node `net`）经 IPC 暴露，TcpDriver 实现 `IoTransport`；支持 IPv6 校验、同端点并发用 connId 区分、断连窗口处理。终端直通提示仅 TCP 传输渲染（设备回显无歧义，串口不提示）。

@@ -83,8 +83,8 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     // 端口确定后由下方 watcher 按端口加载/保存。
     const decoderCfg = reactive(structuredClone(DEFAULT_DECODER_CONFIG))
 
-    // 校验和配置：会话级、按端口持久化（语义与 decoder 同构）。默认值以旧版全局设置播种
-    // （settings store 七次迁移提取的 legacy-checksum 键），未配置端口回归该默认。
+    // 校验和配置：会话级、按端口持久化（语义与 decoder 同构）。默认不启用校验，
+    // 未配置的端口回归该默认（'none'）。
     const checksumCfg = reactive(defaultChecksumConfig())
 
     // 延迟绑定器：pause.clearAll 在调用时才解析到真实的 clear 回调
@@ -156,8 +156,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
     )
 
     // 校验和配置按端口持久化（与 decoder-config 同构：切端口载入，变更写回）。
-    // 首端口且无已存配置时沿用内存配置（含旧全局播种值）并落盘——升级后首次连接
-    // 用户此前的全局校验设置不丢失，之后每个端口独立配置。
+    // 首端口且无已存配置时沿用内存配置（默认 none）并落盘，之后每个端口独立配置。
     const CHECKSUM_KEY = (port: string) => `checksum-config:${port}`
     let checksumHasSelectedPort = false
     watch(
@@ -169,7 +168,7 @@ export function createSession(overrides: SessionOverrides = {}): Session {
           // 该端口已有配置，或之前已选过端口 → 载入该端口配置（不同端口不同校验方式）
           Object.assign(checksumCfg, { ...defaultChecksumConfig(), ...stored })
         } else {
-          // 首个端口且无已存配置：沿用内存配置（含旧全局播种值），落盘一次
+          // 首个端口且无已存配置：沿用内存配置（默认 none），落盘一次
           storage.set(CHECKSUM_KEY(port), checksumCfg)
         }
         checksumHasSelectedPort = true

@@ -19,7 +19,7 @@
 
 真正跨会话共享的是解析类设置：`encoding`/`frame`/`bufferLimit`/`sendChecksum`/`rxChecksumAlgorithm`/`waveform`（经 session/index.ts L57 同一 proxy 注入）。多会话 v1 共享这些是**可接受行为**（切 tab 时设置全局生效）；会话化拆分（AppSettings 拆 Global+Session、store deps 改签名、SettingsModal 重构、持久化改造）是**纯重构**——单会话下零用户可见变化，风险高收益低，且拆的时候有 UI 可对照验证。**记为已知后续项**，本设计不实施。
 
-> **2026-08-15 更新**：其中的校验和部分已实施——`sendChecksum`/`rxChecksumAlgorithm` 移出 AppSettings，改为会话级 `session.checksum`（`ChecksumConfig`，按端口持久化，ConnectionBar 弹窗编辑，见 `src/session/index.ts`）；多会话各配各的校验方式，旧全局值经 settings store 七次迁移播种首端口。`encoding`/`frame`/`bufferLimit`/`waveform` 仍为全局共享。
+> **2026-08-15 更新**：其中的校验和部分已实施——`sendChecksum`/`rxChecksumAlgorithm` 移出 AppSettings，改为会话级 `session.checksum`（`ChecksumConfig`，按端口持久化，ConnectionBar 弹窗编辑，见 `src/session/index.ts`）；多会话各配各的校验方式，未配置端口默认不启用校验。`encoding`/`frame`/`bufferLimit`/`waveform` 仍为全局共享。
 
 ## 现状（已核实）
 

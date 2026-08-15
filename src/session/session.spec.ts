@@ -241,7 +241,6 @@ describe('createSession · 校验和配置（会话级）', () => {
 
   it('RX 校验：会话级 rx 开启后，校验失败帧打标记', async () => {
     storage.remove('checksum-config:COM3')
-    storage.remove('legacy-checksum')
     const mock = new MockSerialSource()
     const session = makeSession(mock)
     await session.serial.refreshPorts() // COM3
@@ -257,24 +256,6 @@ describe('createSession · 校验和配置（会话级）', () => {
     expect(session.messages.messages[1].checksumFailed).toBe(true)
     await session.serial.disconnect()
     storage.remove('checksum-config:COM3')
-  })
-
-  it('旧全局校验设置迁移：首端口播种 legacy 值，全局设置清理', async () => {
-    storage.remove('checksum-config:COM3')
-    // 模拟七次迁移前：全局 settings 里带旧校验字段
-    storage.set('settings', { sendChecksum: 'sum8', rxChecksumAlgorithm: 'xor8' })
-    const a = makeSession(new MockSerialSource())
-    await a.serial.refreshPorts() // COM3，首端口 → 以旧全局值播种并落盘
-    expect(a.checksum.send).toBe('sum8')
-    expect(a.checksum.rx).toBe('xor8')
-    // 旧字段已从全局设置剥离（settings store 七次迁移）
-    const cleaned = storage.get<Record<string, unknown>>('settings', {})
-    expect('sendChecksum' in cleaned).toBe(false)
-    expect('rxChecksumAlgorithm' in cleaned).toBe(false)
-    a.dispose()
-    // 清理持久化残留，避免影响后续用例
-    storage.remove('checksum-config:COM3')
-    storage.remove('legacy-checksum')
   })
 })
 
