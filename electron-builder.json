@@ -29,6 +29,7 @@
   "linux": {
     "target": ["AppImage", "deb"],
     "icon": "build/icon.png",
+    "maintainer": "kali20177 <2862606190@qq.com>",
     "artifactName": "${productName}-${version}-${arch}.${ext}"
   },
   "appImage": {
