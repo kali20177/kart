@@ -3,13 +3,13 @@ import { computed } from 'vue'
 import { NModal, NButton, NSpin, NProgress, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useUpdater } from '@/composables/useUpdater'
-import { useActiveSession } from '@/composables/useSession'
+import { useSessions } from '@/composables/useSession'
 import { formatBytes, formatSpeed, formatEta } from '@/utils/updater'
 
 const { state, dialogVisible, download, cancelDownload, quitAndInstall, openReleases, check, closeDialog } = useUpdater()
 const { t } = useI18n()
 const dialog = useDialog()
-const activeSession = useActiveSession()
+const sessions = useSessions()
 
 const status = computed(() => state.value.status)
 const info = computed(() => state.value.info)
@@ -42,16 +42,22 @@ const title = computed(() => {
   }
 })
 
-// ── 重启保护（串口工具特有）：录制/下发活跃时二次确认，避免状态全丢 ──
-const recordingStatus = computed(() => activeSession.value.recorder.state.status)
-const transferActive = computed(() =>
-  activeSession.value.transfer.transfers.some((t) => t.status === 'queued' || t.status === 'sending' || t.status === 'paused')
-)
+// ── 重启保护（串口工具特有）：任一会话录制/下发活跃时二次确认，避免状态全丢。
+// 必须遍历全部会话（useSessions）——dockview 多面板并排时录制/下发可能跑在
+// 非聚焦面板上，只看聚焦会话（useActiveSession）会漏判导致传输被静默掐断。
+const busyActivities = computed(() => {
+  const parts: string[] = []
+  for (const s of sessions.value) {
+    if (s.recorder.state.status !== 'idle') parts.push(t('update.recordingActive'))
+    if (s.transfer.transfers.some((tr) => tr.status === 'queued' || tr.status === 'sending' || tr.status === 'paused')) {
+      parts.push(t('update.transferActive'))
+    }
+  }
+  return parts
+})
 
 function onRestart(): void {
-  const parts: string[] = []
-  if (recordingStatus.value !== 'idle') parts.push(t('update.recordingActive'))
-  if (transferActive.value) parts.push(t('update.transferActive'))
+  const parts = busyActivities.value
   if (parts.length === 0) {
     quitAndInstall()
     return

@@ -24,6 +24,13 @@ const RELEASES_URL = 'https://github.com/kali20177/kart/releases/latest'
 const CANCELLED_CODE = 'ERR_UPDATER_CANCELLED'
 
 /**
+ * macOS 是否已用 Developer ID 签名（构建期决策）。
+ * 当前无证书（用户确定不购买）——false：mac 退出时不做静默安装（必然失败）。
+ * 购买证书并启用 electron-builder 签名后置 true，恢复 mac 的退出自动安装流。
+ */
+const MAC_APP_SIGNED = false
+
+/**
  * 应用自升级单例（electron-updater 封装）。
  *
  * 契约（渲染端无关后端，见 docs/upgrade-design.md §15）：
@@ -48,7 +55,11 @@ export class Updater {
   constructor(private readonly platform: NodeJS.Platform = process.platform) {
     // 下载需用户确认；安装只在「立即重启」或自然退出时进行
     autoUpdater.autoDownload = false
-    autoUpdater.autoInstallOnAppQuit = true
+    // macOS 当前无 Developer ID 签名（MAC_APP_SIGNED=false）：退出时的静默 Squirrel
+    // 安装注定失败且只有日志可见（窗口已关用户看不到）。「稍后」应只是「稍后再说」，
+    // 不再让每次退出白跑一次注定失败的安装；「立即重启」仍是显式调用不受影响。
+    // 若日后购买证书签名，把该常量置 true 即可恢复 mac 的退出自动安装流。
+    autoUpdater.autoInstallOnAppQuit = this.platform === 'darwin' ? MAC_APP_SIGNED : true
     autoUpdater.logger = updaterLogger
 
     const feed = process.env.KART_UPDATE_FEED

@@ -171,7 +171,7 @@ updater: {
 | Windows (nsis) | ✅ | 未签名可更新（首次安装有 SmartScreen 警告，属证书问题非 updater 问题）；oneClick 静默安装 |
 | Linux (AppImage) | ✅ | 需 `APPIMAGE` 环境变量（AppImage 启动方式），否则判定 unavailable |
 | Linux (deb) | ❌ | electron-updater 不支持 deb；该渠道用户手动下载。gate 已覆盖 |
-| macOS (zip) | ⚠️ | **electron-updater 在 macOS 要求应用已用 Developer ID 签名**（Gatekeeper）；当前构建无签名 → 更新大概率在下载/安装阶段失败 |
+| macOS (zip) | ⚠️ | **electron-updater 在 macOS 要求应用已用 Developer ID 签名**（Gatekeeper）；当前构建无签名 → 更新大概率在下载/安装阶段失败。`autoInstallOnAppQuit` 按 darwin 置 false（`MAC_APP_SIGNED` 常量）：「稍后」=真正的稍后，退出不再白跑注定失败的静默 Squirrel 安装 |
 
 > **实测印证（2026-08-16 本地打包冒烟）**：本地构建的未签名 `KART.app` 直接启动即被 Gatekeeper 拦截并弹窗「未打开 KART.app，因其包含恶意软件」——连本地打包产物都如此，macOS 无签名路径的"手动下载兜底"是必须的。本地验证打包产物时需右键→打开（或 `xattr -dr com.apple.quarantine`）；日常迭代验证走 `KART_UPDATE_DEV=1` dev 流程（不经 Gatekeeper）。
 
@@ -222,7 +222,7 @@ macOS 处理（v1 简洁方案）：正常走 `check()`，若下载/安装阶段
 ## 十三、里程碑拆分
 
 - **P0（链路打通）**：electron-updater 依赖 + external；electron-builder publish provider + `--publish never`；CI 补 `latest*.yml` 上传；`Updater.ts` + IPC + preload + `electron-env.d.ts` 类型；`useUpdater` + UpdateDialog + 帮助菜单入口 + 启动自动检查；zh/en i18n；Updater.spec 状态机单测。收口标志：发 `v0.1.1` 后旧版应用端到端更新成功。
-- **P1（健壮性）✅ 已完成（2026-08-16）**：错误降级（手动下载兜底全平台）、下载进度/速度/ETA、**取消下载**（CancellationToken + CancelError → 回 available 可重下）、**重启保护（录制/下发活跃时二次确认）**、releaseNotes 展示、macOS 无签名降级提示文案（含 downloaded 态"稍后"不承诺自动安装、主操作改手动下载）。
+- **P1（健壮性）✅ 已完成（2026-08-16，含两轮审核修正）**：错误降级（手动下载兜底全平台）、下载进度/速度/ETA、**取消下载**（CancellationToken + CancelError → 回 available 可重下）、**重启保护——遍历全部会话聚合检测**（useSessions，dockview 多面板时非聚焦会话的录制/下发也能触发确认）、releaseNotes 展示、macOS 无签名降级（downloaded 态"稍后"不承诺自动安装、主操作改手动下载；**autoInstallOnAppQuit 按 darwin 置 false，退出不再白跑注定失败的静默安装**）。
 - **P2（增强，非本期）**：设置项「自动检查更新」开关（settings 迁移）、channel/预发布通道、Gitee/CDN 镜像 generic provider、真机三平台回归。
 
 ## 十四、待确认（产品决策）

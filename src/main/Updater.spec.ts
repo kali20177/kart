@@ -126,6 +126,19 @@ describe('Updater（主进程单例）', () => {
     expect(mockAutoUpdater.forceDevUpdateConfig).toBe(true)
   })
 
+  it('构造：macOS 未签名（MAC_APP_SIGNED=false）→ autoInstallOnAppQuit=false，「稍后」不白跑注定失败的静默安装', () => {
+    new Updater('darwin')
+    expect(mockAutoUpdater.autoInstallOnAppQuit).toBe(false)
+    expect(mockAutoUpdater.autoDownload).toBe(false)
+  })
+
+  it('构造：非 macOS → autoInstallOnAppQuit=true（自然退出静默安装）', () => {
+    new Updater('win32')
+    expect(mockAutoUpdater.autoInstallOnAppQuit).toBe(true)
+    new Updater('linux')
+    expect(mockAutoUpdater.autoInstallOnAppQuit).toBe(true)
+  })
+
   it('检查中守卫：checking 状态下再次 check 不重复发起', async () => {
     const u = new Updater()
     const p1 = u.check() // 进入 checking（checkForUpdates 挂起中）
