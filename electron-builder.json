@@ -28,7 +28,9 @@
   "linux": {
     "target": ["AppImage", "deb"],
     "icon": "build/icon.png",
-    "license": "LICENSE",
     "artifactName": "${productName}-${version}-${arch}.${ext}"
+  },
+  "appImage": {
+    "license": "LICENSE"
   }
 }
