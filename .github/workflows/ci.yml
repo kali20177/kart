@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# 同 ref 的新提交取消在跑的旧任务；tag 发布不取消（避免发布中断）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  check:
+    name: 检查（lint / typecheck / 单测）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      # GitHub runner 在美区，直连官方源更快更稳；仅覆盖工作区副本，不动 git 里的 .npmrc
+      - name: 覆盖 .npmrc（官方 registry / Electron 官方下载源）
+        run: printf 'registry=https://registry.npmjs.org/\n' > .npmrc
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  build:
+    name: 打包（${{ matrix.os }}）
+    needs: check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: 覆盖 .npmrc（官方 registry / Electron 官方下载源）
+        run: printf 'registry=https://registry.npmjs.org/\n' > .npmrc
+        shell: bash
+      - run: npm ci
+      # vue-tsc + tsc + vite build + electron-builder（按当前 OS 出对应安装包：AppImage/deb、nsis、dmg/zip）
+      - name: 类型检查 + 构建 + 打包
+        run: npm run electron:build
+      - name: 上传安装包产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: kart-${{ matrix.os }}
+          path: |
+            release/*
+            !release/builder-effective-config.yaml
+          if-no-files-found: error
+
+  e2e:
+    name: 端到端（Electron CDP）
+    runs-on: macos-latest
+    needs: check
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: 覆盖 .npmrc（官方 registry / Electron 官方下载源）
+        run: printf 'registry=https://registry.npmjs.org/\n' > .npmrc
+      - run: npm ci
+      # verify 脚本要求先产出 dist + dist-electron（ELECTRON=true 才会编译主进程）
+      - name: 构建 Electron prod 产物
+        run: npx cross-env ELECTRON=true vite build
+      - name: 终端模式验证（node-pty）
+        run: node scripts/verify-pty.mjs
+      - name: dockview 布局验证
+        run: node scripts/verify-dockview.mjs
+
+  release:
+    name: 发布 GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**
+          generate_release_notes: true
