@@ -431,6 +431,7 @@ export default {
     rxAlgorithm: 'Receive Checksum Algorithm',
     inheritDefault: 'Use Session Default',
     sessionHint: 'Saved per port — different devices can use different checksums.',
+    integrityConflict: 'Decoder "{name}" verifies {algo} internally; a receive checksum that doesn\'t match will flag valid frames as failed. Set to None or {algo}.',
     tooltipEnabled: 'Checksum on: send {send} · receive {rx}',
     tooltipDisabled: 'Checksum off, click to configure',
     algo: {

@@ -56,6 +56,10 @@ export const modbusRtuDecoder: DecoderDefinition = {
   id: 'modbus-rtu',
   name: 'Modbus RTU',
   description: 'Modbus RTU 帧解码（CRC16 校验通过才匹配）',
+  // 匹配前提是帧尾 CRC16 校验通过（见 decode），声明自带校验——校验和弹窗据此提示
+  // 用户避免设置不一致的接收校验算法（合法帧会被误标「校验失败」）。
+  selfChecksIntegrity: true,
+  integrityChecksum: 'crc16-modbus',
   decode(frame) {
     if (frame.length < MIN_LEN) return { matched: false }
     // 帧尾 2 字节即 Modbus CRC16（小端），与接收校验语义一致

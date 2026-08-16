@@ -69,4 +69,36 @@ describe('ChecksumSettingsModal · 会话级校验和配置', () => {
     expect(text).toContain('SUM8')
     expect(text).toContain('CRC16-Modbus')
   })
+
+  it('Modbus RTU 解码器 + 接收校验不一致 → 显示冲突提示（数据驱动于能力位）', async () => {
+    const { session } = mountModal()
+    session.decoder.id = 'modbus-rtu'
+    session.checksum.rx = 'sum8'
+    await nextTick()
+    const text = modalEl().textContent ?? ''
+    expect(text).toContain('Modbus RTU')
+    expect(text).toContain('CRC16-Modbus')
+    expect(text).toContain('建议设为')
+  })
+
+  it('接收校验为「无」或与解码器内置算法一致 → 无冲突提示', async () => {
+    const { session } = mountModal()
+    session.decoder.id = 'modbus-rtu'
+    session.checksum.rx = 'crc16-modbus'
+    await nextTick()
+    expect(modalEl().textContent ?? '').not.toContain('建议设为')
+    session.checksum.rx = 'none'
+    await nextTick()
+    expect(modalEl().textContent ?? '').not.toContain('建议设为')
+  })
+
+  it('未选解码器 / 非自带校验解码器 → 无冲突提示', async () => {
+    const { session } = mountModal()
+    session.checksum.rx = 'sum8'
+    await nextTick()
+    expect(modalEl().textContent ?? '').not.toContain('建议设为')
+    session.decoder.id = 'field'
+    await nextTick()
+    expect(modalEl().textContent ?? '').not.toContain('建议设为')
+  })
 })

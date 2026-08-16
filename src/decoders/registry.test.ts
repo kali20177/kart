@@ -24,4 +24,12 @@ describe('decoder registry', () => {
     register(fieldDecoder)
     expect(getDecoder('field')?.name).toBe(fieldDecoder.name)
   })
+
+  it('modbus-rtu 声明自带 CRC16 校验（能力位，校验和弹窗冲突提示的数据源）', () => {
+    const d = getDecoder('modbus-rtu')
+    expect(d?.selfChecksIntegrity).toBe(true)
+    expect(d?.integrityChecksum).toBe('crc16-modbus')
+    // 字段布局解析器只是按布局切字节、从不校验，不应声明自带校验
+    expect(fieldDecoder.selfChecksIntegrity).toBeUndefined()
+  })
 })

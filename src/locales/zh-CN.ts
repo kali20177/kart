@@ -437,6 +437,7 @@ export default {
     rxAlgorithm: '接收校验算法',
     inheritDefault: '继承会话默认',
     sessionHint: '校验配置按端口独立保存，不同设备可配置不同校验方式。',
+    integrityConflict: '当前帧解码器「{name}」已内置 {algo} 校验，接收校验与它不一致时，合法帧也会被标记为校验失败。建议设为「无」或 {algo}。',
     tooltipEnabled: '校验已开启：发送 {send} · 接收 {rx}',
     tooltipDisabled: '校验未开启，点击配置',
     algo: {

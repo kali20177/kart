@@ -1,6 +1,8 @@
 // 解码器注册表契约 —— 把「帧 → 结构化字段视图」的解析做成可注册扩展点。
 // 本阶段仅内置 TS 解码器；将来 JS 脚本解码器（CSP 禁 eval，需 vm/worker 沙箱）可复用同一契约。
 
+import type { ChecksumAlgorithm } from '@/types'
+
 /** 一个已解码的字段：名称 + 已格式化的显示值 + 在帧中的位置 */
 export interface DecodeField {
   name: string
@@ -32,6 +34,14 @@ export interface DecoderDefinition<O = unknown> {
   /** 显示名（内置集用协议名，与 themes 同例：registry 层保持纯数据） */
   name: string
   description?: string
+  /**
+   * 解码器自带帧完整性校验（匹配成功即意味着帧校验通过，如 Modbus RTU 内部验证 CRC16）。
+   * 校验和弹窗据此提示用户：接收校验算法与 integrityChecksum 不一致时，合法帧也会被
+   * 标记为校验失败。数据驱动护栏——未来新增自带校验的解码器只需声明此字段，调用端无需改动。
+   */
+  selfChecksIntegrity?: boolean
+  /** selfChecksIntegrity 所用的校验算法（冲突提示文案用；声明 selfChecksIntegrity 时应同时声明） */
+  integrityChecksum?: ChecksumAlgorithm
   /** 帧（已剥离帧尾分隔符）→ 字段视图；options 由各解码器解释，可省略 */
   decode(frame: Uint8Array, options?: O): DecodeResult
 }
