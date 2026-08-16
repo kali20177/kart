@@ -132,6 +132,22 @@ describe('updaterReducer（状态机单步迁移）', () => {
     expect(s.progress).toBeNull()
   })
 
+  it('cancel 回到 available（info 保留，可重新下载）', () => {
+    const available = updaterReducer(idle, { type: 'available', info: { version: '1.1.0', files: [{ size: 100 }] } })
+    const downloading = updaterReducer(available, { type: 'download-start' })
+    const s = updaterReducer(downloading, { type: 'cancel' })
+    expect(s.status).toBe('available')
+    expect(s.info?.version).toBe('1.1.0')
+    expect(s.progress).toBeNull()
+    expect(s.error).toBeNull()
+  })
+
+  it('downloaded 后再次 available（复查路径需防回归，见 Updater.check 守卫）', () => {
+    const downloading = updaterReducer(idle, { type: 'download-start' })
+    const downloaded = updaterReducer(downloading, { type: 'downloaded', info: { version: '1.1.0' } })
+    expect(updaterReducer(downloaded, { type: 'not-available' }).status).toBe('not-available')
+  })
+
   it('unavailable → 终态', () => {
     const s = updaterReducer(idle, { type: 'unavailable' })
     expect(s.status).toBe('unavailable')

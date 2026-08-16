@@ -88,6 +88,12 @@ export default {
     close: '关闭',
     unavailable: '自动更新仅在打包版桌面应用可用（当前为开发/浏览器模式）。',
     macUnsigned: 'macOS 自动更新需要开发者签名证书，可先手动下载安装包。',
+    macDownloadHint: 'macOS 自动更新需要开发者签名证书，自动安装可能失败——请使用「手动下载」安装新版本。',
+    cancelDownload: '取消下载',
+    restartConfirmTitle: '确认重启安装？',
+    restartConfirmContent: '重启会中断当前正在进行的操作：{items}。确定继续吗？',
+    recordingActive: '会话录制',
+    transferActive: '文件下发',
   },
   common: {
     cancel: '取消',

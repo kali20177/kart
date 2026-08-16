@@ -65,6 +65,7 @@ export type UpdaterEvent =
   | { type: 'download-start' }
   | { type: 'progress'; progress: UpdaterProgress }
   | { type: 'downloaded'; info: RawUpdateInfo }
+  | { type: 'cancel' }
   | { type: 'error'; message: string }
   | { type: 'unavailable' }
 
@@ -143,6 +144,9 @@ export function updaterReducer(prev: UpdaterState, ev: UpdaterEvent): UpdaterSta
         progress: null,
         error: null
       }
+    case 'cancel':
+      // 用户取消下载：回到「发现新版本」（info 保留），可重新下载
+      return { ...prev, status: 'available', progress: null, error: null }
     case 'error':
       return { ...prev, status: 'error', error: ev.message, progress: null }
     case 'unavailable':

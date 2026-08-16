@@ -222,7 +222,7 @@ macOS 处理（v1 简洁方案）：正常走 `check()`，若下载/安装阶段
 ## 十三、里程碑拆分
 
 - **P0（链路打通）**：electron-updater 依赖 + external；electron-builder publish provider + `--publish never`；CI 补 `latest*.yml` 上传；`Updater.ts` + IPC + preload + `electron-env.d.ts` 类型；`useUpdater` + UpdateDialog + 帮助菜单入口 + 启动自动检查；zh/en i18n；Updater.spec 状态机单测。收口标志：发 `v0.1.1` 后旧版应用端到端更新成功。
-- **P1（健壮性）**：错误降级（手动下载兜底全平台）、下载进度/速度/ETA、取消下载、重启保护（录制/下发确认）、releaseNotes 展示、macOS 无签名降级提示文案。
+- **P1（健壮性）✅ 已完成（2026-08-16）**：错误降级（手动下载兜底全平台）、下载进度/速度/ETA、**取消下载**（CancellationToken + CancelError → 回 available 可重下）、**重启保护（录制/下发活跃时二次确认）**、releaseNotes 展示、macOS 无签名降级提示文案（含 downloaded 态"稍后"不承诺自动安装、主操作改手动下载）。
 - **P2（增强，非本期）**：设置项「自动检查更新」开关（settings 迁移）、channel/预发布通道、Gitee/CDN 镜像 generic provider、真机三平台回归。
 
 ## 十四、待确认（产品决策）

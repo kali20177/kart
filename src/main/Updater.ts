@@ -1,5 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import { autoUpdater, CancellationToken } from 'electron-updater'
 import type { Logger, ProgressInfo, UpdateInfo } from 'electron-updater'
 import { createUpdaterState, isUpdaterActive, updaterReducer } from '../utils/updater'
 import type { UpdaterEvent, UpdaterState } from '../utils/updater'
@@ -17,15 +17,18 @@ const updaterLogger: Logger = {
   debug: (m) => mainLogger.debug('updater', String(m))
 }
 
-// 手动下载兜底地址（与 electron-builder github provider 的仓库一致）
+// 手动下载兜底地址（与 electron-builder github provider 的仓库一致；换仓库需同步两处）
 const RELEASES_URL = 'https://github.com/kali20177/kart/releases/latest'
+
+/** electron-updater 取消下载时 reject 的错误码（builder-util-runtime CancelError） */
+const CANCELLED_CODE = 'ERR_UPDATER_CANCELLED'
 
 /**
  * 应用自升级单例（electron-updater 封装）。
  *
  * 契约（渲染端无关后端，见 docs/upgrade-design.md §15）：
  * - 状态经 `updater:event` 推送完整快照（UpdaterState），渲染端只消费该形态；
- * - 动作：check / download / quitAndInstall / openReleases；
+ * - 动作：check / download / cancelDownload / quitAndInstall / openReleases；
  * - autoDownload=false：下载需用户在对话框显式确认；
  * - autoInstallOnAppQuit=true：「稍后」的语义=下次自然退出时静默安装，绝不主动重启。
  *
@@ -36,6 +39,7 @@ const RELEASES_URL = 'https://github.com/kali20177/kart/releases/latest'
 export class Updater {
   private state: UpdaterState = createUpdaterState()
   private startupCheckScheduled = false
+  private cancelToken: CancellationToken | null = null
 
   /**
    * @param platform 平台注入（默认为运行平台）——Linux deb 渠道判定在测试中
@@ -78,13 +82,13 @@ export class Updater {
     }, delayMs)
   }
 
-  /** 检查更新。进行中（checking/downloading）直接返回当前状态，不重复发起。 */
+  /** 检查更新。进行中（checking/downloading）或已就绪待重启（downloaded）直接返回当前状态，不重复发起。 */
   async check(): Promise<UpdaterState> {
     if (!this.isActive()) {
       this.apply({ type: 'unavailable' })
       return this.getState()
     }
-    if (this.state.status === 'checking' || this.state.status === 'downloading') {
+    if (this.state.status === 'checking' || this.state.status === 'downloading' || this.state.status === 'downloaded') {
       return this.getState()
     }
     this.apply({ type: 'check-start' })
@@ -100,25 +104,40 @@ export class Updater {
     return this.getState()
   }
 
-  /** 开始下载（仅 available 状态可进入）。完成/失败由事件驱动状态。 */
+  /** 开始下载（仅 available 状态可进入）。完成/失败/取消由事件驱动状态。 */
   async download(): Promise<UpdaterState> {
     if (this.state.status !== 'available') return this.getState()
     this.apply({ type: 'download-start' })
+    this.cancelToken = new CancellationToken()
     try {
       mainLogger.info('updater', `downloading v${this.state.info?.version ?? '?'}`)
-      await autoUpdater.downloadUpdate()
+      await autoUpdater.downloadUpdate(this.cancelToken)
     } catch (e) {
+      // 用户主动取消：回到「发现新版本」，可重新下载；不显示错误对话框
+      if (isCancelledError(e)) {
+        mainLogger.info('updater', 'download cancelled by user')
+        this.apply({ type: 'cancel' })
+        return this.getState()
+      }
       const message = e instanceof Error ? e.message : String(e)
       mainLogger.error('updater', `download failed: ${message}`)
       this.apply({ type: 'error', message })
+    } finally {
+      this.cancelToken = null
     }
     return this.getState()
   }
 
+  /** 取消进行中的下载：downloadUpdate 以 CancelError reject，状态回到 available */
+  cancelDownload(): void {
+    if (this.state.status !== 'downloading' || !this.cancelToken) return
+    this.cancelToken.dispose()
+  }
+
   /**
    * 退出并安装。isSilent=false 让 Windows NSIS 弹出安装进度（用户可见），
-   * isForceRunAfter=true 安装完成后重新拉起应用。调用方（渲染端）负责
-   * 在确认对话框里提示录制/下发正在进行的风险。
+   * isForceRunAfter=true 安装完成后重新拉起应用。
+   * 渲染端 UpdateDialog 在调用前已做过录制/下发活跃的二次确认（见 useUpdater）。
    */
   quitAndInstall(): void {
     mainLogger.info('updater', 'quit and install triggered by user')
@@ -170,6 +189,12 @@ export class Updater {
       this.apply({ type: 'downloaded', info: toRawInfo(info) })
     })
     autoUpdater.on('error', (err: Error) => {
+      // 用户主动取消下载也会以 error 走一遍（部分版本）；已由 download() 的
+      // CancelError 分支处理成功态，这里只记日志不覆盖状态
+      if (isCancelledError(err)) {
+        mainLogger.debug('updater', 'ignore cancelled error event')
+        return
+      }
       const message = err instanceof Error ? err.message : String(err)
       mainLogger.error('updater', `autoUpdater error: ${message}`)
       this.apply({ type: 'error', message })
@@ -187,6 +212,11 @@ export class Updater {
       }
     }
   }
+}
+
+/** electron-updater 取消下载时 reject 的错误（builder-util-runtime CancelError） */
+function isCancelledError(e: unknown): boolean {
+  return e instanceof Error && (e as Error & { code?: string }).code === CANCELLED_CODE
 }
 
 /** 原始 UpdateInfo → 契约最小结构（files 仅保留 size，避免泄漏 url/sha512 等）。

@@ -52,12 +52,19 @@ export function useUpdater() {
     if (s.status === 'not-available') message.info(t('update.latest'))
     else if (s.status === 'error') dialogVisible.value = true
     else if (s.status === 'unavailable') message.info(t('update.unavailable'))
+    // downloaded：主进程守卫直接返回「已就绪」——重新弹窗让用户能看到重启安装入口
+    else if (s.status === 'downloaded') dialogVisible.value = true
   }
 
   /** 开始下载（退出按钮置于 available 态对话框） */
   async function download(): Promise<void> {
     const bridge = window.electron?.updater
     if (bridge) state.value = await bridge.download()
+  }
+
+  /** 取消进行中的下载（主进程回 available 经 updater:event 同步状态） */
+  async function cancelDownload(): Promise<void> {
+    await window.electron?.updater?.cancelDownload()
   }
 
   /** 退出并安装（调用方须先确认录制/下发风险） */
@@ -75,5 +82,5 @@ export function useUpdater() {
     dialogVisible.value = false
   }
 
-  return { state, dialogVisible, check, download, quitAndInstall, openReleases, closeDialog }
+  return { state, dialogVisible, check, download, cancelDownload, quitAndInstall, openReleases, closeDialog }
 }

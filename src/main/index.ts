@@ -366,8 +366,10 @@ function registerUpdaterIpc(updater: Updater): void {
   ipcMain.handle('updater:get-state', () => updater.getState())
   // 检查更新：进行中/下载中守卫幂等；非激活环境置 unavailable（不发起网络请求）
   ipcMain.handle('updater:check', () => updater.check())
-  // 开始下载（仅 available 状态生效）；完成/失败由 updater:event 驱动状态
+  // 开始下载（仅 available 状态生效）；完成/失败/取消由 updater:event 驱动状态
   ipcMain.handle('updater:download', () => updater.download())
+  // 取消进行中的下载（状态回到 available，可重新下载）
+  ipcMain.handle('updater:cancel-download', () => updater.cancelDownload())
   // 退出并安装（渲染端负责在确认对话框提示录制/下发风险）
   ipcMain.handle('updater:quit-and-install', () => updater.quitAndInstall())
   // 手动下载兜底：系统浏览器打开 GitHub Releases 页

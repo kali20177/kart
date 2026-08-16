@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NModal, NButton, NSpin, NProgress } from 'naive-ui'
+import { NModal, NButton, NSpin, NProgress, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useUpdater } from '@/composables/useUpdater'
+import { useActiveSession } from '@/composables/useSession'
 import { formatBytes, formatSpeed, formatEta } from '@/utils/updater'
 
-const { state, dialogVisible, download, quitAndInstall, openReleases, check, closeDialog } = useUpdater()
+const { state, dialogVisible, download, cancelDownload, quitAndInstall, openReleases, check, closeDialog } = useUpdater()
 const { t } = useI18n()
+const dialog = useDialog()
+const activeSession = useActiveSession()
 
 const status = computed(() => state.value.status)
 const info = computed(() => state.value.info)
@@ -38,6 +41,29 @@ const title = computed(() => {
     default: return t('menu.checkUpdate')
   }
 })
+
+// ── 重启保护（串口工具特有）：录制/下发活跃时二次确认，避免状态全丢 ──
+const recordingStatus = computed(() => activeSession.value.recorder.state.status)
+const transferActive = computed(() =>
+  activeSession.value.transfer.transfers.some((t) => t.status === 'queued' || t.status === 'sending' || t.status === 'paused')
+)
+
+function onRestart(): void {
+  const parts: string[] = []
+  if (recordingStatus.value !== 'idle') parts.push(t('update.recordingActive'))
+  if (transferActive.value) parts.push(t('update.transferActive'))
+  if (parts.length === 0) {
+    quitAndInstall()
+    return
+  }
+  dialog.warning({
+    title: t('update.restartConfirmTitle'),
+    content: t('update.restartConfirmContent', { items: parts.join('、') }),
+    positiveText: t('update.restartNow'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: () => quitAndInstall()
+  })
+}
 </script>
 
 <template>
@@ -82,7 +108,9 @@ const title = computed(() => {
       <!-- 下载完成 -->
       <template v-else-if="status === 'downloaded'">
         <p class="done">{{ t('update.downloaded') }}</p>
-        <p class="hint">{{ t('update.laterHint') }}</p>
+        <!-- macOS 无签名：自动安装大概率失败，不承诺「稍后自动安装」，引导手动下载 -->
+        <p v-if="isMac" class="hint">{{ t('update.macDownloadHint') }}</p>
+        <p v-else class="hint">{{ t('update.laterHint') }}</p>
       </template>
 
       <!-- 失败（自动检查的失败保持静默，此态仅手动检查/下载中出错进入） -->
@@ -99,11 +127,19 @@ const title = computed(() => {
           <NButton size="small" type="primary" @click="download">{{ t('update.download') }}</NButton>
         </template>
         <template v-else-if="status === 'downloading'">
+          <NButton size="small" @click="cancelDownload">{{ t('update.cancelDownload') }}</NButton>
           <NButton size="small" @click="closeDialog">{{ t('update.close') }}</NButton>
         </template>
         <template v-else-if="status === 'downloaded'">
-          <NButton size="small" @click="closeDialog">{{ t('update.later') }}</NButton>
-          <NButton size="small" type="primary" @click="quitAndInstall">{{ t('update.restartNow') }}</NButton>
+          <template v-if="isMac">
+            <!-- mac 无签名：不承诺重启即装，主操作走手动下载 -->
+            <NButton size="small" @click="closeDialog">{{ t('update.later') }}</NButton>
+            <NButton size="small" type="primary" @click="openReleases">{{ t('update.manualDownload') }}</NButton>
+          </template>
+          <template v-else>
+            <NButton size="small" @click="closeDialog">{{ t('update.later') }}</NButton>
+            <NButton size="small" type="primary" @click="onRestart">{{ t('update.restartNow') }}</NButton>
+          </template>
         </template>
         <template v-else-if="status === 'error'">
           <NButton size="small" @click="closeDialog">{{ t('update.close') }}</NButton>

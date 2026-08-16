@@ -45,6 +45,8 @@ declare global {
         check(): Promise<UpdaterState>
         /** 开始下载（仅 available 状态生效） */
         download(): Promise<UpdaterState>
+        /** 取消进行中的下载（状态回到 available，可重新下载） */
+        cancelDownload(): Promise<void>
         /** 退出并安装（调用方须先确认录制/下发风险） */
         quitAndInstall(): Promise<void>
         /** 打开 GitHub Releases 页（手动下载兜底） */

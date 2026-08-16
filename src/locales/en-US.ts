@@ -88,6 +88,12 @@ export default {
     close: 'Close',
     unavailable: 'Auto-update is only available in the packaged desktop app (current environment is dev/browser).',
     macUnsigned: 'Updating on macOS requires a developer signing certificate. You can download the installer manually for now.',
+    macDownloadHint: 'Updating on macOS requires a developer signing certificate; automatic installation may fail — please use "Download Manually" to install the new version.',
+    cancelDownload: 'Cancel Download',
+    restartConfirmTitle: 'Restart to install?',
+    restartConfirmContent: 'Restarting will interrupt the following activity in progress: {items}. Continue?',
+    recordingActive: 'session recording',
+    transferActive: 'file transfer',
   },
   common: {
     cancel: 'Cancel',

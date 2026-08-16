@@ -4,7 +4,7 @@ import { UPDATER_EVENT_CHANNEL } from './Updater'
 // ── electron-updater / electron mock ──
 // 状态与实例数组都在 vi.hoisted 中定义：hoisted 早于 vi.mock 执行，
 // 工厂可引用替身，测试拿到强类型实例（无需 any）。
-const { mockAutoUpdater, mockWindows, mockApp, mockShell } = vi.hoisted(() => {
+const { mockAutoUpdater, mockWindows, mockApp, mockShell, MockCancellationToken } = vi.hoisted(() => {
   const listeners = new Map<string, Array<(...args: unknown[]) => void>>()
 
   const mockAutoUpdater = {
@@ -23,7 +23,7 @@ const { mockAutoUpdater, mockWindows, mockApp, mockShell } = vi.hoisted(() => {
     resetListeners: () => listeners.clear(),
     setFeedURL: vi.fn(),
     checkForUpdates: vi.fn(async () => null),
-    downloadUpdate: vi.fn(async () => undefined),
+    downloadUpdate: vi.fn(async (_token?: unknown) => undefined),
     quitAndInstall: vi.fn()
   }
 
@@ -32,10 +32,16 @@ const { mockAutoUpdater, mockWindows, mockApp, mockShell } = vi.hoisted(() => {
   const mockApp = { isPackaged: true, getVersion: vi.fn(() => '0.1.0') }
   const mockShell = { openExternal: vi.fn(async () => undefined) }
 
-  return { mockAutoUpdater, mockWindows, mockApp, mockShell }
+  // CancellationToken 最小替身（Updater.download 构造 + cancelDownload dispose）
+  class MockCancellationToken {
+    disposed = false
+    dispose() { this.disposed = true }
+  }
+
+  return { mockAutoUpdater, mockWindows, mockApp, mockShell, MockCancellationToken }
 })
 
-vi.mock('electron-updater', () => ({ autoUpdater: mockAutoUpdater }))
+vi.mock('electron-updater', () => ({ autoUpdater: mockAutoUpdater, CancellationToken: MockCancellationToken }))
 vi.mock('electron', () => ({
   app: mockApp,
   BrowserWindow: { getAllWindows: () => mockWindows },
@@ -126,6 +132,60 @@ describe('Updater（主进程单例）', () => {
     const p2 = u.check()
     await Promise.all([p1, p2])
     expect(mockAutoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+  })
+
+  it('downloaded 守卫：待重启状态下手动复查不重新发起（防「已就绪」被退回「发现新版本」）', async () => {
+    const u = new Updater()
+    await u.check()
+    mockAutoUpdater.emit('update-available', NEW_INFO)
+    await u.download()
+    mockAutoUpdater.emit('update-downloaded', NEW_INFO)
+    expect(u.getState().status).toBe('downloaded')
+
+    await u.check() // 守卫直接返回，不查 feed
+    expect(mockAutoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(u.getState().status).toBe('downloaded')
+  })
+
+  it('取消下载：CancelError → 回到 available（不显示错误），下载传入 CancellationToken', async () => {
+    const u = new Updater()
+    await u.check()
+    mockAutoUpdater.emit('update-available', NEW_INFO)
+    const cancelErr = Object.assign(new Error('cancelled'), { code: 'ERR_UPDATER_CANCELLED' })
+    mockAutoUpdater.downloadUpdate.mockRejectedValueOnce(cancelErr)
+
+    await u.download()
+    expect(u.getState().status).toBe('available')
+    expect(u.getState().error).toBeNull()
+    expect(u.getState().info?.version).toBe('1.1.0') // 可重新下载
+    // 下载请求携带可取消令牌
+    expect(mockAutoUpdater.downloadUpdate.mock.calls[0][0]).toBeDefined()
+  })
+
+  it('取消下载：非 downloading 状态调用为 no-op', () => {
+    const u = new Updater()
+    expect(() => u.cancelDownload()).not.toThrow()
+  })
+
+  it('取消产生的 error 事件（部分版本会发）被忽略，不覆盖状态', async () => {
+    const u = new Updater()
+    await u.check()
+    mockAutoUpdater.emit('update-available', NEW_INFO)
+    await u.download()
+    const cancelled = Object.assign(new Error('cancelled'), { code: 'ERR_UPDATER_CANCELLED' })
+    mockAutoUpdater.emit('error', cancelled)
+    expect(u.getState().status).toBe('downloading')
+  })
+
+  it('下载失败（非取消）→ error 状态', async () => {
+    const u = new Updater()
+    await u.check()
+    mockAutoUpdater.emit('update-available', NEW_INFO)
+    mockAutoUpdater.downloadUpdate.mockRejectedValueOnce(new Error('磁盘空间不足'))
+    await u.download()
+    const s = u.getState()
+    expect(s.status).toBe('error')
+    expect(s.error).toBe('磁盘空间不足')
   })
 
   it('完整更新流：check → available → download → progress → downloaded，全程广播契约状态', async () => {
