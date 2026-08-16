@@ -126,6 +126,11 @@ const navItems = computed<NavItem[]>(() => [
     icon: 'M8 2v10M4 8l4 4 4-4M2 14h12'
   },
   {
+    key: 'input',
+    label: t('settings.input'),
+    icon: 'M2 8h11M9 4l4 4-4 4'
+  },
+  {
     key: 'display',
     label: t('settings.display'),
     icon: 'M2 4h12v9H2zM5 13v1h6v-1'
@@ -226,6 +231,17 @@ const navItems = computed<NavItem[]>(() => [
           </NFormItem>
           <NFormItem :label="t('settings.bufferLimit')">
             <NInputNumber v-model:value="s.bufferLimit" :min="100" :max="100000" :step="500" style="width: 100%" />
+          </NFormItem>
+        </NForm>
+
+        <!-- ========== 输入 ========== -->
+        <NForm v-if="activeTab === 'input'" label-placement="top" size="small">
+          <div class="section-title">{{ t('settings.input') }}</div>
+          <NFormItem>
+            <template #label>
+              {{ t('settings.sendHistoryLimit') }}<span style="margin-left: 6px; color: var(--text-dim); font-weight: 400">{{ t('settings.sendHistoryLimitHint') }}</span>
+            </template>
+            <NInputNumber v-model:value="s.sendHistoryLimit" :min="1" :max="5000" :step="10" style="width: 100%" />
           </NFormItem>
         </NForm>
 

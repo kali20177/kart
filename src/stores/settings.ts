@@ -37,6 +37,7 @@ const DEFAULTS: AppSettings = {
   autoReconnect: false,
   showPauseNotification: true,
   recordFormat: 'text' as const,
+  sendHistoryLimit: 50,
 }
 
 /** 全局共享 store：应用设置跨会话统一（组件经 session.settings 或单例均可读同一 proxy）。 */

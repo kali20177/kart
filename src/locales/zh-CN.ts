@@ -363,6 +363,7 @@ export default {
   settings: {
     title: '设置',
     receive: '接收',
+    input: '输入',
     display: '显示',
     waveform: '波形解析',
     connection: '连接',
@@ -378,6 +379,9 @@ export default {
     delimiterHex: '分隔符 (HEX)',
     fixedLengthBytes: '每帧字节数',
     bufferLimit: '缓冲上限（帧）',
+    // 输入
+    sendHistoryLimit: '发送历史条数上限',
+    sendHistoryLimitHint: '输入框 ↑/↓ 翻阅与历史弹窗的最大条数',
     // 显示
     defaultView: '默认视图',
     theme: '主题',

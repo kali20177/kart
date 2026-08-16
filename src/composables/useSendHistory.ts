@@ -1,20 +1,43 @@
-import { ref } from 'vue'
+import { ref, watch, type WatchStopHandle } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { STORAGE_PREFIX } from './useStorage'
+import { useSettingsStore } from '@/stores/settings'
 
 const STORAGE_KEY = STORAGE_PREFIX + 'sendHistory'
-const DEFAULT_MAX = 50
+const FALLBACK_MAX = 50
 
 // 模块级 ref，确保所有调用方共享同一份状态。
 // useStorage 返回响应式 ref，变更（含 in-place unshift/splice）自动落盘 localStorage，
 // 无需手动 persist。跨标签页亦同步。
 const history = useStorage<string[]>(STORAGE_KEY, [])
 const cursor = ref(-1)
-let max = DEFAULT_MAX
+
+/** 当前上限：全局设置可配（设置 ▸ 输入 ▸ 发送历史条数上限）；未配置/非法时回退 50 */
+function currentMax(): number {
+  const limit = useSettingsStore().settings.sendHistoryLimit
+  return Number.isInteger(limit) && limit > 0 ? limit : FALLBACK_MAX
+}
+
+/** 按当前上限裁剪历史 */
+function trim() {
+  const m = currentMax()
+  if (history.value.length > m) {
+    history.value.splice(m)
+    history.value = [...history.value]
+  }
+}
+
+// 上限调低时立即裁剪，避免历史弹窗展示超出设置的条数。
+// 惰性创建：watch 建立时立即求值一次 getter（拿 oldValue），若放模块顶层，
+// 会在 app.use(createPinia()) 之前求值 → useSettingsStore 抛 "no active Pinia"，
+// 导致 bundle 在 mount 前崩溃、应用停在加载页。故在首次组件 setup 调用时才创建。
+let trimWatch: WatchStopHandle | null = null
 
 /** 发送历史：↑/↓ 翻阅本会话发送过的内容。自动持久化到 localStorage */
-export function useSendHistory(maxOverride = DEFAULT_MAX) {
-  max = maxOverride
+export function useSendHistory() {
+  if (!trimWatch) {
+    trimWatch = watch(() => useSettingsStore().settings.sendHistoryLimit, trim)
+  }
 
   function add(entry: string) {
     const trimmed = entry
@@ -22,7 +45,7 @@ export function useSendHistory(maxOverride = DEFAULT_MAX) {
     // 去掉与最近一条重复的项
     if (history.value[0] !== trimmed) {
       history.value.unshift(trimmed)
-      if (history.value.length > max) history.value.pop()
+      if (history.value.length > currentMax()) history.value.pop()
     }
     cursor.value = -1
   }

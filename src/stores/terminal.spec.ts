@@ -30,6 +30,7 @@ function makeSettings(partial?: Partial<AppSettings['terminal']>): AppSettings {
     autoReconnect: false,
     showPauseNotification: true,
     recordFormat: 'text',
+    sendHistoryLimit: 50,
   }
 }
 

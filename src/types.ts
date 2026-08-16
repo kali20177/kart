@@ -226,6 +226,9 @@ export interface AppSettings {
   showPauseNotification: boolean
   // 录制
   recordFormat: RecordFormat
+  // 输入
+  /** 发送历史最大保留条数（输入框 ↑/↓ 翻阅与历史弹窗展示上限） */
+  sendHistoryLimit: number
 }
 
 /**

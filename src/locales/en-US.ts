@@ -363,6 +363,7 @@ export default {
   settings: {
     title: 'Settings',
     receive: 'Receive',
+    input: 'Input',
     display: 'Display',
     waveform: 'Wave Parse',
     connection: 'Connection',
@@ -377,6 +378,8 @@ export default {
     delimiterHex: 'Delimiter (HEX)',
     fixedLengthBytes: 'Bytes per Frame',
     bufferLimit: 'Buffer Limit (frames)',
+    sendHistoryLimit: 'Send History Limit',
+    sendHistoryLimitHint: 'Max entries for ↑/↓ browsing and the history popover',
     defaultView: 'Default View',
     theme: 'Theme',
     dark: 'Dark',
