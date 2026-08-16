@@ -56,7 +56,7 @@ vi.mock('./logger', () => ({
 
 vi.mock('serialport', () => ({ SerialPort: MockSerialPort }))
 
-import { SerialPortManager, toCalloutPath } from './SerialPortManager'
+import { SerialPortManager, toCalloutPath, isMacOSPseudoTerminal } from './SerialPortManager'
 
 const OPTS = {
   baudRate: 115200,
@@ -90,6 +90,23 @@ describe('toCalloutPath · macOS tty → cu 换算', () => {
   })
 })
 
+describe('isMacOSPseudoTerminal · macOS 伪终端识别', () => {
+  it('darwin 下识别 macOS 系统伪终端', () => {
+    expect(isMacOSPseudoTerminal('/dev/tty.debug-console', 'darwin')).toBe(true)
+    expect(isMacOSPseudoTerminal('/dev/tty.Bluetooth-Incoming-Port', 'darwin')).toBe(true)
+  })
+
+  it('darwin 下真实串口不误判', () => {
+    expect(isMacOSPseudoTerminal('/dev/tty.usbserial-2430', 'darwin')).toBe(false)
+    expect(isMacOSPseudoTerminal('/dev/tty.usbmodem2303', 'darwin')).toBe(false)
+  })
+
+  it('非 darwin 平台不识别（过滤仅 macOS 生效，CI 在 linux 上跑也覆盖此分支）', () => {
+    expect(isMacOSPseudoTerminal('/dev/tty.debug-console', 'linux')).toBe(false)
+    expect(isMacOSPseudoTerminal('/dev/tty.Bluetooth-Incoming-Port', 'win32')).toBe(false)
+  })
+})
+
 describe('SerialPortManager · listPortsAsync', () => {
   let mgr: SerialPortManager
 
@@ -114,12 +131,18 @@ describe('SerialPortManager · listPortsAsync', () => {
       { path: '/dev/tty.Bluetooth-Incoming-Port' }
     ])
     const list = await mgr.listPortsAsync()
-    expect(list).toHaveLength(2)
-    // 本机平台为 darwin 时换算成 cu；其他平台保持 tty —— 两种断言都成立
+    // darwin 上过滤 macOS 伪终端并换算 cu；其他平台（CI/linux）不过滤、保持 tty —— 长度与路径断言同分支
+    const isDarwin = process.platform === 'darwin'
+    expect(list).toHaveLength(isDarwin ? 2 : 4)
     expect(list.map((i) => i.path)).toEqual(
-      process.platform === 'darwin'
+      isDarwin
         ? ['/dev/cu.usbserial-2430', '/dev/cu.usbmodem2303']
-        : ['/dev/tty.usbserial-2430', '/dev/tty.usbmodem2303']
+        : [
+            '/dev/tty.usbserial-2430',
+            '/dev/tty.usbmodem2303',
+            '/dev/tty.debug-console',
+            '/dev/tty.Bluetooth-Incoming-Port'
+          ]
     )
     expect(list[0].vendorId).toBe('1a86')
     expect(list[0].productId).toBe('7523')

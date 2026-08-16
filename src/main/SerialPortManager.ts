@@ -14,8 +14,12 @@ const MACOS_PSEUDO_TERMINAL_PATTERNS = [
 /** 单端口占用探测超时（ms）：某端口 open 挂起时不阻塞整个枚举，超时视为不占用 */
 const PROBE_TIMEOUT_MS = 1000
 
-function isMacOSPseudoTerminal(path: string): boolean {
-  if (process.platform !== 'darwin') return false
+/**
+ * 是否为 macOS 系统伪终端（IOKit 报为串口但非真实串口，枚举时过滤）。
+ * platform 参数默认取 process.platform，便于跨平台单测强制 darwin/linux（与 toCalloutPath 同模式）。
+ */
+export function isMacOSPseudoTerminal(path: string, platform: string = process.platform): boolean {
+  if (platform !== 'darwin') return false
   return MACOS_PSEUDO_TERMINAL_PATTERNS.some((p) => p.test(path))
 }
 
