@@ -1,4 +1,4 @@
-import { ref, watch, type WatchStopHandle } from 'vue'
+import { effectScope, ref, watch } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { STORAGE_PREFIX } from './useStorage'
 import { useSettingsStore } from '@/stores/settings'
@@ -28,16 +28,26 @@ function trim() {
 }
 
 // 上限调低时立即裁剪，避免历史弹窗展示超出设置的条数。
-// 惰性创建：watch 建立时立即求值一次 getter（拿 oldValue），若放模块顶层，
-// 会在 app.use(createPinia()) 之前求值 → useSettingsStore 抛 "no active Pinia"，
-// 导致 bundle 在 mount 前崩溃、应用停在加载页。故在首次组件 setup 调用时才创建。
-let trimWatch: WatchStopHandle | null = null
+// 用模块级手工 detached effectScope 惰性创建：
+//  - 惰性：scope.run 内的 watch 创建时会立即求值一次 getter（拿 oldValue），若放模块顶层，
+//    会在 app.use(createPinia()) 之前求值 → useSettingsStore 抛 "no active Pinia"，
+//    导致 bundle 在 mount 前崩溃、应用停在加载页。故延迟到首次组件 setup 调用时。
+//  - detached（不挂当前组件作用域）：setup 期间创建的 effect 默认随该组件卸载而 stop，
+//    首次调用组件一卸载，「调低上限立即裁剪」会永久失效；detached scope 与组件生命周期解耦，
+//    与应用同生命周期（模块级状态本来就该如此）。scope 由模块持有、永不 stop。
+let trimScope: ReturnType<typeof effectScope> | null = null
+function ensureTrimWatch() {
+  if (trimScope) return
+  const scope = effectScope(true)
+  scope.run(() => {
+    watch(() => useSettingsStore().settings.sendHistoryLimit, trim)
+  })
+  trimScope = scope
+}
 
 /** 发送历史：↑/↓ 翻阅本会话发送过的内容。自动持久化到 localStorage */
 export function useSendHistory() {
-  if (!trimWatch) {
-    trimWatch = watch(() => useSettingsStore().settings.sendHistoryLimit, trim)
-  }
+  ensureTrimWatch()
 
   function add(entry: string) {
     const trimmed = entry

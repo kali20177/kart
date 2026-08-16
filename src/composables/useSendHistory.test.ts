@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { nextTick, defineComponent } from 'vue'
+import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -54,5 +55,25 @@ describe('useSendHistory', () => {
     setActivePinia(undefined as never)
     vi.resetModules()
     await expect(import('./useSendHistory')).resolves.toBeDefined()
+  })
+
+  it('上限 watch 不随首个调用组件卸载而失效', async () => {
+    // setup 期间创建的 watch 默认挂组件作用域，组件卸载即停；上限裁剪须与应用同生命周期，
+    // 故 useSendHistory 用 detached effectScope 隔离——首个调用组件卸载后调低上限仍应立即裁剪。
+    const Host = defineComponent({
+      setup() {
+        sendHistory.useSendHistory()
+        return () => null
+      },
+    })
+    const wrapper = mount(Host, { attachTo: document.body })
+    const h = sendHistory.useSendHistory()
+    for (let i = 0; i < 3; i++) h.add(`cmd-${i}`)
+    wrapper.unmount()
+    document.body.innerHTML = ''
+
+    useSettingsStore().settings.sendHistoryLimit = 2
+    await nextTick()
+    expect(h.history.value).toEqual(['cmd-2', 'cmd-1'])
   })
 })
