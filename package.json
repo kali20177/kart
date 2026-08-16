@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "嵌入式串口调试助手",
-  "author": "kart",
+  "author": "kali20177",
+  "license": "MIT",
   "type": "module",
   "main": "dist-electron/main/index.cjs",
   "scripts": {

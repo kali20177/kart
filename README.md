@@ -94,3 +94,7 @@ npm run electron:preview  # 构建后用 Electron 直接运行（不打包）
 | TCP（Electron） | Node `net` 模块（主进程 IPC） |
 | 持久化 | localStorage + IndexedDB 镜像（Electron 下主进程 JSON 文件） |
 | 测试 | Vitest + jsdom + Playwright CDP（终端/布局端到端验证） |
+
+## License
+
+[MIT](./LICENSE) · Copyright (c) 2026 kali20177

@@ -7,7 +7,8 @@
   "files": [
     "dist/**",
     "dist-electron/**",
-    "package.json"
+    "package.json",
+    "LICENSE"
   ],
   "asarUnpack": [
     "**/*.node"
@@ -21,9 +22,13 @@
     "target": "nsis",
     "icon": "build/icon.ico"
   },
+  "nsis": {
+    "license": "LICENSE"
+  },
   "linux": {
     "target": ["AppImage", "deb"],
     "icon": "build/icon.png",
+    "license": "LICENSE",
     "artifactName": "${productName}-${version}-${arch}.${ext}"
   }
 }
