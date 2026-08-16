@@ -71,6 +71,9 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.blockmap
+            # electron-updater 元数据（无它 updater 拿不到最新版本/下载地址）：
+            # Windows→latest.yml / macOS→latest-mac.yml / Linux→latest-linux.yml
+            release/latest*.yml
           if-no-files-found: error
 
   e2e:

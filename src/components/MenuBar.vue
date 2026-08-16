@@ -9,7 +9,9 @@ import { storage } from '@/composables/useStorage'
 import { onSnapshotExport } from '@/utils/persist'
 import { useI18n } from 'vue-i18n'
 import { logger } from '@/utils/logger'
+import { useUpdater } from '@/composables/useUpdater'
 import KnowledgeBaseModal from './KnowledgeBaseModal.vue'
+import UpdateDialog from './UpdateDialog.vue'
 
 const { t } = useI18n()
 // settings/commands 为全局共享 store（会话间统一），serial/recorder 指向当前活动会话。
@@ -26,6 +28,8 @@ const showAbout = ref(false)
 const showLicense = ref(false)
 const showShortcuts = ref(false)
 const showKnowBase = ref(false)
+
+const updater = useUpdater()
 
 // 容量告警快照导出成功的提示（persist.ts 通过事件广播，UI 层在此消费）
 onMounted(() => {
@@ -105,11 +109,18 @@ const helpMenu = computed<DropdownOption[]>(() => [
   { label: t('menu.knowBase'), key: 'know-base' },
   { type: 'divider', key: 'd1' },
   { label: t('menu.shortcuts'), key: 'shortcuts' },
-  { type: 'divider', key: 'd2' },
-  { label: t('menu.about'), key: 'about' },
+  // 「检查更新」仅桌面版（Electron）存在；浏览器无 updater 桥不展示
+  ...(window.electron?.updater
+    ? [
+        { type: 'divider' as const, key: 'd2' },
+        { label: t('menu.checkUpdate'), key: 'check-update' }
+      ]
+    : []),
   { type: 'divider', key: 'd3' },
-  { label: t('menu.license'), key: 'license' },
+  { label: t('menu.about'), key: 'about' },
   { type: 'divider', key: 'd4' },
+  { label: t('menu.license'), key: 'license' },
+  { type: 'divider', key: 'd5' },
   { label: t('menu.devtools'), key: 'devtools' }
 ])
 
@@ -183,6 +194,9 @@ function handleSelect(key: string) {
         message.info(t('about.browserDevtools'))
       }
       break
+    case 'check-update':
+      void updater.check()
+      break
   }
 }
 </script>
@@ -242,6 +256,7 @@ function handleSelect(key: string) {
   </NModal>
 
   <KnowledgeBaseModal v-model:show="showKnowBase" />
+  <UpdateDialog />
 </template>
 
 <style scoped>

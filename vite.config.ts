@@ -86,7 +86,9 @@ export default defineConfig({
                     // 原生 .node 向量，不能被打进 bundle（路径会失效）。external 后
                     // 在运行时由 Node 从打包应用内的 node_modules 解析，配合
                     // electron-builder 的 asarUnpack 把 .node 解出 asar。
-                    external: ['serialport', /^@serialport\//, 'node-pty']
+                    // electron-updater 同列：含平台相关动态 require（mac 走
+                    // Squirrel.Mac），保持 bundle 外置、运行时从 node_modules 解析。
+                    external: ['serialport', /^@serialport\//, 'node-pty', 'electron-updater']
                   }
                 }
               }

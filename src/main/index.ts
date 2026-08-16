@@ -5,6 +5,7 @@ import { SerialPortManager } from './SerialPortManager'
 import { TcpManager } from './TcpManager'
 import { PtyManager } from './PtyManager'
 import { JsonStore } from './JsonStore'
+import { Updater } from './Updater'
 import { mainLogger } from './logger'
 
 // ── 全局错误拦截（必须在最前面注册） ──
@@ -359,6 +360,20 @@ function registerLoggerIpc(): void {
   })
 }
 
+/** 注册应用自升级 IPC handlers（Updater 单例，状态经 updater:event 推送） */
+function registerUpdaterIpc(updater: Updater): void {
+  // 当前状态快照（渲染端挂载时同步，防事件早于订阅丢失）
+  ipcMain.handle('updater:get-state', () => updater.getState())
+  // 检查更新：进行中/下载中守卫幂等；非激活环境置 unavailable（不发起网络请求）
+  ipcMain.handle('updater:check', () => updater.check())
+  // 开始下载（仅 available 状态生效）；完成/失败由 updater:event 驱动状态
+  ipcMain.handle('updater:download', () => updater.download())
+  // 退出并安装（渲染端负责在确认对话框提示录制/下发风险）
+  ipcMain.handle('updater:quit-and-install', () => updater.quitAndInstall())
+  // 手动下载兜底：系统浏览器打开 GitHub Releases 页
+  ipcMain.handle('updater:open-releases', () => updater.openReleases())
+}
+
 /** 注册持久化镜像 IPC handlers（渲染端 localStorage 的权威副本落盘） */
 function registerPersistIpc(store: JsonStore): void {
   // 渲染端每次 persistNow 调用触发，写入内存 store 并防抖落盘
@@ -465,6 +480,8 @@ app.whenReady().then(() => {
   registerTcpIpc()
   registerLoggerIpc()
   registerPersistIpc(jsonStore)
+  const updater = new Updater()
+  registerUpdaterIpc(updater)
   configureWebSerial()
 
   Menu.setApplicationMenu(null)
@@ -475,6 +492,10 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  // 启动后延迟静默检查：有更新才推事件（渲染端弹窗），无更新不打扰。
+  // 渲染端在 App 挂载即订阅 updater:event，5s 延迟保证订阅先于结果事件。
+  updater.scheduleStartupCheck()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

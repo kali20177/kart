@@ -1,7 +1,12 @@
 {
   "appId": "com.kart.app",
   "productName": "KART",
-  "publish": null,
+  "publish": {
+    "provider": "github",
+    "owner": "kali20177",
+    "repo": "kart",
+    "releaseType": "release"
+  },
   "directories": {
     "output": "release"
   },

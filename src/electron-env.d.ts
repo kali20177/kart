@@ -1,5 +1,6 @@
 import type { ElectronSerial } from '@/serial/SerialPortDriver'
 import type { ElectronTcp } from '@/serial/TcpDriver'
+import type { UpdaterState } from '@/utils/updater'
 
 // preload 通过 contextBridge 暴露的 Electron 桥接 API（仅 Electron 下存在）。
 // 从 env.d.ts 拆出独立模块文件，以便引用 SerialPortDriver 导出的 ElectronSerial
@@ -36,6 +37,20 @@ declare global {
         save(key: string, value: unknown): Promise<boolean>
         /** 全量快照导出（容量告警时），用户经系统对话框选择保存位置 */
         exportSnapshot(content: string, fileName: string): Promise<boolean>
+      }
+      updater?: {
+        /** 当前状态快照（挂载时同步用，防事件早于订阅丢失） */
+        getState(): Promise<UpdaterState>
+        /** 检查更新（进行中/下载中守卫，幂等） */
+        check(): Promise<UpdaterState>
+        /** 开始下载（仅 available 状态生效） */
+        download(): Promise<UpdaterState>
+        /** 退出并安装（调用方须先确认录制/下发风险） */
+        quitAndInstall(): Promise<void>
+        /** 打开 GitHub Releases 页（手动下载兜底） */
+        openReleases(): Promise<void>
+        /** 订阅状态推送，返回退订函数 */
+        onState(handler: (state: UpdaterState) => void): () => void
       }
     }
     // Tauri 版原生桥（`window.kart`）在 Electron 分支不存在，声明为可选仅为让

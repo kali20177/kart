@@ -1,0 +1,17 @@
+# 本地升级链路验证专用配置（仅 dev 模式生效，electron-builder files 不包含此文件，不会打包进应用）。
+#
+# electron:dev 时若设 KART_UPDATE_DEV=1，主进程 Updater 置 forceDevUpdateConfig=true，
+# electron-updater 会读取 app.getAppPath()（dev 下即项目根）的 dev-app-update.yml，
+# 把更新源指向本地服务器，不触真实网络即可验证「检查→下载→完成」全链路。
+#
+# 用法：
+#   1. 先构建一次产出元数据与安装包：npm run electron:build（latest-mac.yml 等在 release/）
+#   2. 在 release/ 起本地静态服务器：cd release && python3 -m http.server 8765
+#   3. 启动 dev 验证：KART_UPDATE_DEV=1 npm run electron:dev
+#      —— 注意 electron-updater 会缓存检查结果，本地反复验证时可先删
+#         ~/Library/Caches/kart-updater（或设置里清缓存）避免误判「已是最新」。
+#
+# 打包产物验证用 KART_UPDATE_FEED 环境变量覆盖烘焙地址（generic provider 同语义），
+# 无需为测试另行打包一份假地址构建。
+provider: generic
+url: http://127.0.0.1:8765

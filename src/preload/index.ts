@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { UpdaterState } from '../utils/updater'
 
 // 主进程回调写盘错误时，转发给渲染进程录制器（按窗口）。可选监听。
 let writeErrorHandler: ((msg: string) => void) | null = null
@@ -46,6 +47,15 @@ ipcRenderer.on('tcp:data', (_e, payload: { id: string; data: Uint8Array }) => {
 })
 ipcRenderer.on('tcp:error', (_e, payload: { id: string; msg: string }) => {
   for (const h of tcpErrorHandlers) h(payload.msg, payload.id)
+})
+
+// ── 应用自升级 ──
+// 主进程经 webContents.send('updater:event', state) 推送完整状态快照
+// （单一通道 + 完整快照：订阅方无需按事件类型拼装，防渲染端竞态）。
+type UpdaterStateHandler = (state: UpdaterState) => void
+const updaterStateHandlers = new Set<UpdaterStateHandler>()
+ipcRenderer.on('updater:event', (_e, state: UpdaterState) => {
+  for (const h of updaterStateHandlers) h(state)
 })
 
 contextBridge.exposeInMainWorld('electron', {
@@ -198,5 +208,24 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('persist:save', key, value) as Promise<boolean>,
     exportSnapshot: (content: string, fileName: string) =>
       ipcRenderer.invoke('persist:export-snapshot', content, fileName) as Promise<boolean>,
+  },
+
+  // ── 应用自升级（渲染端契约与后端无关，见 docs/upgrade-design.md §15）──
+  updater: {
+    /** 当前状态快照（挂载时同步用，防事件早于订阅丢失） */
+    getState: () => ipcRenderer.invoke('updater:get-state') as Promise<UpdaterState>,
+    /** 检查更新（进行中/下载中守卫，幂等） */
+    check: () => ipcRenderer.invoke('updater:check') as Promise<UpdaterState>,
+    /** 开始下载（仅 available 状态生效） */
+    download: () => ipcRenderer.invoke('updater:download') as Promise<UpdaterState>,
+    /** 退出并安装（调用方须先确认录制/下发风险） */
+    quitAndInstall: () => ipcRenderer.invoke('updater:quit-and-install') as Promise<void>,
+    /** 打开 GitHub Releases 页（手动下载兜底） */
+    openReleases: () => ipcRenderer.invoke('updater:open-releases') as Promise<void>,
+    /** 订阅状态推送，返回退订函数 */
+    onState: (handler: UpdaterStateHandler) => {
+      updaterStateHandlers.add(handler)
+      return () => { updaterStateHandlers.delete(handler) }
+    }
   }
 })
