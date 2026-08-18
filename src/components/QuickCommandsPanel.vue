@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import {
   NButton,
   NModal,
   NForm,
   NFormItem,
   NInput,
+  NInputNumber,
   NSelect,
   NColorPicker,
   NDropdown,
@@ -15,6 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { useActiveSession } from '@/composables/useSession'
 import { useCommandsStore } from '@/stores/commands'
 import { useSendHistory } from '@/composables/useSendHistory'
+import { expandCommandVars } from '@/utils/command-vars'
 import type { DataMode, LineEnding, QuickCommand } from '@/types'
 
 const sendHistory = useSendHistory()
@@ -31,6 +33,14 @@ const serial = computed(() => activeSession.value.serial)
 const checksum = computed(() => activeSession.value.checksum)
 const message = useMessage()
 const { t } = useI18n()
+
+// ── 每命令独立循环发送状态（组件级：面板常驻 App 根，v-show 隐藏不影响循环）──
+const looping = ref<Set<string>>(new Set())
+const loopTimers = new Map<string, ReturnType<typeof setInterval>>()
+const loopSent = new Map<string, number>()
+const loopUnwatches = new Map<string, () => void>()
+
+type LoopStopReason = 'manual' | 'completed' | 'disconnect' | 'silent'
 
 const modeOptions = [
   { label: 'ASCII', value: 'ascii' },
@@ -58,7 +68,17 @@ const editing = ref<QuickCommand>(blank())
 const isNew = ref(true)
 
 function blank(): QuickCommand {
-  return { id: '', name: '', payload: '', mode: 'ascii', appendNewline: 'crlf', color: '#2080f0', checksum: 'inherit' }
+  return {
+    id: '',
+    name: '',
+    payload: '',
+    mode: 'ascii',
+    appendNewline: 'crlf',
+    color: '#2080f0',
+    checksum: 'inherit',
+    loopIntervalMs: 1000,
+    loopCount: 0
+  }
 }
 
 function openNew() {
@@ -86,12 +106,98 @@ function saveEdit() {
   showEdit.value = false
 }
 
-async function sendCmd(c: QuickCommand) {
+/**
+ * 展开占位符后发送一次。
+ * c 为模板（保留占位符），s/cfg 为发送目标——单发用当前活动会话，
+ * 循环在启动时捕获会话快照，避免切 tab 后把命令发到别的会话。
+ * 校验和在该会话默认发送校验（cs 解析后）之上计算，覆盖有的展开后内容，天然联动。
+ */
+async function runOnce(c: QuickCommand, s: typeof serial.value, cfg: typeof checksum.value): Promise<boolean> {
+  const payload = expandCommandVars(c.payload, c.mode, { seq: store.nextSeq(c.id) })
   const ending: LineEnding = c.appendNewline === 'inherit' ? 'crlf' : c.appendNewline
-  const cs = !c.checksum || c.checksum === 'inherit' ? checksum.value.send : c.checksum
-  const r = await serial.value.send(c.payload, c.mode, ending, 'utf-8', cs)
-  if (!r.ok) message.error(r.error ?? t('commands.sendFailed'))
-  else sendHistory.add(c.payload)
+  const cs = !c.checksum || c.checksum === 'inherit' ? cfg.send : c.checksum
+  const r = await s.send(payload, c.mode, ending, 'utf-8', cs)
+  if (!r.ok) {
+    message.error(r.error ?? t('commands.sendFailed'))
+    return false
+  }
+  return true
+}
+
+async function sendCmd(c: QuickCommand) {
+  // 循环中点击卡片 = 停止该命令的循环（与发送框「发送/停止」按钮一致的语义）
+  if (looping.value.has(c.id)) {
+    stopLoop(c.id, 'manual')
+    return
+  }
+  const ok = await runOnce(c, serial.value, checksum.value)
+  // 记录模板本身（含占位符），回填发送框后仍可编辑动态值
+  if (ok) sendHistory.add(c.payload)
+}
+
+function startLoop(c: QuickCommand) {
+  if (!serial.value.connected) {
+    message.warning(t('composer.needConnect'))
+    return
+  }
+  // 快照循环目标的会话与校验配置：期间切换 tab/修改会话校验不影响本次循环
+  const s = serial.value
+  const cfg = checksum.value
+  const interval = Math.max(10, c.loopIntervalMs ?? 1000)
+  const total = c.loopCount ?? 0
+  looping.value.add(c.id)
+  loopSent.set(c.id, 0)
+  message.info(
+    total > 0
+      ? t('composer.loopStartCount', { total, interval })
+      : t('composer.loopStartInfinite', { interval }),
+    { duration: 2000 }
+  )
+  loopTimers.set(
+    c.id,
+    setInterval(async () => {
+      const ok = await runOnce(c, s, cfg)
+      if (!ok) {
+        stopLoop(c.id, 'silent') // runOnce 已弹错误提示，这里静默停
+        return
+      }
+      const n = (loopSent.get(c.id) ?? 0) + 1
+      loopSent.set(c.id, n)
+      if (total > 0 && n >= total) stopLoop(c.id, 'completed')
+    }, interval)
+  )
+  // 目标会话断连即停（发失败才停会多等一个间隔）
+  loopUnwatches.set(
+    c.id,
+    watch(() => s.connected, (on) => { if (!on) stopLoop(c.id, 'disconnect') })
+  )
+}
+
+function stopLoop(id: string, reason: LoopStopReason) {
+  const timer = loopTimers.get(id)
+  if (timer) {
+    clearInterval(timer)
+    loopTimers.delete(id)
+  }
+  loopUnwatches.get(id)?.()
+  loopUnwatches.delete(id)
+  if (!looping.value.has(id)) return
+  looping.value.delete(id)
+  const n = loopSent.get(id) ?? 0
+  loopSent.delete(id)
+  if (reason === 'completed') {
+    message.success(t('composer.loopDone', { n }), { duration: 3000 })
+  } else if (reason === 'manual') {
+    message.info(t('composer.loopStopped', { n }), { duration: 2000 })
+  } else if (reason === 'disconnect') {
+    message.warning(t('composer.loopDisconnect', { n }), { duration: 3000 })
+  }
+  // silent: 不提示（卸载、或发送错误已自行弹窗）
+}
+
+function toggleLoop(c: QuickCommand) {
+  if (looping.value.has(c.id)) stopLoop(c.id, 'manual')
+  else startLoop(c)
 }
 
 function menuOptions(c: QuickCommand) {
@@ -103,11 +209,22 @@ function menuOptions(c: QuickCommand) {
   ].map((o) => ({ ...o, cmd: c }))
 }
 function onMenu(key: string, c: QuickCommand) {
-  if (key === 'edit') openEdit(c)
-  else if (key === 'dup') store.duplicate(c.id)
-  else if (key === 'del') store.remove(c.id)
-  else if (key === 'to-composer') emit('to-composer', { text: c.payload, mode: c.mode })
+  if (key === 'edit') {
+    // 编辑会替换 store 条目，循环闭包持有旧对象——先停再编辑，避免发旧配置
+    if (looping.value.has(c.id)) stopLoop(c.id, 'silent')
+    openEdit(c)
+  } else if (key === 'dup') {
+    store.duplicate(c.id)
+  } else if (key === 'del') {
+    if (looping.value.has(c.id)) stopLoop(c.id, 'silent')
+    store.remove(c.id)
+  } else if (key === 'to-composer') emit('to-composer', { text: c.payload, mode: c.mode })
 }
+
+// 面板卸载兜底：停止所有残留循环
+onBeforeUnmount(() => {
+  for (const id of [...looping.value]) stopLoop(id, 'silent')
+})
 
 // 拖拽排序
 const dragIndex = ref<number | null>(null)
@@ -182,6 +299,7 @@ function onFile(e: Event) {
         v-for="(c, i) in store.commands"
         :key="c.id"
         class="item"
+        :class="{ 'is-looping': looping.has(c.id) }"
         draggable="true"
         @dragstart="dragIndex = i"
         @dragover.prevent
@@ -194,6 +312,18 @@ function onFile(e: Event) {
             <span class="tag">{{ c.mode.toUpperCase() }}</span>{{ c.payload }}
           </div>
         </div>
+        <button
+          type="button"
+          class="icon-btn loop-btn"
+          :class="{ active: looping.has(c.id) }"
+          :title="looping.has(c.id) ? t('commands.loopStop') : t('commands.loop')"
+          @click="toggleLoop(c)"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 8a5 5 0 0 1-9 3M3 8a5 5 0 0 1 9-3" />
+            <path d="M13 3v3h-3M3 13v-3h3" />
+          </svg>
+        </button>
         <NDropdown
           trigger="click"
           :options="menuOptions(c)"
@@ -217,6 +347,7 @@ function onFile(e: Event) {
         </NFormItem>
         <NFormItem :label="t('commands.content')">
           <NInput v-model:value="editing.payload" :placeholder="t('commands.payloadPlaceholder')" />
+          <div class="hint">{{ t('commands.payloadHint') }}: <code>{time} {time:full} {seq} {rand}</code></div>
         </NFormItem>
         <NFormItem :label="t('commands.mode')">
           <NSelect v-model:value="editing.mode" :options="modeOptions" />
@@ -226,6 +357,16 @@ function onFile(e: Event) {
         </NFormItem>
         <NFormItem :label="t('commands.checksum')">
           <NSelect v-model:value="editing.checksum" :options="checksumOptions" />
+        </NFormItem>
+        <NFormItem :label="t('commands.loop')">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <NInputNumber v-model:value="editing.loopIntervalMs" :min="10" :step="100" size="small" style="width: 130px">
+              <template #suffix>ms</template>
+            </NInputNumber>
+            <NInputNumber v-model:value="editing.loopCount" :min="0" size="small" style="width: 120px">
+              <template #suffix>{{ t('commands.loopCount') }}</template>
+            </NInputNumber>
+          </div>
         </NFormItem>
         <NFormItem :label="t('commands.color')">
           <NColorPicker v-model:value="editing.color" :show-alpha="false" />
@@ -286,6 +427,31 @@ function onFile(e: Event) {
 .icon-btn svg {
   width: 14px;
   height: 14px;
+}
+.hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.hint code {
+  font-family: var(--mono-font);
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+.loop-btn.active {
+  color: var(--accent);
+  animation: loop-pulse 1.2s ease-out infinite;
+}
+.item.is-looping .name {
+  color: var(--accent);
+}
+@keyframes loop-pulse {
+  0%   { opacity: 1; transform: scale(1); }
+  50%  { opacity: 0.5; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
 }
 .list {
   flex: 1;

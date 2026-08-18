@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-08-15。已完成项标注 ✅。
+> 最近更新：2026-08-17。已完成项标注 ✅，已决定不实现项标注 ~~删除线~~。
 
 ## 一、生产环境缺失功能
 
@@ -34,7 +34,7 @@
 12. ✅ **导出格式单一** — 已完成：支持 TXT/CSV/JSON/Binary 四种导出格式，含筛选导出、hex+ascii 双列等选项。
 13. ✅ **结构化协议解析器** — 已完成（帧解码器，commit `220cc5c` 起）。`src/decoders/` 注册表 + 内置解码器：**字段布局解析器**（`field`，u8/u16/u32 等格式、偏移/长度精确校验防越界）+ **Modbus RTU**（`modbus-rtu`，请求/响应按 byteCount 一致性判别、寄存器组多值字段、异常响应解析）。解码成功的帧叠加字段块（概要行 + 逐字段十六进制/数值），不替换原始字节；解码配置会话级按端口持久化（`decoder-config:<port>`，`id=''` 即不启用）。解码器注册表为可扩展点（未来 JS 脚本解码器可复用同一契约，CSP 禁 eval 需 vm/worker 沙箱）。其上构建**仪表盘**（数字表/状态灯/字段总览 widget、阈值告警、拖拽排序，见 [docs/dashboard-design.md](./dashboard-design.md)）。
 14. ✅ **单连接，不支持多端口并发** — 已完成（commit `4f792ca`/`31dfb06`/`7503179`）。Electron 主进程 `SerialPortManager` 由单端口实例改为 `Map<path, PortEntry>`，支持并发打开多个端口，同端口二次 open 拒绝并提示占用；IPC 事件 payload 携带端口路径，渲染端按 `_openPath` 过滤分发。UI 层多会话 tab 布局（`SessionPane`）：每 tab 一个 Session（独立驱动 + store 六件套），`v-show` 切换保留隐藏会话存活，可同时盯多设备；根层对话框按 opener 会话绑定，全局组件走 `useActiveSession`。Web Serial 侧 `_entries[]` 亦支持多端口。注意：`portOptions` 不再自动落盘（多会话无法区分意图，仅存会话内存）。
-15. **快速命令不支持变量/宏替换** — `QuickCommand.payload` 静态。缺计数器、时间戳、CRC 占位；无每命令独立循环发送。
+15. ✅ **快速命令不支持变量/宏替换** — 已完成（2026-08-17）：发送时展开占位符 + 每命令独立循环发送。展开逻辑为纯函数 `src/utils/command-vars.ts`（`expandCommandVars`，有单测 15 例）：`{time}`（`HH:MM:SS`）/ `{time:full}`（`YYYY-MM-DD HH:MM:SS`）`/ {seq}`（每命令自增序号，hex 模式单字节 00-FF 取模、ascii 模式十进制）`/ {rand}`（随机字节，hex 模式单字节、ascii 模式十进制 0-255）。展开发生在模式转换前，因此校验和自动覆盖展开后的内容（与既有每命令校验和/会话默认校验天然联动）；未知 `{xxx}` 原样保留，不破坏普通载荷。序号计数器在 commands store（`nextSeq`，按命令 id 独立、删除命令即清理、不持久化重启归零）。UI：快速命令卡片新增 ↻ 按钮启停本命令循环发送（间隔/次数在编辑弹窗配置，次数 0=无限，复用发送框的循环 toast 文案），循环启动时快照目标会话与校验配置（切 tab 不串口、断连自动停、编辑/删除命令先停循环），卡片点击在循环中变为停止（与发送框语义一致）。**不做**：表达式计算 / JS 或 Lua 脚本 / 变量表绑定（Serial Studio Pro 级，KART 不需要）。
 16. ✅ **波形缺测量与导出** — 已完成：`WaveformChart` 支持游标读值、双游标 Δ、V/div & ms/div 时基、触发线、每通道自定义颜色、暂停回看，支持 CSV 导出波形数据。
 17. ✅ **自动重连是空开关** — 已完成。`settings.autoReconnect` 开关在 `SettingsModal` 连接页生效。串口 store（`src/stores/serial.ts`）在驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）时，按固定 2s 间隔无限次重试 `connect()`；用户点击断开/切换驱动走 `userDisconnect()` 标记原因不重连，关闭开关立即停止挂起重连。重连前 `refreshPorts()` 确认设备归位，未归位则继续排程；`WebSerialDriver.listPorts` 现重新拉取 `getPorts()`，让拔插后重新接入的已授权端口自愈列表，支持 Web Serial 下的断插重连。状态：`reconnecting`/`reconnectAttempts`/`reconnectNextAt`，`StatusBar` 显示橙色 LED +「重连中…{n}s后重试 · 第{m}次」倒计时（nowTick 驱动 1s 刷新）；重连成功在 `ConnectionBar` 弹一次 toast。判定逻辑集中在纯函数 `src/utils/reconnect.ts`（`shouldReconnect` / `countdownSecs`，有单测 8 例），避免 store 与组件各算一套。
 18. ✅ **缺少实时日志落盘** — 已完成。原始字节流在帧切分之前通过 `serial.onData`/`onTxData` 双通道捕获，经 500ms/64KB 缓冲批量写入文件。平台抽象 `IFileWriter`（`src/composables/useFileWriter.ts`）：浏览器走 File System Access API（`showSaveFilePicker` + `FileSystemWritableFileStream`），Electron 走 `dialog.showSaveDialog` + `fs.createWriteStream` IPC。录制器 store（`src/stores/recorder.ts`）管理状态机（idle→recording→stopping→idle/error），支持断线自动停止、写入异常进入 error 状态。录制按钮+格式切换在 `ConnectionBar`，录制指示（脉动红点+文件名+文件大小+已录制时长）在 `StatusBar`，菜单项在 `MenuBar`。输出格式可选 `.txt`（带时间戳 HEX 行，含方向标记 RX/TX）或 `.csv`（timestamp,direction,hex,ascii 四列）。浏览器不支持 File System Access API 时按钮自动置灰。
@@ -50,13 +50,12 @@
 21. ✅ **全局快捷键缺失** — 已有快捷键（`Ctrl/Cmd+Enter` 发送、`Alt/Ctrl+↑↓` 翻历史）已在帮助菜单新增「快捷键」面板展示，不额外添加显式 UI 已有操作的快捷键。
 22. ~~**关键字告警**~~ — **已决定不实现**（2026-08 产品决策）：收到特定模式声音/通知告警需求不明确、ROI 低，不做。需要验证数据特征时用「搜索 + 标注」替代。
 23. ✅ **端口元信息缺失（VID/PID/厂商）** — 已完成：`SerialDriver.listPorts()` 返回结构化 `PortInfo[]`（path/manufacturer/vendorId/productId），不再只给字符串数组。serialport 驱动透传主进程 `SerialPortInfo` 富数据；Web Serial 用 `getInfo()` 取 VID/PID，并按 `src/utils/usb-vendors.ts` 常见厂商表反查厂商名（查不到显示裸 ID）；mock 提供造假完整元数据供开发预览。UI 采用渐进披露：端口下拉触发框仍只显示路径，菜单项第二行灰色小字显示「厂商 · VID:xxxx PID:xxxx」。**占用提示**也已实现：主进程 `SerialPortManager.probePortBusy` 在枚举时对每个端口尝试独占打开探测（`dtr:false/rts:false` 尽量不扰动电平、成功立即关闭释放、1s 超时兜底），打开失败判定为被其他程序占用，`listPortsAsync` 返回 `busy` 字段透传到下拉——busy 端口禁用 + 红色「被其他程序占用」，与「已被其他会话占用」（会话间提示）区分；`refreshPorts` 自动选中跳过 busy 端口。**已知限制**：busy 为枚举时瞬时快照非实时，需刷新端口重新探测；Web Serial 无此探测能力；probe 仅将锁定类打开失败（lock/busy/in use/access is denied 等）判为占用——权限不足（EACCES）、设备不存在/拔出等非锁定错误不判 busy，端口保持可选，连接时报真实错误。
-24. **复制能力弱** — 单帧复制带时间戳/方向 ✅；多选批量复制 / 导出 txt / 删除 ✅（全选即"复制全部可见"）；仍缺 CSV 行。
+24. **复制能力弱** — 单帧复制带时间戳/方向 ✅；多选批量复制 / 导出 txt / 删除 ✅（全选即"复制全部可见"）。~~CSV 行复制~~ — **已决定不实现**（2026-08-17 产品决策）：导出对话框已覆盖 CSV 场景，剪贴板复制 CSV 行 ROI 低。
 25. ✅ **`useStorage` 同步无容量保护** — 已完成。`useStorage` 同步 API（`{get,set,remove}`）保持不变，新增直写落盘层 `src/utils/persist.ts`（`persistNow`）：用户数据（settings/commands/customBaudRates/autoSave/export-preferences/record-dir-*）变更即同步写 localStorage + 异步镜像（浏览器 → IndexedDB `kart-persist`；Electron → 主进程 `JsonStore` 落盘 `userData/kart-settings.json`，防抖 500ms + 原子写 + will-quit 同步刷盘）。容量监控：落盘时按 `estimateJsonSize` 累计占用，≥1.5MB 触发全量快照导出（浏览器 Blob 下载 / Electron 系统对话框），每会话限一次并 toast 提醒。布局/临时键（rightWidth/inputHeight/sendHistory）仍走同步 localStorage（vueuse `useStorage`），量级小无需镜像。`clear()` 的 `storage.remove` 语义保留（镜像仅作备份不删除）。
 
 ### 边界说明
 
-- 第 23 项依赖 Web Serial 驱动实现相应能力，前端 UI 可先做但落地需驱动支持（属"阶段 2 路线图"）。
-- 其余各项（1–4、6–13、15–16、18–22、24）纯前端可独立完成。
+- 第 4 项「待补」子项（校验工具拆分 / echo-crc 策略 / 大文件流式读）纯前端可独立完成，与驱动选择无关。
 
 ---
 

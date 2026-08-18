@@ -128,6 +128,10 @@ export interface QuickCommand {
   color?: string
   /** 校验和算法，'inherit' 使用全局设置 */
   checksum?: 'inherit' | ChecksumAlgorithm
+  /** 循环发送间隔（ms），配合卡片 ↻ 按钮启停（可选，默认 1000） */
+  loopIntervalMs?: number
+  /** 循环发送次数，0 = 无限（可选，默认 0） */
+  loopCount?: number
 }
 
 /** 帧切分策略 */
