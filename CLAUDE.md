@@ -256,10 +256,12 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 ## 待完成事项
 
 1. 将 Blob 下载替换为 Electron `dialog` + `fs`（快照导出已走 dialog，其余下载路径未接）
-2. 文件发送引擎内联工具（crc/chunk-framer/rate-limit）拆分为独立 `utils/*.ts` + 单测
-3. 快速命令变量/宏替换（计数器、时间戳、CRC 占位）未实现（`QuickCommand.payload` 静态）
-4. 波形二进制解析模式已移除（仅文本行解析），未来重引入时重新评估时间对齐
 
-## 生产环境缺失功能与已知问题
+## 性能与实现注意事项
 
-生产化待补功能（按优先级分层）与已知技术问题汇总在 [docs/production-gaps.md](docs/production-gaps.md)，供后续任务规划参考。设计文档见 [docs/](./docs/)（multi-session-ui、terminal-mode、dashboard、file-transfer、multi-port、theme-system）。
+- **消息列表 bufferLimit 上限**：调大 bufferLimit 不会让巨型帧硬冻结复发（帧大小已封顶），但持续收数据时每次刷入仍对全部条目做 O(n) 重算（DynamicScroller `sizes`/`itemsWithSize` + `filtered` + `computeDeltas`），条目数 5 万～10 万时会渐进卡顿掉帧（变慢而非硬冻结）。若要支撑超大 bufferLimit，需换固定高度虚拟化（RecycleScroller）或对条目数封顶。
+- **gap-timeout 把帧率锁在 ~1/gapMs**（默认 20ms → 约 20 帧/秒）；`buffer-flood` 灌满压测需用「分隔符 \n」帧策略才能秒级灌满缓冲验证丢弃提示。
+- **巨型帧渲染截断**：超 4096B 的帧折叠为前 512B 预览（`MessageBubble` 两档截断），单次展开全量可接受；若有「导出/复制巨帧」之外的批量全量渲染需求，需重新评估截断策略。
+- **波形二进制解析模式已移除**（仅文本行解析，X 轴用真实到达时间无漂移）；未来重引入二进制/结构化字节流协议时，重新评估时间对齐策略。
+
+设计文档见 [docs/](./docs/)（multi-session-ui、terminal-mode、dashboard、file-transfer、multi-port、theme-system）。

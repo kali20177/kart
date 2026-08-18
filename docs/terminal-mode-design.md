@@ -5,7 +5,7 @@
 > 本文件是终端模式的架构说明 + 实施蓝图，行文以已实现代码为准。
 > 日期：2026-08-08。状态：**xterm.js 迁移完成；全屏 TUI 由 node-pty 本地 shell 通道验证**（见「实施计划」里程碑）。
 >
-> 关联：`docs/production-gaps.md`；迁移前自研实现见 git 历史（`feat/terminal` 提交，本分支已替换）。
+> 迁移前自研实现见 git 历史（`feat/terminal` 提交，本分支已替换）。
 
 ## 背景与目标
 

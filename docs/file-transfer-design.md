@@ -1,6 +1,5 @@
 # 文件下发功能设计
 
-> 对应 [docs/production-gaps.md](./production-gaps.md) 第 4 点：**文件发送（二进制整包下发）**。
 > 本文为实现前设计稿，落地时按「实现步骤」分阶段推进。
 
 ## 1. 背景与目标
@@ -498,8 +497,7 @@ function addFileTransfer(transferId: string, filename: string, size: number) {
 12. i18n 两语言包。
 
 **阶段 E — 收尾**
-13. 更新 `docs/production-gaps.md` 第 4 点标 ✅。
-14. `npm run typecheck` + `npm test` 全绿。
+13. `npm run typecheck` + `npm test` 全绿。
 ```
 
 逐阶段交付，每阶段可独立 typecheck/test 验证。
