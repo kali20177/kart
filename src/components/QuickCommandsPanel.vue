@@ -229,6 +229,19 @@ function onMenu(key: string, c: QuickCommand) {
   } else if (key === 'to-composer') emit('to-composer', { text: c.payload, mode: c.mode })
 }
 
+// 命令列表被整体替换（导入 importJson / 恢复默认 resetToPresets）时，被循环的
+// 旧 id 命令会从列表消失但定时器仍残留——监听 id 集合，消失即停，一处覆盖所有替换路径
+// （拖拽排序只改顺序不改集合，不会误停）。
+watch(
+  () => store.commands.map((c) => c.id).join(','),
+  (ids) => {
+    if (!looping.value.size) return
+    for (const id of [...looping.value]) {
+      if (!ids.includes(id)) stopLoop(id, 'silent')
+    }
+  }
+)
+
 // 面板卸载兜底：停止所有残留循环
 onBeforeUnmount(() => {
   for (const id of [...looping.value]) stopLoop(id, 'silent')
@@ -264,9 +277,7 @@ function onFile(e: Event) {
   if (!f) return
   const reader = new FileReader()
   reader.onload = () => {
-    // importJson 会整体替换命令列表（重生成 id），被循环的旧命令随之消失但定时器残留——
-    // 先统一停掉所有循环，避免向已不存在或已换 id 的命令后台空发
-    for (const id of [...looping.value]) stopLoop(id, 'silent')
+    // 列表整体替换后，旧 id 循环由上方 id 集合 watch 统一停掉（导入失败时列表未变，循环保留）
     const r = store.importJson(String(reader.result))
     if (r.ok) message.success(t('commands.importOk'))
     else message.error(r.error ?? t('commands.importFail'))
