@@ -26,12 +26,11 @@ describe('chunk-source', () => {
     }
   })
 
-  it('文件变更后重新读取反映新内容（未缓存整文件字节）', async () => {
+  it('重复随机切片读取结果一致（jsdom Blob 不可变，无法做「文件变更反映」断言）', async () => {
     const bytes = pattern(64)
     const file = new File([bytes], 't.bin')
     const src = fileSource(file)
     expect([...(await src.slice(0, 64))]).toEqual([...bytes])
-    // jsdom Blob 不可变，此断言改为验证重复读取一致即可
     expect([...(await src.slice(10, 20))]).toEqual([...bytes.slice(10, 20)])
   })
 })

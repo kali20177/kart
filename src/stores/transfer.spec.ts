@@ -4,6 +4,7 @@ import { createTransferStore } from './transfer'
 import type { TransferDeps } from './transfer'
 import type { FileTransferConfig, FileTransferState } from '@/types'
 import { frameChunk, sliceChunk } from '@/utils/chunk-framer'
+import { crc16modbus } from '@/utils/checksum'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -75,6 +76,18 @@ function pattern(n: number): Uint8Array<ArrayBuffer> {
 // 设备回吐收到的 CRC 尾部（seq-crc 帧最后两字节）
 const echoFooter = (wire: Uint8Array) => wire.slice(-2)
 
+/** 找到 CRC16 低/高字节恰为指定值的 1~2 字节载荷（构造 CRC=0x15 碰撞用例；穷举最多 65535 个候选） */
+function findPayloadWithCrcByte(byteIndex: 0 | 1, value: number): Uint8Array<ArrayBuffer> {
+  for (let i = 1; i < 0x10000; i++) {
+    const p = new Uint8Array(new ArrayBuffer(2))
+    p[0] = i & 0xff
+    p[1] = i >> 8
+    const crc = crc16modbus(p)
+    if (byteIndex === 0 ? (crc & 0xff) === value : ((crc >> 8) & 0xff) === value) return p
+  }
+  throw new Error(`未找到 CRC ${byteIndex === 0 ? '低' : '高'}字节为 ${value} 的载荷`)
+}
+
 describe('transfer store：echo-crc ACK', () => {
   it('设备回吐正确 CRC → 全部完成', async () => {
     const { store, wires } = makeHarness(echoFooter)
@@ -140,6 +153,56 @@ describe('transfer store：echo-crc ACK', () => {
     const t = await waitTerminal(store)
     expect(t.status).toBe('completed')
     expect(wires.length).toBe(3)
+  })
+
+  it('CRC 低字节恰为 NACK 字节 0x15 的合法回吐 → 完成且不重发（碰撞消除）', async () => {
+    const payload = findPayloadWithCrcByte(0, 0x15)
+    const { store, wires } = makeHarness(echoFooter)
+    const file = new File([payload], 'fw.bin') // 单包
+    await store.start(file, cfg({}))
+    const t = await waitTerminal(store)
+    expect(t.status).toBe('completed')
+    expect(wires.length).toBe(1) // 未被误判 NACK 触发重发
+  })
+
+  it('CRC 高字节恰为 0x15 的合法回吐 → 完成且不重发', async () => {
+    const payload = findPayloadWithCrcByte(1, 0x15)
+    const { store, wires } = makeHarness(echoFooter)
+    const file = new File([payload], 'fw.bin')
+    await store.start(file, cfg({}))
+    const t = await waitTerminal(store)
+    expect(t.status).toBe('completed')
+    expect(wires.length).toBe(1)
+  })
+})
+
+describe('transfer store：异常兜底（引擎不卡死）', () => {
+  it('sendRaw 抛错 → error 状态，且引擎释放可再次下发', async () => {
+    const connected = ref(true)
+    let failNext = true
+    const deps: TransferDeps = {
+      sendRaw: async () => {
+        if (failNext) {
+          failNext = false
+          throw new Error('write crash')
+        }
+        return { ok: true }
+      },
+      onData: () => () => {},
+      connected,
+      addFileTransfer: () => {}
+    }
+    const store = effectScope().run(() => createTransferStore(deps))!
+    const file = new File([pattern(64)], 'fw.bin')
+    await store.start(file, cfg({ waitForAck: false, retries: 0 }))
+    const t1 = await waitTerminal(store)
+    expect(t1.status).toBe('error')
+
+    // 引擎未卡死：再次下发走通（此前 bug：pump 未捕获异常时 pumpRunning 永久 true，
+    // 后续下发被 if (pumpRunning) return 静默拒绝，无任何 UI 反馈）
+    await store.retry(t1.id)
+    const t2 = await waitTerminal(store)
+    expect(t2.status).toBe('completed')
   })
 })
 

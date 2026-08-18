@@ -185,7 +185,15 @@ export function createTransferStore(deps: TransferDeps) {
     for (let attempt = 0; attempt <= config.retries; attempt++) {
       if (abortFlag) return false
 
-      const r = await deps.sendRaw(wire, config.logEachChunk)
+      let r: { ok: boolean; error?: string }
+      try {
+        r = await deps.sendRaw(wire, config.logEachChunk)
+      } catch (err) {
+        // 驱动写抛错（串口断开/IO 故障等）：按重试次数处理，避免未捕获拒绝卡死 pump
+        logger.warn('transfer', `sendRaw 异常（attempt ${attempt + 1}）: ${(err as Error)?.message ?? String(err)}`)
+        if (attempt < config.retries) continue
+        return false
+      }
       if (!r.ok) {
         if (attempt < config.retries) continue
         return false
@@ -217,19 +225,26 @@ export function createTransferStore(deps: TransferDeps) {
       // echo-crc 需要累积回吐字节（≥2 字节后按小端比对）；其余模式逐字节立即判定
       const echoBuf: number[] = []
       let finished = false
+      let unsub: (() => void) | null = null
+      let nackTimer: ReturnType<typeof setTimeout> | undefined
+      // NACK 宽限窗口：echo-crc 首字节 0x15 可能是独立 NACK，也可能是 CRC 低字节。
+      // 等第二字节最多 min(ackTimeout/2, 50)ms——到达则按 echo 比对，不到则判 NACK，
+      // 消除「CRC 字节恰为 0x15 → 每次重试都确定性误判 NACK」的线缆歧义。
+      const nackGrace = Math.min(config.ackTimeout / 2, 50)
 
       // 幂等收尾：超时与响应竞态时只 resolve 一次
       const finish = (ok: boolean) => {
         if (finished) return
         finished = true
         clearTimeout(timeout)
+        if (nackTimer !== undefined) clearTimeout(nackTimer)
         unsub?.()
         resolve(ok)
       }
 
       const timeout = setTimeout(() => finish(false), config.ackTimeout)
 
-      const unsub = deps.onData((bytes: Uint8Array) => {
+      unsub = deps.onData((bytes: Uint8Array) => {
         for (const b of bytes) {
           if (config.ackMode === 'any') {
             finish(true)
@@ -247,19 +262,25 @@ export function createTransferStore(deps: TransferDeps) {
             }
           }
           if (config.ackMode === 'echo-crc') {
-            // NACK 优先于 CRC 比对
-            if (isNackByte(b)) {
-              finish(false)
-              return
+            if (echoBuf.length === 0 && isNackByte(b)) {
+              nackTimer = setTimeout(() => finish(false), nackGrace)
             }
             echoBuf.push(b)
             if (echoBuf.length >= 2) {
+              if (nackTimer !== undefined) {
+                clearTimeout(nackTimer)
+                nackTimer = undefined
+              }
               finish(matchEchoCrc(echoBuf, expectedCrc))
               return
             }
           }
         }
       })
+
+      // 若驱动在订阅时同步回调（异常注入场景），finish 已跑但 unsub 尚未赋值，
+      // 这里补一次解除，避免订阅泄漏
+      if (finished) unsub?.()
     })
   }
 
@@ -291,105 +312,113 @@ export function createTransferStore(deps: TransferDeps) {
     let lastUpdateTime = startTime
     let lastSent = 0
 
-    while (pass <= (config.repeat > 0 ? config.repeat : 1)) {
-      // 如果 repeat > 0，每一轮重置
-      if (config.repeat > 0 && pass > 1) {
-        totalSent = 0
-        chunkIndex = 0
-        seq = 0
-        updateTransfer(id, {
-          sent: 0,
-          currentChunk: 0,
-          pass,
-          status: 'sending'
-        })
-      }
-
-      while (chunkIndex < Math.ceil(source.size / (config.chunkSize || source.size))) {
-        // 检查暂停
-        if (pausePromise) {
-          await pausePromise
-          pausePromise = null
-          pauseGate = null
-        }
-        if (abortFlag) {
-          cleanupPump(id, 'aborted')
-          return
+    try {
+      while (pass <= (config.repeat > 0 ? config.repeat : 1)) {
+        // 如果 repeat > 0，每一轮重置
+        if (config.repeat > 0 && pass > 1) {
+          totalSent = 0
+          chunkIndex = 0
+          seq = 0
+          updateTransfer(id, {
+            sent: 0,
+            currentChunk: 0,
+            pass,
+            status: 'sending'
+          })
         }
 
-        // 取切片（数据源按 [start,end) 增量读取，内存占用有界为 chunkSize）
-        const chunkSize = config.chunkSize > 0 ? config.chunkSize : source.size
-        const start = chunkIndex * chunkSize
-        const end = Math.min(start + chunkSize, source.size)
-        const chunk = await source.slice(start, end)
+        while (chunkIndex < Math.ceil(source.size / (config.chunkSize || source.size))) {
+          // 检查暂停
+          if (pausePromise) {
+            await pausePromise
+            pausePromise = null
+            pauseGate = null
+          }
+          if (abortFlag) {
+            cleanupPump(id, 'aborted')
+            return
+          }
 
-        // 封装
-        let wire = frameChunk(chunk, seq, config.framing, config.chunkSuffix)
-        // 错误注入
-        wire = injectCorrupt(wire, chunkIndex, config.injectCorruptEveryN)
+          // 取切片（数据源按 [start,end) 增量读取，内存占用有界为 chunkSize）
+          const chunkSize = config.chunkSize > 0 ? config.chunkSize : source.size
+          const start = chunkIndex * chunkSize
+          const end = Math.min(start + chunkSize, source.size)
+          const chunk = await source.slice(start, end)
 
-        // echo-crc 需要本包期望 CRC（设备回吐的比对基准；payload 的 CRC16）
-        const expectedCrc = config.ackMode === 'echo-crc' ? crc16modbus(chunk) : 0
+          // 封装
+          let wire = frameChunk(chunk, seq, config.framing, config.chunkSuffix)
+          // 错误注入
+          wire = injectCorrupt(wire, chunkIndex, config.injectCorruptEveryN)
 
-        // 发送
-        const ok = await sendWithRetry(wire, chunkIndex, config, expectedCrc)
-        if (!ok) {
-          cleanupPump(id, 'error', chunkIndex)
-          return
-        }
+          // echo-crc 需要本包期望 CRC（设备回吐的比对基准；payload 的 CRC16）
+          const expectedCrc = config.ackMode === 'echo-crc' ? crc16modbus(chunk) : 0
 
-        totalSent += chunk.length
-        chunkIndex++
-        seq++
+          // 发送
+          const ok = await sendWithRetry(wire, chunkIndex, config, expectedCrc)
+          if (!ok) {
+            cleanupPump(id, 'error', chunkIndex)
+            return
+          }
 
-        // 限速
-        const now = Date.now()
-        const delay = paceDelay(now, startTime, totalSent, config.bytesPerSecond, config.interChunkDelay)
-        if (delay > 0) {
-          const waitStart = Date.now()
-          while (Date.now() - waitStart < delay) {
-            if (abortFlag) {
-              cleanupPump(id, 'aborted')
-              return
+          totalSent += chunk.length
+          chunkIndex++
+          seq++
+
+          // 限速
+          const now = Date.now()
+          const delay = paceDelay(now, startTime, totalSent, config.bytesPerSecond, config.interChunkDelay)
+          if (delay > 0) {
+            const waitStart = Date.now()
+            while (Date.now() - waitStart < delay) {
+              if (abortFlag) {
+                cleanupPump(id, 'aborted')
+                return
+              }
+              await sleep(10)
             }
-            await sleep(10)
+          }
+
+          // 更新进度（rAF 风格批处理）
+          const updateTime = Date.now()
+          const dt = updateTime - lastUpdateTime
+          if (dt >= 50) {
+            const deltaSent = totalSent - lastSent
+            const instantRate = dt > 0 ? (deltaSent / dt) * 1000 : 0
+            // 首次直接用瞬时值，后续用 EMA 平滑（alpha=0.5 收敛更快）
+            // 注意：不能从 line 358 捕获的 state 引用读取 bytesPerSec——
+            // updateTransfer 会创建新对象替换 shallowRef 数组，原引用已过期。
+            const current = transfers.value.find((t) => t.id === id)
+            const prevRate = current?.bytesPerSec ?? 0
+            const bytesPerSec = prevRate === 0
+              ? instantRate
+              : prevRate * 0.5 + instantRate * 0.5
+
+            updateTransfer(id, {
+              sent: totalSent,
+              currentChunk: chunkIndex,
+              elapsedMs: updateTime - startTime,
+              bytesPerSec: Math.round(bytesPerSec)
+            })
+            lastUpdateTime = updateTime
+            lastSent = totalSent
           }
         }
 
-        // 更新进度（rAF 风格批处理）
-        const updateTime = Date.now()
-        const dt = updateTime - lastUpdateTime
-        if (dt >= 50) {
-          const deltaSent = totalSent - lastSent
-          const instantRate = dt > 0 ? (deltaSent / dt) * 1000 : 0
-          // 首次直接用瞬时值，后续用 EMA 平滑（alpha=0.5 收敛更快）
-          // 注意：不能从 line 358 捕获的 state 引用读取 bytesPerSec——
-          // updateTransfer 会创建新对象替换 shallowRef 数组，原引用已过期。
-          const current = transfers.value.find((t) => t.id === id)
-          const prevRate = current?.bytesPerSec ?? 0
-          const bytesPerSec = prevRate === 0
-            ? instantRate
-            : prevRate * 0.5 + instantRate * 0.5
-
-          updateTransfer(id, {
-            sent: totalSent,
-            currentChunk: chunkIndex,
-            elapsedMs: updateTime - startTime,
-            bytesPerSec: Math.round(bytesPerSec)
-          })
-          lastUpdateTime = updateTime
-          lastSent = totalSent
-        }
+        pass++
       }
-
-      pass++
+    } catch (err) {
+      // 兜底：读片/发送/订阅等任何未捕获异常都收敛为 error 并释放引擎，
+      // 避免 pumpRunning 永久卡 true（后续下发被 if (pumpRunning) return 静默拒绝）
+      logger.error('transfer', `pump 异常中断: ${(err as Error)?.message ?? String(err)}`)
+      cleanupPump(id, 'error', chunkIndex, `发送中断：${(err as Error)?.message ?? String(err)}`)
+      return
     }
 
     // 完成
     cleanupPump(id, 'completed')
   }
 
-  function cleanupPump(id: string, status: TransferStatus, failedChunk?: number) {
+  function cleanupPump(id: string, status: TransferStatus, failedChunk?: number, errorMsg?: string) {
     pumpRunning = false
     // 保留 fileData/filePath 供 retry 重新读文件（File 可多次随机切片读，无内存驻留）
 
@@ -401,7 +430,7 @@ export function createTransferStore(deps: TransferDeps) {
       elapsedMs: Date.now() - (rec?.startedAt ?? Date.now())
     }
     if (failedChunk !== undefined) patch.failedChunk = failedChunk
-    if (status === 'error') patch.error = '发送失败（重试耗尽）'
+    if (status === 'error') patch.error = errorMsg ?? '发送失败（重试耗尽）'
     updateTransfer(id, patch)
 
     if (status === 'completed') logger.info('transfer', `completed: ${tag} in ${patch.elapsedMs}ms`)
