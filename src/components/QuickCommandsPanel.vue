@@ -116,12 +116,19 @@ async function runOnce(c: QuickCommand, s: typeof serial.value, cfg: typeof chec
   const payload = expandCommandVars(c.payload, c.mode, { seq: store.nextSeq(c.id) })
   const ending: LineEnding = c.appendNewline === 'inherit' ? 'crlf' : c.appendNewline
   const cs = !c.checksum || c.checksum === 'inherit' ? cfg.send : c.checksum
-  const r = await s.send(payload, c.mode, ending, 'utf-8', cs)
-  if (!r.ok) {
-    message.error(r.error ?? t('commands.sendFailed'))
+  try {
+    const r = await s.send(payload, c.mode, ending, 'utf-8', cs)
+    if (!r.ok) {
+      message.error(r.error ?? t('commands.sendFailed'))
+      return false
+    }
+    return true
+  } catch (e) {
+    // 防御：serial.send 内部已捕获驱动异常返回 {ok:false}；此处兜底实现变化，
+    // 防止 setInterval 回调产生 unhandled rejection 且循环不收敛。
+    message.error(e instanceof Error ? e.message : String(e))
     return false
   }
-  return true
 }
 
 async function sendCmd(c: QuickCommand) {
@@ -140,9 +147,10 @@ function startLoop(c: QuickCommand) {
     message.warning(t('composer.needConnect'))
     return
   }
-  // 快照循环目标的会话与校验配置：期间切换 tab/修改会话校验不影响本次循环
+  // 快照循环目标的会话与会话校验：切 tab 不影响本次循环；
+  // 校验取值拷贝而非引用，循环运行中在面板外修改会话校验也不串改
   const s = serial.value
-  const cfg = checksum.value
+  const cfg = { ...checksum.value }
   const interval = Math.max(10, c.loopIntervalMs ?? 1000)
   const total = c.loopCount ?? 0
   looping.value.add(c.id)
@@ -256,6 +264,9 @@ function onFile(e: Event) {
   if (!f) return
   const reader = new FileReader()
   reader.onload = () => {
+    // importJson 会整体替换命令列表（重生成 id），被循环的旧命令随之消失但定时器残留——
+    // 先统一停掉所有循环，避免向已不存在或已换 id 的命令后台空发
+    for (const id of [...looping.value]) stopLoop(id, 'silent')
     const r = store.importJson(String(reader.result))
     if (r.ok) message.success(t('commands.importOk'))
     else message.error(r.error ?? t('commands.importFail'))

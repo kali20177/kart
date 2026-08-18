@@ -79,8 +79,9 @@ export const useCommandsStore = defineStore('commands', () => {
     try {
       const parsed = JSON.parse(json)
       if (!Array.isArray(parsed)) return { ok: false, error: '根节点必须是数组' }
-      // 重新生成 id，避免冲突
+      // 重新生成 id，避免冲突；旧 id 的 {seq} 计数全部失效，一并清空
       commands.value = parsed.map((c: QuickCommand) => ({ ...c, id: genId() }))
+      seqCounters.value = {}
       return { ok: true }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : '解析失败' }

@@ -22,4 +22,14 @@ describe('commands store：占位符 {seq} 计数器', () => {
     expect(store.nextSeq('p1')).toBe(1)
     expect(store.commands.some((c) => c.id === 'p1')).toBe(false)
   })
+
+  it('importJson 后旧 id 的 {seq} 计数一并清空', () => {
+    const store = useCommandsStore()
+    store.nextSeq('p1')
+    store.nextSeq('p1')
+    const r = store.importJson(JSON.stringify([{ name: 'n', payload: 'hi', mode: 'ascii' }]))
+    expect(r.ok).toBe(true)
+    // 旧 id 计数随命令列表整体替换一起失效；新 id 另起计数从 1 开始
+    expect(store.nextSeq('p1')).toBe(1)
+  })
 })
