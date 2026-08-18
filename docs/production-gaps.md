@@ -2,7 +2,7 @@
 
 本文件记录串口调试助手作为**生产环境工具**尚缺的功能（按优先级分层），以及开发中发现的已知技术问题。供后续任务规划与排期参考。
 
-> 最近更新：2026-08-17。已完成项标注 ✅，已决定不实现项标注 ~~删除线~~。
+> 最近更新：2026-08-18。已完成项标注 ✅，已决定不实现项标注 ~~删除线~~。
 
 ## 一、生产环境缺失功能
 
@@ -20,7 +20,11 @@
    - **UX 层**：`FileTransferDialog`（预设：原始整包/STM32-ISP/ESP32/压测/自定义 + 文件拖拽与移除）、`FileTransferBubble`（消息流内单条文件气泡：进度条/速率/ETA/暂停继续中止重试详情，按 `Message.kind==='file'` 委托渲染）、`InputComposer` 📎 按钮 + 拖拽入口、`StatusBar` 活跃下发紧凑条。
    - **限速语义可视化**：字节速率输入框实时显示当前波特率对应的物理层上限（按 `dataBits/parity/stopBits` 推算 bit/字节），超限橙色警告。明确「有效速度 = min(波特率 B/s, 字节速率)」，二者作用层不同（物理硬天花板 vs 应用软节流保护设备缓冲）。
    - **Mock 阶段局限**：`MockSerialSource.write()` 立即返回不按波特率节流，当前传输速率纯属 `sleep()` 软节流，波特率暂无真实约束。阶段 2 接入 Web Serial 后波特率才成为真实物理天花板，届时 UI 提示即准确生效（前端已按未来行为设计，后端切换零改动）。
-   - **待补**：① 纯逻辑工具（crc/chunk-framer/rate-limit）当前内联在 transfer.ts，设计稿规划的独立 `utils/*.ts` + 单测尚未拆分；② ACK `echo-crc` 策略暂简化为「收到任意字节即 ACK」，未做 CRC 回吐比对；④ 大文件流式读（v1 用 `File.arrayBuffer()`，数百 MB 内 OK）。③ ✅ 真实 Web Serial 驱动接入已完成（`WebSerialDriver`，Chromium 89+，HTTPS + 用户授权）。
+   - **2026-08-18 更新（三项待补全部完成）**：
+     - ① ✅ 纯逻辑工具拆分——`src/utils/chunk-framer.ts`（切片/三种协议封装/错误注入）、`rate-limit.ts`（字节速率+包间延时双旋钮）、`ack.ts`（any/byte/echo-crc 判定，含小端 CRC 比对），各有单测（共 22 例）；`transfer.ts` 仅剩调度与 ACK 订阅。
+     - ② ✅ echo-crc 真实现——expected CRC（payload 的 CRC16）经 pump→sendWithRetry→waitForAck 管线传入；回吐字节累积 ≥2 字节后按小端与期望比对，NACK(0x15) 优先判定；超时与响应竞态由幂等 finish 守卫。store 级假设备行为测试（`transfer.spec.ts`，9 例）覆盖：正确回吐完成 / CRC 不匹配重发本包 / NACK 立即重试 / 超时重试耗尽报错 / 错误注入→回吐比对失败→重试闭环 / byte 模式回归。
+     - ③ ✅ 真实 Web Serial 驱动接入（同前，`WebSerialDriver`，Chromium 89+，HTTPS + 用户授权）。
+     - ④ ✅ 流式读——`start()` 不再整文件 `File.arrayBuffer()`，改 `ChunkSource` 抽象（`src/utils/chunk-source.ts`：fileSource 逐块 `file.slice()` 随机切片读，jsdom 无 arrayBuffer 时回退 FileReader）；内存占用从 O(整文件) → O(chunkSize)。retry/repeat/startOffset 的随机重读语义不变。验证：双路径字节恒等（fileSource 逐块读 vs 内存切片参考逐字节一致）+ 读取有界性（单次读取 ≤ chunkSize、读取次数 = 分块数、从未整文件一次读）。顺带修复：retry 原先因 cleanup 清空 fileBytes 而「完成后不可重试」实为失效，现持 File 句柄，完成后重试可用。**已知限制**：进度字段按 50ms 批处理刷新，超快传输（无 ACK 无延时）完成时气泡进度可能停在 0（实际字节以发出 wire 为准）。
 5. ✅ **DTR/RTS/Break 控制** — 已完成。`SerialDriver` 新增 `setSignals({ dtr?, rts? })` 与 `setBreak(active)`，四种驱动实现：Web Serial 走 `port.setSignals({ dataTerminalReady, requestToSend, break })`（`env.d.ts` 补充输出线字段）；Electron 走 IPC → 主进程 serialport `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言；unsupported 抛错。serial store 新增 `dtr`/`rts` 状态与 `setDtr`/`setRts`/`pulseBreak`（250ms 脉冲，`breakBusy` 防连点），连接后自动重放上次电平（断线重连不丢意图）。UI 在 StatusBar 信号区放置 DTR/RTS 切换 chips + BRK 脉冲按钮，并保留 CTS 只读指示（状态圆点样式、非按钮，hover 注明「只读」；DCD/DSR/RI 指示已移除），断开时禁用+灰度。Web Serial 与 serialport 均原生支持，不再属「待驱动」项。
 6. ✅ **暂停时数据直接丢弃** — 暂停时数据仍不缓冲保留（波形追加缓冲无意义：恢复瞬间刷新长段 + 超缓冲区截断后数据不全），恢复时通过 warning toast 提示用户缺失数据的时间段（`HH:MM:SS.mmm – HH:MM:SS.mmm (Xs)`），消息列表与波形图均有各自独立提示。
 7. ✅ **布局与发送历史不持久化** — 已完成：右栏宽度（`App.vue` rightWidth）、输入框高度（`InputComposer` DOM 拖拽高度）、发送历史（`useSendHistory`）三项均通过 `useStorage` 持久化到 localStorage。发送历史限制最近 50 条，避免 localStorage 撑爆。
@@ -55,7 +59,7 @@
 
 ### 边界说明
 
-- 第 4 项「待补」子项（校验工具拆分 / echo-crc 策略 / 大文件流式读）纯前端可独立完成，与驱动选择无关。
+- 本文件记录的全部功能项与技术问题均已完成或已决策不实现（2026-08-18）。细节可在代码与 git 历史中追溯，本文件可归档。
 
 ---
 

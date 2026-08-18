@@ -6,6 +6,11 @@ import { useSerialStore } from './serial'
 import { storeToRefs } from 'pinia'
 import { useMessagesStore } from './messages'
 import { crc16modbus } from '@/utils/checksum'
+import { frameChunk, injectCorrupt } from '@/utils/chunk-framer'
+import { paceDelay } from '@/utils/rate-limit'
+import { matchEchoCrc, isNackByte } from '@/utils/ack'
+import { fileSource } from '@/utils/chunk-source'
+import type { ChunkSource } from '@/utils/chunk-source'
 import { logger } from '@/utils/logger'
 
 /** transfer store 的外部依赖——下发/ACK 数据与连接状态来自 serial，文件气泡入消息列表。 */
@@ -112,8 +117,8 @@ export function createTransferStore(deps: TransferDeps) {
   let abortFlag = false
   let pauseGate: (() => void) | null = null   // resolve 函数
   let pausePromise: Promise<void> | null = null
-  // 字节数组缓存（pump 循环读取）
-  let fileBytes: Uint8Array | null = null
+  // 最近一次下发的 File 句柄（重试/续传重读用；流式读不驻留字节，仅句柄）
+  let fileData: File | null = null
   let filePath = ''
   let fileConfig: FileTransferConfig = { ...DEFAULT_CONFIG }
 
@@ -169,99 +174,13 @@ export function createTransferStore(deps: TransferDeps) {
     return id
   }
 
-  // ── 限速工具 ──
-
-  function paceDelay(
-    _now: number,
-    startedAt: number,
-    sent: number,
-    bps: number,
-    interDelay: number
-  ): number {
-    if (!bps) return interDelay
-    const elapsed = _now - startedAt
-    const target = (bps * elapsed) / 1000
-    const deficit = sent - target
-    return Math.max(interDelay, deficit > 0 ? (deficit / bps) * 1000 : 0)
-  }
-
-  // ── CRC16-Modbus 工具 ──
-
-  function crc16(data: Uint8Array): number {
-    return crc16modbus(data)
-  }
-
-  // ── 帧封装 ──
-
-  function frameChunk(chunk: Uint8Array, seq: number, config: FileTransferConfig): Uint8Array {
-    const { framing, chunkSuffix } = config
-    let wire: Uint8Array
-
-    switch (framing) {
-      case 'len-prefix': {
-        const len = chunk.length
-        const header = new Uint8Array([len & 0xff, (len >> 8) & 0xff])
-        wire = new Uint8Array(header.length + chunk.length)
-        wire.set(header)
-        wire.set(chunk, header.length)
-        break
-      }
-      case 'seq-crc': {
-        const len = chunk.length
-        const crcVal = crc16(chunk)
-        const header = new Uint8Array([
-          seq & 0xff, (seq >> 8) & 0xff,
-          len & 0xff, (len >> 8) & 0xff
-        ])
-        const footer = new Uint8Array([crcVal & 0xff, (crcVal >> 8) & 0xff])
-        wire = new Uint8Array(header.length + chunk.length + footer.length)
-        wire.set(header)
-        wire.set(chunk, header.length)
-        wire.set(footer, header.length + chunk.length)
-        break
-      }
-      default: // raw
-        wire = new Uint8Array(chunk)
-        break
-    }
-
-    // 追加行尾
-    if (chunkSuffix !== 'none') {
-      const suffixMap: Record<string, Uint8Array> = {
-        cr: new Uint8Array([0x0d]),
-        lf: new Uint8Array([0x0a]),
-        crlf: new Uint8Array([0x0d, 0x0a])
-      }
-      const suffix = suffixMap[chunkSuffix] || new Uint8Array(0)
-      if (suffix.length > 0) {
-        const combined = new Uint8Array(wire.length + suffix.length)
-        combined.set(wire)
-        combined.set(suffix, wire.length)
-        wire = combined
-      }
-    }
-
-    return wire
-  }
-
-  // ── 错误注入 ──
-
-  function maybeInjectError(wire: Uint8Array, chunkSeq: number, config: FileTransferConfig): Uint8Array {
-    if (config.injectCorruptEveryN > 0 && chunkSeq > 0 && chunkSeq % config.injectCorruptEveryN === 0) {
-      // 把最后一个字节翻转
-      const corrupted = new Uint8Array(wire)
-      corrupted[corrupted.length - 1] ^= 0xff
-      return corrupted
-    }
-    return wire
-  }
-
   // ── 发送并等待 ACK ──
 
   async function sendWithRetry(
     wire: Uint8Array,
     chunkIndex: number,
-    config: FileTransferConfig
+    config: FileTransferConfig,
+    expectedCrc: number
   ): Promise<boolean> {
     for (let attempt = 0; attempt <= config.retries; attempt++) {
       if (abortFlag) return false
@@ -284,8 +203,8 @@ export function createTransferStore(deps: TransferDeps) {
         return false
       }
 
-      // 等待 ACK
-      const ackOk = await waitForAck(config)
+      // 等待 ACK（echo-crc 需要本包期望 CRC 做回吐比对）
+      const ackOk = await waitForAck(config, expectedCrc)
       if (ackOk) return true
       if (abortFlag) return false
       // 超时或 NACK，重试
@@ -293,42 +212,51 @@ export function createTransferStore(deps: TransferDeps) {
     return false
   }
 
-  function waitForAck(config: FileTransferConfig): Promise<boolean> {
+  function waitForAck(config: FileTransferConfig, expectedCrc: number): Promise<boolean> {
     return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
+      // echo-crc 需要累积回吐字节（≥2 字节后按小端比对）；其余模式逐字节立即判定
+      const echoBuf: number[] = []
+      let finished = false
+
+      // 幂等收尾：超时与响应竞态时只 resolve 一次
+      const finish = (ok: boolean) => {
+        if (finished) return
+        finished = true
+        clearTimeout(timeout)
         unsub?.()
-        resolve(false)
-      }, config.ackTimeout)
+        resolve(ok)
+      }
+
+      const timeout = setTimeout(() => finish(false), config.ackTimeout)
 
       const unsub = deps.onData((bytes: Uint8Array) => {
         for (const b of bytes) {
           if (config.ackMode === 'any') {
-            clearTimeout(timeout)
-            unsub()
-            resolve(true)
+            finish(true)
             return
           }
           if (config.ackMode === 'byte') {
             if (b === config.ackByte) {
-              clearTimeout(timeout)
-              unsub()
-              resolve(true)
+              finish(true)
               return
             }
             // NACK (0x15) — 立即失败重试
-            if (b === 0x15) {
-              clearTimeout(timeout)
-              unsub()
-              resolve(false)
+            if (isNackByte(b)) {
+              finish(false)
               return
             }
           }
-          // echo-crc: 需要对比 CRC，暂简化为收到任意字节即 ACK
           if (config.ackMode === 'echo-crc') {
-            clearTimeout(timeout)
-            unsub()
-            resolve(true)
-            return
+            // NACK 优先于 CRC 比对
+            if (isNackByte(b)) {
+              finish(false)
+              return
+            }
+            echoBuf.push(b)
+            if (echoBuf.length >= 2) {
+              finish(matchEchoCrc(echoBuf, expectedCrc))
+              return
+            }
           }
         }
       })
@@ -339,21 +267,21 @@ export function createTransferStore(deps: TransferDeps) {
 
   let pumpRunning = false
 
-  async function pump(filename: string, bytes: Uint8Array, config: FileTransferConfig) {
+  async function pump(filename: string, source: ChunkSource, config: FileTransferConfig) {
     if (pumpRunning) return
     pumpRunning = true
     abortFlag = false
     pauseGate = null
     pausePromise = null
 
-    const id = addTransfer(filename, bytes.length, config)
+    const id = addTransfer(filename, source.size, config)
     activeId.value = id
     const state = transfers.value.find((t) => t.id === id)!
     state.status = 'sending'
     triggerRef(transfers)
 
     // 添加消息气泡
-    deps.addFileTransfer(id, filename, bytes.length)
+    deps.addFileTransfer(id, filename, source.size)
 
     const startTime = Date.now()
     let totalSent = 0
@@ -377,7 +305,7 @@ export function createTransferStore(deps: TransferDeps) {
         })
       }
 
-      while (chunkIndex < Math.ceil(bytes.length / (config.chunkSize || bytes.length))) {
+      while (chunkIndex < Math.ceil(source.size / (config.chunkSize || source.size))) {
         // 检查暂停
         if (pausePromise) {
           await pausePromise
@@ -389,19 +317,22 @@ export function createTransferStore(deps: TransferDeps) {
           return
         }
 
-        // 取切片
-        const chunkSize = config.chunkSize > 0 ? config.chunkSize : bytes.length
+        // 取切片（数据源按 [start,end) 增量读取，内存占用有界为 chunkSize）
+        const chunkSize = config.chunkSize > 0 ? config.chunkSize : source.size
         const start = chunkIndex * chunkSize
-        const end = Math.min(start + chunkSize, bytes.length)
-        const chunk = bytes.slice(start, end)
+        const end = Math.min(start + chunkSize, source.size)
+        const chunk = await source.slice(start, end)
 
         // 封装
-        let wire = frameChunk(chunk, seq, config)
+        let wire = frameChunk(chunk, seq, config.framing, config.chunkSuffix)
         // 错误注入
-        wire = maybeInjectError(wire, chunkIndex, config)
+        wire = injectCorrupt(wire, chunkIndex, config.injectCorruptEveryN)
+
+        // echo-crc 需要本包期望 CRC（设备回吐的比对基准；payload 的 CRC16）
+        const expectedCrc = config.ackMode === 'echo-crc' ? crc16modbus(chunk) : 0
 
         // 发送
-        const ok = await sendWithRetry(wire, chunkIndex, config)
+        const ok = await sendWithRetry(wire, chunkIndex, config, expectedCrc)
         if (!ok) {
           cleanupPump(id, 'error', chunkIndex)
           return
@@ -460,8 +391,7 @@ export function createTransferStore(deps: TransferDeps) {
 
   function cleanupPump(id: string, status: TransferStatus, failedChunk?: number) {
     pumpRunning = false
-    fileBytes = null
-    filePath = ''
+    // 保留 fileData/filePath 供 retry 重新读文件（File 可多次随机切片读，无内存驻留）
 
     const rec = transfers.value.find((t) => t.id === id)
     const tag = rec ? `${rec.filename} (${rec.sent}/${rec.total}B)` : id
@@ -487,15 +417,14 @@ export function createTransferStore(deps: TransferDeps) {
 
   // ── 公开操作 ──
 
-  /** 读取文件并开始下发 */
+  /** 记录文件句柄并开始下发（不读入内存——pump 按块 file.slice 增量读） */
   async function start(file: File, config: FileTransferConfig) {
     if (activeId.value) {
       await abort(activeId.value)
     }
     if (!deps.connected.value) return
 
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    fileBytes = bytes
+    fileData = file
     filePath = file.name
     fileConfig = { ...config }
 
@@ -504,7 +433,7 @@ export function createTransferStore(deps: TransferDeps) {
     // 保存最后配置
     lastConfig.value = { ...config }
 
-    pump(file.name, bytes, config)
+    pump(file.name, fileSource(file), config)
   }
 
   /** 暂停 */
@@ -550,11 +479,9 @@ export function createTransferStore(deps: TransferDeps) {
     transfers.value = list
     triggerRef(transfers)
 
-    // 读取文件重新开始
-    // 注意：重试需要文件还在，如果文件不在内存中则无法重试
-    // 这里简化处理：如果有 fileBytes 且文件名匹配，直接重发
-    if (fileBytes && filePath === t.filename) {
-      pump(t.filename, fileBytes, fileConfig)
+    // 重新从 File 句柄读起（File 可多次随机切片读；文件名需与最近一次下发一致）
+    if (fileData && filePath === t.filename) {
+      pump(t.filename, fileSource(fileData), fileConfig)
     }
   }
 
