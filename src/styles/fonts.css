@@ -1,7 +1,7 @@
 /* 自托管字体 ——
  * Orbitron 用于 OLED HUD 主题的"display"字体（标题/数字等）。
  * 自托管而非 Google Fonts 是因为 CSP 不允许外部 style-sheet 加载。
- * 仅在 OLED 主题里通过 --display-font 引用，不污染其他主题。
+ * 仅在对应主题里通过 --display-font/--mono-font 引用，不污染其他主题。
  * 源文件来自 Google Fonts v35 的可变字体（12KB，含 400-900 字重）。
  */
 @font-face {
@@ -11,4 +11,24 @@
   font-display: swap;
   src: url('/fonts/orbitron-var.woff2') format('woff2-variations'),
        url('/fonts/orbitron-var.woff2') format('woff2');
+}
+
+/* 像素风主题（retro-console）字体 ——
+ * Press Start 2P 作 display 标题（仅 Latin，中文回退 ui-font），
+ * VT323 作 mono 数据字（仅 Latin，中文回退系统等宽）。
+ */
+@font-face {
+  font-family: 'Press Start 2P Local';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/press-start-2p-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'VT323 Local';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/vt323-latin-400-normal.woff2') format('woff2');
 }

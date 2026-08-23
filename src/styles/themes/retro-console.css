@@ -1,0 +1,76 @@
+/* retro-console 主题 —— 像素形状语言全局强制层。
+ *
+ * token 只达 var() 引用处，碰不到 Naive 组件内部、hover/focus、tooltip 等缝隙；
+ * 主题里改 borderRadius/字面色只是「配色像」，不足以构成整体像素感。
+ * 这里按 [data-theme-id='retro-console']（applyTheme 设置）做形状强制，弥补缺口：
+ * 硬切过渡、2px 硬边框、阶梯硬阴影（无模糊）、CRT 扫描线。
+ * 仅该主题激活时生效，其他主题完全不受影响。
+ */
+
+/* —— 硬切：像素风无缓动、无柔光 —— */
+[data-theme-id='retro-console'] *,
+[data-theme-id='retro-console'] *::before,
+[data-theme-id='retro-console'] *::after {
+  transition: none !important;
+}
+
+/* —— CRT 扫描线（全局覆盖，不挡交互）—— */
+[data-theme-id='retro-console'] .app::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.22) 0,
+    rgba(0, 0, 0, 0.22) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* —— 阶梯硬边框：所有 Naive 输入/选择/按钮/卡片/标签/弹窗 + 玻璃条 —— */
+[data-theme-id='retro-console'] .n-input,
+[data-theme-id='retro-console'] .n-base-selection,
+[data-theme-id='retro-console'] .n-button,
+[data-theme-id='retro-console'] .n-card,
+[data-theme-id='retro-console'] .n-base-tag,
+[data-theme-id='retro-console'] .n-tabs-nav,
+[data-theme-id='retro-console'] .n-modal,
+[data-theme-id='retro-console'] .n-popover,
+[data-theme-id='retro-console'] .n-dialog,
+[data-theme-id='retro-console'] .glass-strong,
+[data-theme-id='retro-console'] .glass {
+  border: var(--border-width) solid var(--border);
+}
+
+/* —— 阶梯硬阴影（Npx 偏移、无模糊）取代柔光阴影 ——
+    关键认知：retro 底色深，半透明黑阴影在深底上是「黑叠深色」对比不足（复审：几乎不可见）。
+    改不透明纯黑 #000，让浮层/侧栏在深底上下压出实色块；聊天气泡用小一圈 2px，
+    避免满屏都是大阴影。 */
+[data-theme-id='retro-console'] .glass-strong,
+[data-theme-id='retro-console'] .n-card,
+[data-theme-id='retro-console'] .n-popover,
+[data-theme-id='retro-console'] .n-modal,
+[data-theme-id='retro-console'] .n-dialog,
+[data-theme-id='retro-console'] .n-dropdown-menu,
+[data-theme-id='retro-console'] .right {
+  box-shadow: 3px 3px 0 #000 !important;
+}
+
+[data-theme-id='retro-console'] .bubble {
+  box-shadow: 2px 2px 0 #000;
+}
+
+/* —— 像素颗粒：位图/图标更显点阵 —— */
+[data-theme-id='retro-console'] img,
+[data-theme-id='retro-console'] canvas {
+  image-rendering: pixelated;
+}
+
+/* —— 数据/统计数字用等宽像素字，强化仪器感 —— */
+[data-theme-id='retro-console'] .rx-stat,
+[data-theme-id='retro-console'] .tx-stat {
+  font-family: var(--mono-font);
+}

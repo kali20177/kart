@@ -2,12 +2,14 @@ import type { ThemeDefinition, ThemeTokens } from './types'
 import { glassIndustrialDark } from './builtin/glass-industrial-dark'
 import { glassIndustrialLight } from './builtin/glass-industrial-light'
 import { oledHud } from './builtin/oled-hud'
+import { retroConsole } from './builtin/retro-console'
 
 const registry = new Map<string, ThemeDefinition>()
 
 register(glassIndustrialDark)
 register(glassIndustrialLight)
 register(oledHud)
+register(retroConsole)
 
 export function register(theme: ThemeDefinition): void {
   registry.set(theme.id, theme)
