@@ -45,6 +45,7 @@ export const retroConsole: ThemeDefinition = {
     '--radius-xl': '0px',
     '--pill-radius': '0px',
     '--border-width': '2px',
+    '--chat-bg': 'var(--bg-panel)',
     '--gap': '8px',
     '--mono-font': "'VT323 Local','VT323','Cascadia Mono','Consolas',monospace",
     '--ui-font': "'VT323 Local','VT323','PingFang SC','Microsoft YaHei',monospace",

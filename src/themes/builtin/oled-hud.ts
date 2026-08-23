@@ -43,6 +43,7 @@ export const oledHud: ThemeDefinition = {
     '--radius-xl': '4px',
     '--pill-radius': '999px',
     '--border-width': '1px',
+    '--chat-bg': 'var(--bg-panel)', // 0 blur 不透明底（与透出 --glass-bg 一致）
     '--gap': '8px',
     '--mono-font': "'JetBrains Mono','Cascadia Mono','Consolas',monospace",
     '--ui-font': "'Inter',-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif",

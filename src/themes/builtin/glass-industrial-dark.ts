@@ -47,6 +47,7 @@ export const glassIndustrialDark: ThemeDefinition = {
     '--radius-xl': '10px',
     '--pill-radius': '999px',
     '--border-width': '1px',
+    '--chat-bg': 'transparent', // 玻璃质感：消息列表透出 --glass-bg，保留毛玻璃
     '--gap': '8px',
     '--mono-font': "'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace",
     '--ui-font': "'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
