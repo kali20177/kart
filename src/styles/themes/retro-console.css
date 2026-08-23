@@ -30,7 +30,9 @@
   );
 }
 
-/* —— 阶梯硬边框：所有 Naive 输入/选择/按钮/卡片/标签/弹窗 + 玻璃条 —— */
+/* —— 阶梯硬边框：所有 Naive 输入/选择/按钮/卡片/标签/弹窗 + 玻璃条 ——
+    只对 width/style 用 !important：确保默认与 focus/hover 态都保持 2px 硬边，
+    但 border-color 留给 Naive —— 聚焦态仍能亮起 primary 色指示焦点。 */
 [data-theme-id='retro-console'] .n-input,
 [data-theme-id='retro-console'] .n-base-selection,
 [data-theme-id='retro-console'] .n-button,
@@ -42,7 +44,9 @@
 [data-theme-id='retro-console'] .n-dialog,
 [data-theme-id='retro-console'] .glass-strong,
 [data-theme-id='retro-console'] .glass {
-  border: var(--border-width) solid var(--border);
+  border-width: var(--border-width) !important;
+  border-style: solid !important;
+  border-color: var(--border);
 }
 
 /* —— 阶梯硬阴影（Npx 偏移、无模糊）取代柔光阴影 ——
@@ -69,8 +73,9 @@
   image-rendering: pixelated;
 }
 
-/* —— 数据/统计数字用等宽像素字，强化仪器感 —— */
-[data-theme-id='retro-console'] .rx-stat,
-[data-theme-id='retro-console'] .tx-stat {
+/* —— 数据/统计数字用等宽像素字，强化仪器感 ——
+   StatusBar 的实际结构是 .stat-group 内嵌 .dir-label/.val/.rate（RX/TX 帧数/速率），
+   早年选择器 .rx-stat/.tx-stat 已不存在，这里改为对真实包裹层生效。 */
+[data-theme-id='retro-console'] .stat-group {
   font-family: var(--mono-font);
 }

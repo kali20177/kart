@@ -679,14 +679,14 @@ function handleExport(key: string) {
   display: inline-block;
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   flex-shrink: 0;
 }
 .ch-dot {
   display: inline-block;
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   margin-right: 4px;
   flex-shrink: 0;
 }

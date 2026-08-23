@@ -50,4 +50,17 @@ describe('applyTheme', () => {
     expect(root.style.getPropertyValue('--bg')).toBe('#111')
     expect(root.style.getPropertyValue('--chat-bg')).toBe('#00f')
   })
+
+  it('清空覆盖后移除之前写入的键（含非 token 键 --chat-bg），不残留旧值', () => {
+    // 非 token 键：只经覆盖写入，清空后必须移除、回落 CSS 默认
+    applyTheme(theme, { '--chat-bg': '#00f' })
+    expect(root.style.getPropertyValue('--chat-bg')).toBe('#00f')
+    applyTheme(theme, { '--chat-bg': '' })
+    expect(root.style.getPropertyValue('--chat-bg')).toBe('')
+    // 主题 token 键：清空后回退主题值而非残留覆盖值
+    applyTheme(theme, { '--ui-font': 'SomeFont' })
+    expect(root.style.getPropertyValue('--ui-font')).toBe('SomeFont')
+    applyTheme(theme, {})
+    expect(root.style.getPropertyValue('--ui-font')).toBe('Inter, sans-serif')
+  })
 })

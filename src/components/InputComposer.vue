@@ -411,7 +411,7 @@ onBeforeUnmount(() => {
   margin-right: 6px;
   border: 2px solid currentColor;
   border-right-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   vertical-align: -2px;
   animation: loop-spin 0.8s linear infinite;
 }

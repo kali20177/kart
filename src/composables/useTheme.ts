@@ -24,21 +24,24 @@ export function useTheme() {
   // themeId 切换 / 用户覆盖变化 → 应用 CSS 变量 + 主题附带字体。
   // 用户覆盖（settings.themeOverrides）在主题 token 之上叠加，优先级最高，
   // 支持「自定义全局字体 / 聊天空背景」等个性化。
-  function applyCurrent() {
+  function applyNow() {
     const t = getTheme(themeId.value) ?? listThemes()[0]
     applyThemeTokens(t, settingsStore.settings.themeOverrides)
     applyThemeFonts(t)
   }
-  watch(
-    () => settingsStore.settings.themeId,
-    applyCurrent,
-    { immediate: true }
-  )
-  watch(
-    () => settingsStore.settings.themeOverrides,
-    applyCurrent,
-    { deep: true }
-  )
+  // 主题切换立即应用（首帧由 main.ts 预应用，此处兜底）；用户覆盖变化合并到每帧一次，
+  // 避免字体框内每键入一个字符都全量重写全部 CSS 变量（中间非法字体名还会短暂回退）。
+  let overridesQueued = false
+  function applyOverridesQueued() {
+    if (overridesQueued) return
+    overridesQueued = true
+    requestAnimationFrame(() => {
+      overridesQueued = false
+      applyNow()
+    })
+  }
+  watch(() => settingsStore.settings.themeId, applyNow, { immediate: true })
+  watch(() => settingsStore.settings.themeOverrides, applyOverridesQueued, { deep: true })
 
   function setTheme(id: string) {
     settingsStore.settings.themeId = id
