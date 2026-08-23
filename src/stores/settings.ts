@@ -16,6 +16,7 @@ const DEFAULTS: AppSettings = {
   bufferLimit: 5000,
   defaultView: 'ascii',
   themeId: 'glass-industrial-dark',
+  themeOverrides: {},
   fontSize: 13,
   locale: 'zh-CN',
   waveform: {

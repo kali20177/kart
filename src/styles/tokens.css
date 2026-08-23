@@ -10,7 +10,11 @@
   --radius: 6px;
   --radius-lg: 8px;
   --radius-xl: 10px;
+  /* 胶囊形元素（REC 指示、占位图标、状态点）圆角，像素风主题置 0 */
+  --pill-radius: 999px;
   --gap: 8px;
+  /* 聊天空背景：默认跟随 --bg-panel，可被用户主题覆盖（--chat-bg）独立定制 */
+  --chat-bg: var(--bg-panel);
 
   --glass-blur: 12px;
   --glass-blur-sm: 8px;

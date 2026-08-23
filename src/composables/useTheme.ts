@@ -1,7 +1,7 @@
 import { computed, watch } from 'vue'
 import { darkTheme } from 'naive-ui'
 import { useSettingsStore } from '@/stores/settings'
-import { getTheme, applyTokens as applyThemeTokens, applyFonts as applyThemeFonts, listThemes } from '@/themes'
+import { getTheme, applyTheme as applyThemeTokens, applyFonts as applyThemeFonts, listThemes } from '@/themes'
 import type { ThemeDefinition } from '@/themes'
 
 export function useTheme() {
@@ -21,15 +21,23 @@ export function useTheme() {
 
   const naiveOverrides = computed(() => theme.value.naiveOverrides)
 
-  // themeId 切换 → 应用 CSS 变量 + 主题附带字体
+  // themeId 切换 / 用户覆盖变化 → 应用 CSS 变量 + 主题附带字体。
+  // 用户覆盖（settings.themeOverrides）在主题 token 之上叠加，优先级最高，
+  // 支持「自定义全局字体 / 聊天空背景」等个性化。
+  function applyCurrent() {
+    const t = getTheme(themeId.value) ?? listThemes()[0]
+    applyThemeTokens(t, settingsStore.settings.themeOverrides)
+    applyThemeFonts(t)
+  }
   watch(
     () => settingsStore.settings.themeId,
-    (id) => {
-      const t = getTheme(id) ?? listThemes()[0]
-      applyThemeTokens(t.tokens, t.isDark)
-      applyThemeFonts(t)
-    },
+    applyCurrent,
     { immediate: true }
+  )
+  watch(
+    () => settingsStore.settings.themeOverrides,
+    applyCurrent,
+    { deep: true }
   )
 
   function setTheme(id: string) {

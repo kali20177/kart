@@ -625,7 +625,7 @@ onBeforeUnmount(() => {
 .status-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   background: var(--text-dim);
   opacity: 0.5;
   flex-shrink: 0;
@@ -662,7 +662,7 @@ onBeforeUnmount(() => {
   height: 20px;
   padding: 0 8px 0 7px;
   border: 1px solid var(--text-dim);
-  border-radius: 999px;
+  border-radius: var(--pill-radius);
   font-family: var(--mono-font);
   font-size: 11px;
   font-weight: 600;
@@ -685,7 +685,7 @@ onBeforeUnmount(() => {
 .rec-pill-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   border: 1.5px solid currentColor;
   background: transparent;
   flex-shrink: 0;
@@ -752,7 +752,7 @@ onBeforeUnmount(() => {
 .decoder-btn-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   background: var(--text-dim);
   opacity: 0.45;
   flex-shrink: 0;

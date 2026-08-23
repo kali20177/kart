@@ -12,6 +12,7 @@ function makeSettings(partial?: Partial<AppSettings['terminal']>): AppSettings {
     bufferLimit: 5000,
     defaultView: 'ascii',
     themeId: 'glass-industrial-dark',
+    themeOverrides: {},
     fontSize: 13,
     locale: 'zh-CN',
     waveform: { parse: {}, maxPoints: 5000, maxHistoryPoints: 200_000 },

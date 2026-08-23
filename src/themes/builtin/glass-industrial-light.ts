@@ -45,6 +45,8 @@ export const glassIndustrialLight: ThemeDefinition = {
     '--radius-md': '6px',
     '--radius-lg': '8px',
     '--radius-xl': '10px',
+    '--pill-radius': '999px',
+    '--border-width': '1px',
     '--gap': '8px',
     '--mono-font': "'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace",
     '--ui-font': "'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
@@ -58,6 +60,7 @@ export const glassIndustrialLight: ThemeDefinition = {
       primaryColorHover: '#3b82f6',
       primaryColorPressed: '#1d4ed8',
       borderRadius: '6px',
+      fontFamily: 'var(--ui-font)',
     },
     Dropdown: {
       fontSizeSmall: '13px',

@@ -359,7 +359,7 @@ async function onBreak() {
 .led {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   background: var(--text-dim);
   flex: none;
 }
@@ -501,7 +501,7 @@ async function onBreak() {
 .signal-ro-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   border: 1.5px solid currentColor;
   background: transparent;
   flex: none;
@@ -590,7 +590,7 @@ async function onBreak() {
 .record-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   background: var(--text-dim);
   flex: none;
 }

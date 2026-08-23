@@ -519,7 +519,7 @@ function saveWidget() {
 .led-dot {
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   flex-shrink: 0;
 }
 .led-dot.alarm {

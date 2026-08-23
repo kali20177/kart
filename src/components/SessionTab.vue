@@ -85,7 +85,7 @@ function onClose() {
 .session-tab-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   background: var(--text-dim);
   opacity: 0.5;
   flex-shrink: 0;

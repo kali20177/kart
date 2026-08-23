@@ -41,6 +41,8 @@ export const oledHud: ThemeDefinition = {
     '--radius-md': '2px',
     '--radius-lg': '3px',
     '--radius-xl': '4px',
+    '--pill-radius': '999px',
+    '--border-width': '1px',
     '--gap': '8px',
     '--mono-font': "'JetBrains Mono','Cascadia Mono','Consolas',monospace",
     '--ui-font': "'Inter',-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif",
@@ -58,6 +60,7 @@ export const oledHud: ThemeDefinition = {
       primaryColorHover: '#33FF99',
       primaryColorPressed: '#00C853',
       borderRadius: '2px',
+      fontFamily: 'var(--ui-font)',
     },
     Dropdown: {
       fontSizeSmall: '13px',

@@ -577,6 +577,8 @@ watch(
      否则消息列表高度塌陷为内容高（空消息时 0） */
   height: 100%;
   min-height: 0;
+  /* 聊天空背景：独立 token 供用户覆盖（如 VSCode 自定义聊天区背景）；默认跟随 --bg-panel */
+  background: var(--chat-bg);
 }
 .toolbar {
   display: flex;
@@ -746,7 +748,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   /* muted 颜色与边框呼应「未激活」语义 */

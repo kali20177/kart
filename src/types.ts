@@ -217,6 +217,12 @@ export interface AppSettings {
   defaultView: DataMode
   // 主题
   themeId: string
+  /**
+   * 用户主题覆盖（CSS 变量名 → 值），优先级高于主题 tokens。
+   * 用于「自定义全局字体（--ui-font/--mono-font/--display-font）」「自定义聊天空背景（--chat-bg）」
+   * 等个性化；主题切换时在 token 之上再叠加这层。空对象即无覆盖。
+   */
+  themeOverrides: Record<string, string>
   fontSize: number
   locale: 'zh-CN' | 'en-US'
   // 波形

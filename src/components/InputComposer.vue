@@ -340,7 +340,7 @@ onBeforeUnmount(() => {
 .repeat-count .dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   background: var(--accent, #18a058);
   box-shadow: 0 0 0 0 currentColor;
   animation: loop-pulse 1.2s ease-out infinite;

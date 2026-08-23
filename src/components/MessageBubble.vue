@@ -425,7 +425,7 @@ function onChipMenuSelect(key: string) {
   margin: 0 6px;
   align-self: center;
   border: 1.5px solid var(--border);
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;

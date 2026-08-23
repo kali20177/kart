@@ -274,7 +274,7 @@ function fmtTime(ms: number): string {
 .status-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   display: inline-block;
 }
 

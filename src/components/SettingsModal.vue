@@ -10,6 +10,7 @@ import {
   NSwitch,
   NButton,
   NButtonGroup,
+  NColorPicker,
   useMessage,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -50,6 +51,31 @@ const viewOptions = computed(() => [
 const themeOptions = computed(() =>
   listThemes().map(t => ({ label: t.name, value: t.id }))
 )
+
+// —— 主题自定义覆盖：在主题 token 之上叠加用户值（优先级最高）。
+// 字体覆盖留空 = 跟随主题（删除覆盖键回退）；聊天空背景可清空（null → 删除）。
+function fontOverride(key: string) {
+  return {
+    get: () => s.themeOverrides[key] ?? '',
+    set: (v: string) => {
+      if (v) s.themeOverrides[key] = v
+      else delete s.themeOverrides[key]
+    },
+  }
+}
+const uiFontOverride = computed(fontOverride('--ui-font'))
+const monoFontOverride = computed(fontOverride('--mono-font'))
+const displayFontOverride = computed(fontOverride('--display-font'))
+const chatBgOverride = computed({
+  get: () => s.themeOverrides['--chat-bg'] ?? null,
+  set: (v: string | null) => {
+    if (v) s.themeOverrides['--chat-bg'] = v
+    else delete s.themeOverrides['--chat-bg']
+  },
+})
+function clearOverrides() {
+  s.themeOverrides = {}
+}
 // 终端字体：枚举操作系统已安装字体（Local Font Access），避免预定义列表里字体不存在导致 xterm 回退渲染错乱。
 // 枚举不可用（非 Chromium/权限拒绝）时降级为空列表，NSelect tag+filterable 支持手动输入字体名兜底。
 const terminalFonts = ref<string[]>([])
@@ -254,6 +280,24 @@ const navItems = computed<NavItem[]>(() => [
           <NFormItem :label="t('settings.theme')">
             <NSelect v-model:value="s.themeId" :options="themeOptions" />
           </NFormItem>
+          <div class="overrides-block">
+            <div class="section-title overrides-title">{{ t('settings.themeOverrides') }}</div>
+            <NFormItem :label="t('settings.uiFontOverride')">
+              <NInput v-model:value="uiFontOverride" :placeholder="t('settings.fontOverridePlaceholder')" clearable />
+            </NFormItem>
+            <NFormItem :label="t('settings.monoFontOverride')">
+              <NInput v-model:value="monoFontOverride" :placeholder="t('settings.fontOverridePlaceholder')" clearable />
+            </NFormItem>
+            <NFormItem :label="t('settings.displayFontOverride')">
+              <NInput v-model:value="displayFontOverride" :placeholder="t('settings.fontOverridePlaceholder')" clearable />
+            </NFormItem>
+            <NFormItem :label="t('settings.chatBgOverride')">
+              <NColorPicker v-model:value="chatBgOverride" :show-alpha="false" :modes="['hex']" />
+            </NFormItem>
+            <NFormItem>
+              <NButton size="small" quaternary type="error" @click="clearOverrides">{{ t('settings.clearOverrides') }}</NButton>
+            </NFormItem>
+          </div>
           <NFormItem :label="t('settings.fontSize')">
             <NInputNumber v-model:value="s.fontSize" :min="10" :max="20" style="width: 100%" />
           </NFormItem>
@@ -484,6 +528,18 @@ const navItems = computed<NavItem[]>(() => [
   margin-bottom: 16px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
+}
+
+/* ===== 主题自定义覆盖 ===== */
+.overrides-block {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+.overrides-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
 /* ===== 波特率列表 ===== */

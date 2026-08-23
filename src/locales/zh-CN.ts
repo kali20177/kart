@@ -391,6 +391,13 @@ export default {
     pauseNotify: '暂停提示',
     pauseNotifyHint: '恢复时提示缺失数据时间段',
     lang: '语言',
+    themeOverrides: '主题自定义覆盖',
+    uiFontOverride: '主界面字体 (UI)',
+    monoFontOverride: '等宽数据字体',
+    displayFontOverride: '标题/展示字体',
+    chatBgOverride: '聊天空背景',
+    clearOverrides: '清空覆盖',
+    fontOverridePlaceholder: '如：VT323, monospace（留空=跟随主题）',
     // 波形
     formatTextHint: '每行解析为数值（逗号/空格/分号分隔）',
     maxPoints: '可视窗口点数',

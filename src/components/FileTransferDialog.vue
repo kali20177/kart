@@ -499,7 +499,7 @@ watch(
   font-size: 16px;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: var(--pill-radius);
   cursor: pointer;
   display: flex;
   align-items: center;

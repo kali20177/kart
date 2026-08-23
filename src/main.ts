@@ -10,7 +10,7 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import '@xterm/xterm/css/xterm.css'
 import 'dockview-core/dist/styles/dockview.css'
 import './styles/dockview.css'
-import { applyTokens, applyFonts, listThemes } from './themes'
+import { applyTheme, applyFonts, listThemes } from './themes'
 import { STORAGE_PREFIX, storage } from './composables/useStorage'
 import { logger } from './utils/logger'
 import { getDriverType } from './serial'
@@ -42,12 +42,16 @@ logger.init('info').then(() => {
 // Pinia 此时尚未初始化，直接用 localStorage 读持久化的 themeId。
 const STORAGE_KEY = STORAGE_PREFIX + 'settings'
 let initialThemeId = 'glass-industrial-dark'
+let initialThemeOverrides: Record<string, string> = {}
 try {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (raw) {
     const parsed = JSON.parse(raw) as Record<string, unknown>
     if (parsed.themeId && typeof parsed.themeId === 'string') {
       initialThemeId = parsed.themeId
+    }
+    if (parsed.themeOverrides && typeof parsed.themeOverrides === 'object') {
+      initialThemeOverrides = parsed.themeOverrides as Record<string, string>
     }
     // 迁移旧版 theme → themeId
     if (parsed.theme && typeof parsed.theme === 'string') {
@@ -58,7 +62,7 @@ try {
   /* 静默降级 */
 }
 const initialTheme = listThemes().find(t => t.id === initialThemeId) ?? listThemes()[0]
-applyTokens(initialTheme.tokens, initialTheme.isDark)
+applyTheme(initialTheme, initialThemeOverrides)
 applyFonts(initialTheme)
 
 createApp(App).use(createPinia()).use(i18n).mount('#app')
