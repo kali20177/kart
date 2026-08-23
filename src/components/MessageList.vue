@@ -577,7 +577,7 @@ watch(
      否则消息列表高度塌陷为内容高（空消息时 0） */
   height: 100%;
   min-height: 0;
-  /* 聊天空背景：独立 token 供用户覆盖（如 VSCode 自定义聊天区背景）；默认跟随 --bg-panel */
+  /* 消息视图背景色：独立 token 供用户覆盖（--chat-bg）；默认跟随 --bg-panel */
   background: var(--chat-bg);
 }
 .toolbar {

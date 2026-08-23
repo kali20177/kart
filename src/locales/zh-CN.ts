@@ -395,7 +395,11 @@ export default {
     uiFontOverride: '主界面字体 (UI)',
     monoFontOverride: '等宽数据字体',
     displayFontOverride: '标题/展示字体',
-    chatBgOverride: '聊天空背景',
+    messageViewBgOverride: '消息视图背景色',
+    bubbleOverrides: '消息气泡配色',
+    bubbleBg: '背景色',
+    bubbleText: '文字色',
+    bubbleBorder: '边框色',
     clearOverrides: '清空覆盖',
     fontOverridePlaceholder: '如：VT323, monospace（留空=跟随主题）',
     // 波形

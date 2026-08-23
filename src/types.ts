@@ -219,8 +219,9 @@ export interface AppSettings {
   themeId: string
   /**
    * 用户主题覆盖（CSS 变量名 → 值），优先级高于主题 tokens。
-   * 用于「自定义全局字体（--ui-font/--mono-font/--display-font）」「自定义聊天空背景（--chat-bg）」
-   * 等个性化；主题切换时在 token 之上再叠加这层。空对象即无覆盖。
+   * 用于「自定义全局字体（--ui-font/--mono-font/--display-font）」「自定义消息视图背景（--chat-bg）
+   * 与消息气泡配色（--rx-* 与 --tx-* 的 背景/文字/边框）」等个性化；
+   * 主题切换时在 token 之上再叠加这层。空对象即无覆盖。
    */
   themeOverrides: Record<string, string>
   fontSize: number

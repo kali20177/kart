@@ -53,7 +53,7 @@ const themeOptions = computed(() =>
 )
 
 // —— 主题自定义覆盖：在主题 token 之上叠加用户值（优先级最高）。
-// 字体覆盖留空 = 跟随主题（删除覆盖键回退）；聊天空背景可清空（null → 删除）。
+// 字体覆盖留空 = 跟随主题（删除覆盖键回退）；颜色覆盖清空 = 回退主题（null → 删除）。
 function fontOverride(key: string) {
   return {
     get: () => s.themeOverrides[key] ?? '',
@@ -63,16 +63,27 @@ function fontOverride(key: string) {
     },
   }
 }
+function colorOverride(key: string) {
+  return {
+    get: () => s.themeOverrides[key] ?? null,
+    set: (v: string | null) => {
+      if (v) s.themeOverrides[key] = v
+      else delete s.themeOverrides[key]
+    },
+  }
+}
 const uiFontOverride = computed(fontOverride('--ui-font'))
 const monoFontOverride = computed(fontOverride('--mono-font'))
 const displayFontOverride = computed(fontOverride('--display-font'))
-const chatBgOverride = computed({
-  get: () => s.themeOverrides['--chat-bg'] ?? null,
-  set: (v: string | null) => {
-    if (v) s.themeOverrides['--chat-bg'] = v
-    else delete s.themeOverrides['--chat-bg']
-  },
-})
+// 消息视图背景色 + 消息气泡配色（RX/TX 各 背景/文字/边框）。
+// 自定义了背景色后，需同步调气泡色保证文字可读性（如白色背景需深色气泡文字）。
+const messageViewBgOverride = computed(colorOverride('--chat-bg'))
+const rxBubbleBg = computed(colorOverride('--rx-bg'))
+const rxBubbleText = computed(colorOverride('--rx-text'))
+const rxBubbleBorder = computed(colorOverride('--rx-border'))
+const txBubbleBg = computed(colorOverride('--tx-bg'))
+const txBubbleText = computed(colorOverride('--tx-text'))
+const txBubbleBorder = computed(colorOverride('--tx-border'))
 function clearOverrides() {
   s.themeOverrides = {}
 }
@@ -291,9 +302,44 @@ const navItems = computed<NavItem[]>(() => [
             <NFormItem :label="t('settings.displayFontOverride')">
               <NInput v-model:value="displayFontOverride" :placeholder="t('settings.fontOverridePlaceholder')" clearable />
             </NFormItem>
-            <NFormItem :label="t('settings.chatBgOverride')">
-              <NColorPicker v-model:value="chatBgOverride" :show-alpha="false" :modes="['hex']" />
+            <NFormItem :label="t('settings.messageViewBgOverride')">
+              <NColorPicker v-model:value="messageViewBgOverride" :show-alpha="false" :modes="['hex']" />
             </NFormItem>
+            <div class="bubble-overrides">
+              <div class="overrides-group-title">{{ t('settings.bubbleOverrides') }}</div>
+              <div class="bubble-cols">
+                <div class="bubble-col">
+                  <div class="bubble-col-title">RX</div>
+                  <div class="bubble-cell">
+                    <span class="cell-label">{{ t('settings.bubbleBg') }}</span>
+                    <NColorPicker v-model:value="rxBubbleBg" size="small" :show-alpha="false" :modes="['hex']" />
+                  </div>
+                  <div class="bubble-cell">
+                    <span class="cell-label">{{ t('settings.bubbleText') }}</span>
+                    <NColorPicker v-model:value="rxBubbleText" size="small" :show-alpha="false" :modes="['hex']" />
+                  </div>
+                  <div class="bubble-cell">
+                    <span class="cell-label">{{ t('settings.bubbleBorder') }}</span>
+                    <NColorPicker v-model:value="rxBubbleBorder" size="small" :show-alpha="false" :modes="['hex']" />
+                  </div>
+                </div>
+                <div class="bubble-col">
+                  <div class="bubble-col-title">TX</div>
+                  <div class="bubble-cell">
+                    <span class="cell-label">{{ t('settings.bubbleBg') }}</span>
+                    <NColorPicker v-model:value="txBubbleBg" size="small" :show-alpha="false" :modes="['hex']" />
+                  </div>
+                  <div class="bubble-cell">
+                    <span class="cell-label">{{ t('settings.bubbleText') }}</span>
+                    <NColorPicker v-model:value="txBubbleText" size="small" :show-alpha="false" :modes="['hex']" />
+                  </div>
+                  <div class="bubble-cell">
+                    <span class="cell-label">{{ t('settings.bubbleBorder') }}</span>
+                    <NColorPicker v-model:value="txBubbleBorder" size="small" :show-alpha="false" :modes="['hex']" />
+                  </div>
+                </div>
+              </div>
+            </div>
             <NFormItem>
               <NButton size="small" quaternary type="error" @click="clearOverrides">{{ t('settings.clearOverrides') }}</NButton>
             </NFormItem>
@@ -540,6 +586,40 @@ const navItems = computed<NavItem[]>(() => [
   font-size: 13px;
   font-weight: 600;
   color: var(--text-dim);
+}
+.overrides-group-title {
+  margin: 6px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+/* 消息气泡配色：左列 RX、右列 TX，每列纵向「背景/文字/边框」，每格标签在上、色块在下 */
+.bubble-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+.bubble-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bubble-col-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.bubble-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.bubble-cell .cell-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.3;
 }
 
 /* ===== 波特率列表 ===== */
