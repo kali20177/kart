@@ -1,6 +1,7 @@
 /**
- * 连接栏收起态高度验证（一次性脚本）：连接 mock → 量展开态栏高 → 点收起 →
- * 量收起态栏高 + 截图。断言收起态 ≤ 展开态 - 15px 且 ≤ 28px。
+ * 连接参数栏收起交互回归（收起=整行消失，入口上移会话 tab）：
+ * 连接 mock → 展开态栏高 → 点 ⌃ 收起 → 断言 .bar 消失/tab 按钮出现 →
+ * 点 tab ⌄ 展开（栏恢复）→ 再收起 → 点 tab 电源钮断开（状态点变灰）。
  */
 import { chromium } from 'playwright-core'
 import { mkdirSync } from 'node:fs'
@@ -30,20 +31,26 @@ async function ensureDevServer() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+let pass = 0, fail = 0
+function check(name, ok, detail = '') {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`)
+  if (ok) pass++
+  else fail++
+}
+
 async function main() {
   const stopServer = await ensureDevServer()
   const browser = await chromium.launch({ executablePath: CHROME, headless: true })
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
-  const height = () => page.evaluate(() => {
+  const barBox = () => page.evaluate(() => {
     const bar = document.querySelector('.session-pane .bar')
-    return bar ? bar.getBoundingClientRect().height : -1
+    return bar ? bar.getBoundingClientRect().height : 0
   })
 
   try {
     await page.goto(`${BASE}/?mock`, { waitUntil: 'networkidle' })
     await page.waitForSelector('.session-pane', { timeout: 10000 })
     await sleep(400)
-    // 连接 mock 产生数据
     const sel = page.locator('.mock-label + .n-select .n-base-selection')
     await sel.click()
     const opt = page.locator('.n-base-select-option', { hasText: '混合 ASCII' }).first()
@@ -53,36 +60,54 @@ async function main() {
     await page.locator('button', { hasText: '断开' }).first().waitFor({ timeout: 6000 })
     await sleep(1200)
 
-    const expandedH = await height()
-    await page.screenshot({ path: `${SHOT_DIR}/connbar-expanded.png`, clip: { x: 0, y: 0, width: 1280, height: 140 } })
+    const expandedH = await barBox()
+    await page.screenshot({ path: `${SHOT_DIR}/connbar2-expanded.png`, clip: { x: 0, y: 0, width: 1280, height: 150 } })
+    check('展开态参数栏渲染', expandedH > 30, `${expandedH}px`)
+
+    // 收起：⌃ → .bar display:none（高度 0），tab 上出现电源/展开按钮
     await page.locator('.collapse-btn').first().click()
-    await sleep(500)
-    const collapsedH = await height()
-    await page.screenshot({ path: `${SHOT_DIR}/connbar-collapsed.png`, clip: { x: 0, y: 0, width: 1280, height: 140 } })
-    // retro-console 主题下的收起态观感
+    await sleep(400)
+    const collapsedH = await barBox()
+    const tab = await page.evaluate(() => ({
+      barVisible: (document.querySelector('.session-pane .bar')?.getBoundingClientRect().height ?? 0) > 0,
+      connBtn: !!document.querySelector('.session-tab-conn'),
+      expandBtn: !!document.querySelector('.session-tab-expand'),
+      connOn: document.querySelector('.session-tab-conn')?.classList.contains('on'),
+    }))
+    check('收起后参数栏高度归零', collapsedH === 0, `${collapsedH}px`)
+    check('tab 上出现电源/展开按钮', tab.connBtn && tab.expandBtn, JSON.stringify(tab))
+    check('电源钮为已连接态（绿）', tab.connOn === true)
+    await page.screenshot({ path: `${SHOT_DIR}/connbar2-collapsed.png`, clip: { x: 0, y: 0, width: 1280, height: 150 } })
+
+    // tab ⌄ 展开：参数栏恢复
+    await page.locator('.session-tab-expand').click()
+    await sleep(400)
+    check('tab ⌄ 展开恢复参数栏', (await barBox()) > 30)
+
+    // 再收起，tab 电源钮断开：状态点变灰
+    await page.locator('.collapse-btn').first().click()
+    await sleep(400)
+    await page.locator('.session-tab-conn').click()
+    await sleep(800)
+    const afterDisc = await page.evaluate(() => ({
+      connOn: document.querySelector('.session-tab-conn')?.classList.contains('on'),
+      dotOn: document.querySelector('.session-tab-dot')?.classList.contains('on'),
+    }))
+    check('tab 电源钮断开（绿→灰）', afterDisc.connOn === false && afterDisc.dotOn === false, JSON.stringify(afterDisc))
+    await page.screenshot({ path: `${SHOT_DIR}/connbar2-collapsed-disconnected.png`, clip: { x: 0, y: 0, width: 1280, height: 150 } })
+
+    // retro 主题观感
     await page.evaluate(() => window.__theme.setTheme('retro-console'))
     await sleep(700)
-    await page.screenshot({ path: `${SHOT_DIR}/connbar-collapsed-retro.png`, clip: { x: 0, y: 0, width: 1280, height: 140 } })
-
-    // 收起态结构断言：pill 存在、帧解码/校验和按钮不渲染
-    const ui = await page.evaluate(() => ({
-      pill: !!document.querySelector('.conn-pill'),
-      miniRec: !!document.querySelector('.mini-rec'),
-      decoderBtns: document.querySelectorAll('.decoder-btn').length,
-      nbtnInBar: document.querySelectorAll('.session-pane .bar .n-button').length,
-    }))
-    console.log(`展开态栏高: ${expandedH}px  收起态栏高: ${collapsedH}px  收益: ${expandedH - collapsedH}px`)
-    console.log('收起态 UI:', JSON.stringify(ui))
-    const pass = collapsedH <= expandedH - 15 && collapsedH <= 28 && ui.pill && ui.decoderBtns === 0
-    console.log(pass ? 'PASS' : 'FAIL')
-    if (!pass) process.exitCode = 1
+    await page.screenshot({ path: `${SHOT_DIR}/connbar2-collapsed-retro.png`, clip: { x: 0, y: 0, width: 1280, height: 150 } })
   } catch (e) {
-    console.error('脚本异常:', e.message)
-    process.exitCode = 1
+    check('脚本异常', false, e.message)
   } finally {
     await browser.close()
     stopServer()
   }
+  console.log(`====  ${pass} passed, ${fail} failed  ====`)
+  if (fail > 0) process.exitCode = 1
 }
 
 main()
