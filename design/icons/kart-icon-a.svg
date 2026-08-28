@@ -1,0 +1,40 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 暗色底：贴近应用 dark 主题 bg(#0d1117)→panel(#161b22)，自上而下微微透光 -->
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B2431"/>
+      <stop offset="1" stop-color="#0C1118"/>
+    </linearGradient>
+    <!-- RX 蓝：应用 rx 气泡 #3B82F6 系 -->
+    <linearGradient id="rx" x1="124" y1="330" x2="744" y2="830" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5CA9FF"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <!-- TX 绿：应用 tx 气泡 #10B981 系 -->
+    <linearGradient id="tx" x1="470" y1="96" x2="890" y2="406" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3DDC9E"/>
+      <stop offset="1" stop-color="#0BA36B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 底板 -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="url(#tile)"/>
+  <rect x="2.5" y="2.5" width="1019" height="1019" rx="226" fill="none" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="3"/>
+
+  <!-- TX 绿气泡（右上层）：'K' 的 ASCII 十六进制 0x4B，呼应 ASCII/Hex 切换 -->
+  <rect x="470" y="96" width="420" height="280" rx="92" fill="url(#tx)"/>
+  <path d="M 856 346 L 856 448 Q 856 468 840 454 L 738 370 Z" fill="url(#tx)"/>
+  <g fill="#FFFFFF">
+    <path transform="translate(571.6,301) scale(0.17808,-0.17808)" d="M326 0 347 134H29L62 343L396 730H567L195 296L190 264H368L393 420H543L476 0Z"/>
+    <path transform="translate(678.4,301) scale(0.17808,-0.17808)" d="M22 0 138 730H373Q444 730 495.0 705.5Q546 681 570.5 639.0Q595 597 586 542Q576 480 535.5 438.5Q495 397 440 389L439 387Q500 380 530.5 330.5Q561 281 550 211Q534 111 459.5 55.5Q385 0 266 0ZM236 436H324Q368 436 396.5 459.5Q425 483 432 523Q438 564 416.5 586.5Q395 609 351 609H263ZM186 121H280Q329 121 361.5 147.0Q394 173 401 219Q408 265 384.0 291.5Q360 318 311 318H217Z"/>
+  </g>
+
+  <!-- RX 蓝气泡（左下层，主体） -->
+  <rect x="124" y="330" width="620" height="470" rx="120" fill="url(#rx)"/>
+  <path d="M 176 770 L 176 884 Q 176 906 194 891 L 322 792 Z" fill="url(#rx)"/>
+
+  <!-- K：与 4B 同为 JetBrains Mono 真实轮廓（字形源: JetBrainsMonoNLNerdFont-ExtraBoldItalic.ttf） -->
+  <g fill="#FFFFFF">
+    <path transform="translate(311.6,700) scale(0.36986,-0.36986)" d="M21 0 137 730H287L242 447H310L478 730H641L429 372L531 0H372L296 309H220L171 0Z"/>
+  </g>
+</svg>
