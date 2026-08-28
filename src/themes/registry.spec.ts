@@ -63,4 +63,15 @@ describe('applyTheme', () => {
     applyTheme(theme, {})
     expect(root.style.getPropertyValue('--ui-font')).toBe('Inter, sans-serif')
   })
+
+  it('切换到省略某键的主题（Partial tokens）时移除该键，回落 CSS fallback 而非残留上一主题值', () => {
+    applyTheme(theme) // 定义了 --bg/--accent/--ui-font
+    const sparse: ThemeDefinition = { ...theme, id: 'sparse', tokens: { '--bg': '#222' } }
+    applyTheme(sparse)
+    expect(root.getAttribute('data-theme-id')).toBe('sparse')
+    expect(root.style.getPropertyValue('--bg')).toBe('#222')
+    // 上一主题定义、新主题省略的键必须被移除（getPropertyValue 为空串），不能残留 '#111'/'#0af'
+    expect(root.style.getPropertyValue('--accent')).toBe('')
+    expect(root.style.getPropertyValue('--ui-font')).toBe('')
+  })
 })

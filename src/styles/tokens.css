@@ -1,10 +1,15 @@
 /* 设计令牌 —— fallback 默认值层。
-   useTheme 会通过 applyTokens() 覆盖这些值，此文件确保在 JS 执行前页面有合理的默认值。
-   值 = glass-industrial 暗色。若默认主题改为其他，同步更新此处以避免首屏闪烁。 */
+   useTheme 会通过 applyTheme() 用 inline style 覆盖这些值，此文件确保在 JS 执行前
+   页面有合理的默认值。分层：:root 基础值（无明暗语义的键）+ 亮色（glass-industrial
+   light）+ [data-theme='dark'] 暗色（glass-industrial dark）——JS 未跑时的首帧为亮色。
+   注意：新增 TokenKey 时须在此处同步补 fallback，否则 JS 失败/首帧前该键无值。 */
 
 :root {
   --mono-font: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
   --ui-font: 'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --display-font: 'Inter', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --display-letter-spacing: 0;
+  --ascii-btn-font: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius: 6px;
@@ -12,6 +17,7 @@
   --radius-xl: 10px;
   /* 胶囊形元素（REC 指示、占位图标、状态点）圆角，像素风主题置 0 */
   --pill-radius: 999px;
+  --border-width: 1px;
   --gap: 8px;
   /* 消息视图背景色（消息列表容器背景）：默认与 glass 主题一致为 transparent（透出玻璃层），
      像素风主题声明为 var(--bg-panel) 等实色；可被用户主题覆盖（--chat-bg）独立定制 */
@@ -19,13 +25,6 @@
 
   --glass-blur: 12px;
   --glass-blur-sm: 8px;
-
-  /* 亮色默认值（light fallback） */
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(0, 0, 0, 0.06);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
 }
 
 /* 亮色（glass-industrial light） */
@@ -52,6 +51,13 @@
   --ok: #16a34a;
   --warn: #d97706;
   --err: #dc2626;
+
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-highlight: rgba(255, 255, 255, 0.95);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
 
   --search-highlight-bg: #fde047;
   --search-highlight-text: #0f172a;
@@ -90,6 +96,7 @@
 
   --glass-bg: rgba(22, 27, 34, 0.75);
   --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.04);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4), 0 4px 6px rgba(0, 0, 0, 0.2);

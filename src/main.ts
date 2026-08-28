@@ -11,7 +11,7 @@ import '@xterm/xterm/css/xterm.css'
 import 'dockview-core/dist/styles/dockview.css'
 import './styles/dockview.css'
 import './styles/themes/retro-console.css'
-import { applyTheme, applyFonts, listThemes } from './themes'
+import { applyTheme, applyFonts, listThemes, migrateLegacyThemeFields } from './themes'
 import { STORAGE_PREFIX, storage } from './composables/useStorage'
 import { logger } from './utils/logger'
 import { getDriverType } from './serial'
@@ -48,15 +48,13 @@ try {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (raw) {
     const parsed = JSON.parse(raw) as Record<string, unknown>
-    if (parsed.themeId && typeof parsed.themeId === 'string') {
+    // 主题字段迁移与 settings store 共用唯一实现（此处只读不落盘，store 挂载后会再跑并落盘）
+    migrateLegacyThemeFields(parsed)
+    if (typeof parsed.themeId === 'string') {
       initialThemeId = parsed.themeId
     }
     if (parsed.themeOverrides && typeof parsed.themeOverrides === 'object') {
       initialThemeOverrides = parsed.themeOverrides as Record<string, string>
-    }
-    // 迁移旧版 theme → themeId
-    if (parsed.theme && typeof parsed.theme === 'string') {
-      initialThemeId = parsed.theme === 'light' ? 'glass-industrial-light' : 'glass-industrial-dark'
     }
   }
 } catch {

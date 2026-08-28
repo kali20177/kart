@@ -401,7 +401,7 @@ export default {
     bubbleText: '文字色',
     bubbleBorder: '边框色',
     clearOverrides: '清空覆盖',
-    fontOverridePlaceholder: '如：VT323, monospace（留空=跟随主题）',
+    fontOverridePlaceholder: '如：Departure Mono, monospace（留空=跟随主题）',
     // 波形
     formatTextHint: '每行解析为数值（逗号/空格/分号分隔）',
     maxPoints: '可视窗口点数',

@@ -3,7 +3,8 @@ import type { ThemeDefinition } from '../types'
 /**
  * Retro Console 像素风 — 复古游戏机配色。单态暗色。
  * 0 圆角 + 2px 硬边框 + 阶梯硬阴影（2px 偏移无模糊），营造像素/CRT 感。
- * 标题用 Press Start 2P（仅 Latin，中文回退 ui-font），数据用 VT323（等宽）。
+ * 标题用 Press Start 2P（仅 Latin，中文回退 ui-font）；UI 拉丁与数据统一用
+ * Departure Mono（像素点阵、0 带斜线，0/O 与 1/l/I 区分清晰，中文回退系统字体）。
  */
 export const retroConsole: ThemeDefinition = {
   id: 'retro-console',
@@ -47,8 +48,8 @@ export const retroConsole: ThemeDefinition = {
     '--border-width': '2px',
     '--chat-bg': 'var(--bg-panel)',
     '--gap': '8px',
-    '--mono-font': "'VT323 Local','VT323','Cascadia Mono','Consolas',monospace",
-    '--ui-font': "'VT323 Local','VT323','PingFang SC','Microsoft YaHei',monospace",
+    '--mono-font': "'Departure Mono Local','Departure Mono','Cascadia Mono','Consolas',monospace",
+    '--ui-font': "'Departure Mono Local','Departure Mono','PingFang SC','Microsoft YaHei',monospace",
     '--display-font': "'Press Start 2P Local','Press Start 2P','Inter','PingFang SC',sans-serif",
     '--display-letter-spacing': '1px',
     '--ascii-btn-font': "'Press Start 2P Local','Press Start 2P','Inter','PingFang SC',sans-serif",

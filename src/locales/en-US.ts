@@ -398,7 +398,7 @@ export default {
     bubbleText: 'Text',
     bubbleBorder: 'Border',
     clearOverrides: 'Clear Overrides',
-    fontOverridePlaceholder: 'e.g. VT323, monospace (empty = follow theme)',
+    fontOverridePlaceholder: 'e.g. Departure Mono, monospace (empty = follow theme)',
     formatTextHint: 'Parse each line as numbers (comma/space/semicolon separated)',
     maxPoints: 'Visible Points',
     maxHistoryPoints: 'History Buffer Limit',

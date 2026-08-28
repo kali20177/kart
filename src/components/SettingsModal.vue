@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, h } from 'vue'
 import {
   NModal,
   NForm,
@@ -12,11 +12,13 @@ import {
   NButtonGroup,
   NColorPicker,
   useMessage,
+  type SelectOption,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useRecordDirectory } from '@/composables/useRecordDirectory'
-import { listThemes } from '@/themes'
+import { listThemes, getTheme } from '@/themes'
+import type { TokenKey } from '@/themes'
 import { listSystemFonts } from '@/utils/fonts'
 import type { Session } from '@/session'
 
@@ -51,6 +53,21 @@ const viewOptions = computed(() => [
 const themeOptions = computed(() =>
   listThemes().map(t => ({ label: t.name, value: t.id }))
 )
+
+// 主题选项渲染：名称前带三枚色样（面板底/强调/语义 OK），色值取该主题自己的 tokens——
+// 4 套主题风格差异大（玻璃/霓虹/像素），下拉里即可预览配色，降低试错成本
+function renderThemeLabel(option: SelectOption) {
+  const t = getTheme(String(option.value))
+  if (!t) return option.label as string
+  const swatch = (token: TokenKey) =>
+    h('i', { class: 'theme-swatch', style: { background: t.tokens[token] ?? 'transparent' } })
+  return h('span', { class: 'theme-opt' }, [
+    swatch('--bg-panel'),
+    swatch('--accent'),
+    swatch('--ok'),
+    option.label as string,
+  ])
+}
 
 // —— 主题自定义覆盖：在主题 token 之上叠加用户值（优先级最高）。
 // 字体覆盖留空 = 跟随主题（删除覆盖键回退）；颜色覆盖清空 = 回退主题（null → 删除）。
@@ -289,7 +306,7 @@ const navItems = computed<NavItem[]>(() => [
             <NSelect v-model:value="s.defaultView" :options="viewOptions" />
           </NFormItem>
           <NFormItem :label="t('settings.theme')">
-            <NSelect v-model:value="s.themeId" :options="themeOptions" />
+            <NSelect v-model:value="s.themeId" :options="themeOptions" :render-label="renderThemeLabel" />
           </NFormItem>
           <div class="overrides-block">
             <div class="section-title overrides-title">{{ t('settings.themeOverrides') }}</div>
@@ -490,6 +507,20 @@ const navItems = computed<NavItem[]>(() => [
 </template>
 
 <style scoped>
+/* 主题选项色样：下拉菜单经 Naive 传送门挂在 body 下，scoped 够不着，须 :global */
+:global(.theme-opt) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+:global(.theme-swatch) {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 3px);
+}
 .settings-body {
   display: flex;
   gap: 0;

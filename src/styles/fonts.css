@@ -14,8 +14,10 @@
 }
 
 /* 像素风主题（retro-console）字体 ——
- * Press Start 2P 作 display 标题（仅 Latin，中文回退 ui-font），
- * VT323 作 mono 数据字（仅 Latin，中文回退系统等宽）。
+ * Press Start 2P 作 display 标题（仅 Latin，中文回退 ui-font）。
+ * Departure Mono 作 ui 字与 mono 数据字（气泡正文/状态栏数字/hex/界面拉丁，
+ * 中文回退系统字体）：像素点阵风契合主题，且 0 带斜线（slashed zero）、
+ * 1/l/I 区分清晰，无 VT323 那类 0/O 混淆的仪器可读性问题。
  */
 @font-face {
   font-family: 'Press Start 2P Local';
@@ -25,10 +27,11 @@
   src: url('/fonts/press-start-2p-latin-400-normal.woff2') format('woff2');
 }
 
+/* Departure Mono v1.500，SIL OFL 1.1（© Helena Zhang），与项目 MIT 兼容 */
 @font-face {
-  font-family: 'VT323 Local';
+  font-family: 'Departure Mono Local';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/vt323-latin-400-normal.woff2') format('woff2');
+  src: url('/fonts/departure-mono-latin-400-normal.woff2') format('woff2');
 }

@@ -3,7 +3,7 @@ import { reactive, ref, watch } from 'vue'
 import type { AppSettings, WaveformSettings } from '@/types'
 import { storage } from '@/composables/useStorage'
 import { persistNow } from '@/utils/persist'
-import { getTheme } from '@/themes'
+import { migrateLegacyThemeFields } from '@/themes'
 
 const DEFAULTS: AppSettings = {
   encoding: 'utf-8',
@@ -51,22 +51,9 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   >('settings', {})
 
-  // 迁移：旧版 theme → themeId
-  if ('theme' in persisted) {
-    const old = persisted.theme
-    persisted.themeId = old === 'light' ? 'glass-industrial-light' : ('glass-industrial-dark' as string)
-    delete persisted.theme
-    persistNow('settings', persisted)
-  }
-  // 二次迁移：上一版 themeMode（已被删除）→ glass-industrial 对应主题
-  if ('themeMode' in persisted && !('themeId' in persisted)) {
-    persisted.themeId = persisted.themeMode === 'light' ? 'glass-industrial-light' : 'glass-industrial-dark'
-    delete persisted.themeMode
-    persistNow('settings', persisted)
-  }
-  // 三次迁移：上一轮 themeId='glass-industrial'（无 dark/light 后缀）→ 暗色
-  if (persisted.themeId && !getTheme(persisted.themeId)) {
-    persisted.themeId = 'glass-industrial-dark'
+  // 主题字段迁移（theme→themeId / themeMode→themeId / 未知 id 回退暗色），
+  // 与 main.ts 首帧共用 migrateLegacyThemeFields 唯一实现
+  if (migrateLegacyThemeFields(persisted as Record<string, unknown>)) {
     persistNow('settings', persisted)
   }
   // 五次迁移：waveform 新增 maxHistoryPoints（历史缓冲上限）。浅合并下 persisted.waveform

@@ -262,7 +262,7 @@ onMounted(() => {
           </div>
 
           <div
-            class="right"
+            class="right quick-rail"
             :class="{ collapsed: commandsCollapsed, dragging }"
             :style="rightStyle"
           >
