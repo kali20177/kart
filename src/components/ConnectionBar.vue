@@ -482,13 +482,34 @@ onBeforeUnmount(() => {
       </template>
     </template>
 
-    <!-- 收起态：紧凑单行——状态点 + 端口名（数据来源可见，栏高收缩让位给数据显示区） -->
+    <!-- 收起态：极薄单行——状态 pill（点击=连接/断开）+ 录制中 REC 指示。
+         帧解码/校验和等配置入口全部隐藏（收起语义=腾空间，配置先展开），
+         栏高从展开态 ~45px 压到 ~25px。 -->
     <template v-else>
-      <span class="status-dot" :class="{ on: serial.connected, reconnecting: serial.reconnecting }" />
-      <span class="port-label">{{ serial.selectedPort ?? t('conn.selectPort') }}</span>
+      <NTooltip placement="bottom" :style="tipStyle">
+        <template #trigger>
+          <button
+            type="button"
+            class="conn-pill"
+            :class="{ on: serial.connected, reconnecting: serial.reconnecting }"
+            @click="toggle"
+          >
+            <span class="status-dot" :class="{ on: serial.connected, reconnecting: serial.reconnecting }" />
+            <span class="port-label">{{ serial.selectedPort ?? t('conn.selectPort') }}</span>
+          </button>
+        </template>
+        {{ serial.connected ? t('conn.disconnect') : t('conn.connect') }}
+      </NTooltip>
+      <span
+        v-if="recorder.isRecording || recorder.state.status === 'stopping'"
+        class="mini-rec"
+      >
+        <span class="mini-rec-dot" />REC {{ tapeDuration }}
+      </span>
     </template>
 
     <NButton
+      v-if="!collapsed"
       size="small"
       :type="serial.connected ? 'error' : 'primary'"
       strong
@@ -497,8 +518,8 @@ onBeforeUnmount(() => {
       {{ serial.connected ? t('conn.disconnect') : t('conn.connect') }}
     </NButton>
 
-    <!-- 录制控制 -->
-    <template v-if="recorder.supported">
+    <!-- 录制控制（收起态由 mini-rec 只读指示代替） -->
+    <template v-if="recorder.supported && !collapsed">
       <NTooltip placement="bottom" :style="tipStyle">
         <template #trigger>
           <NButton
@@ -529,8 +550,8 @@ onBeforeUnmount(() => {
 
     <div class="spacer" />
 
-    <!-- 帧解码：会话级配置入口（每会话独立，见 DecoderSettingsModal） -->
-    <NTooltip placement="bottom" :style="tipStyle">
+    <!-- 帧解码：会话级配置入口（每会话独立，见 DecoderSettingsModal）；收起态隐藏 -->
+    <NTooltip v-if="!collapsed" placement="bottom" :style="tipStyle">
       <template #trigger>
         <NButton size="small" quaternary class="decoder-btn" @click="showDecoderModal = true">
           <span class="decoder-btn-dot" :class="{ on: !!decoder.id }" />
@@ -540,8 +561,8 @@ onBeforeUnmount(() => {
       {{ decoder.id ? t('decoder.tooltipEnabled', { name: decoderLabel }) : t('decoder.tooltipDisabled') }}
     </NTooltip>
 
-    <!-- 校验和：会话级配置入口（每会话独立，见 ChecksumSettingsModal） -->
-    <NTooltip placement="bottom" :style="tipStyle">
+    <!-- 校验和：会话级配置入口（每会话独立，见 ChecksumSettingsModal）；收起态隐藏 -->
+    <NTooltip v-if="!collapsed" placement="bottom" :style="tipStyle">
       <template #trigger>
         <NButton size="small" quaternary class="decoder-btn" @click="showChecksumModal = true">
           <span class="decoder-btn-dot" :class="{ on: checksumEnabled }" />
@@ -554,9 +575,9 @@ onBeforeUnmount(() => {
     <!-- 参数栏收起/展开 -->
     <NTooltip placement="bottom" :style="tipStyle">
       <template #trigger>
-        <NButton size="small" quaternary class="collapse-btn" @click="collapsed = !collapsed">
+        <button type="button" class="collapse-btn" @click="collapsed = !collapsed">
           {{ collapsed ? '⌄' : '⌃' }}
-        </NButton>
+        </button>
       </template>
       {{ collapsed ? t('conn.expandParams') : t('conn.collapseParams') }}
     </NTooltip>
@@ -617,9 +638,9 @@ onBeforeUnmount(() => {
   pointer-events: none;
   opacity: 0.7;
 }
-/* 收起态：紧凑单行，栏高收缩让位给数据显示区 */
+/* 收起态：极薄单行（内容 20px + padding 2×2 + border 1 ≈ 25px），让位数据显示区 */
 .bar.collapsed {
-  padding: 2px 12px;
+  padding: 2px 10px;
 }
 /* 收起态连接状态点（与会话 tab 圆点一致：灰=未连 / 绿=已连 / 橙=重连中） */
 .status-dot {
@@ -637,6 +658,33 @@ onBeforeUnmount(() => {
 .status-dot.reconnecting {
   background: #ff9800;
   opacity: 1;
+}
+/* 收起态状态 pill：状态点+端口名一体，点击=连接/断开（替代 NButton 压薄行高） */
+.conn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--pill-radius);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  max-width: 260px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.conn-pill:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.conn-pill.on {
+  color: var(--text);
+}
+.conn-pill.reconnecting {
+  color: var(--warn);
 }
 .divider {
   width: 1px;
@@ -707,6 +755,9 @@ onBeforeUnmount(() => {
   .rec-pill.recording .rec-pill-dot {
     animation-duration: 2.4s;
   }
+  .mini-rec-dot {
+    animation-duration: 2.4s;
+  }
 }
 .rec-pill-duration {
   font-variant-numeric: tabular-nums;
@@ -728,20 +779,53 @@ onBeforeUnmount(() => {
 }
 /* 收起态端口名（参数隐藏后保留数据来源可见性） */
 .port-label {
-  font-size: 12px;
-  color: var(--text-dim);
+  font-size: 11px;
+  color: inherit;
   font-family: var(--mono-font);
-  max-width: 180px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   user-select: none;
 }
+/* 收起态录制中指示（只读小字，未录制不占位；展开态仍用完整 REC 按钮） */
+.mini-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--err);
+  font-family: var(--mono-font);
+  user-select: none;
+}
+.mini-rec-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--pill-radius);
+  background: var(--err);
+  animation: rec-pill-blink 1s steps(2, start) infinite;
+}
 .collapse-btn {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
   font-size: 12px;
   line-height: 1;
-  padding: 0 4px;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+  transition: color 0.15s, background-color 0.15s;
+}
+.collapse-btn:hover {
+  color: var(--accent);
+  background: var(--bg-elevated);
 }
 /* —— 会话级配置入口按钮（帧解码 / 校验和共用） —— */
 .decoder-btn {
