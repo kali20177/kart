@@ -288,20 +288,25 @@ onBeforeUnmount(() => {
           class="mono"
           @keydown="onKeydown"
         />
+        <!-- 附件/发送内嵌输入框右下角（聊天应用惯例）：textarea 延伸到容器右缘，
+             拉高后按钮始终贴合右下，不再出现右侧按钮列的空白 -->
+        <div class="fab-row">
+          <NButton size="small" :title="t('fileTransfer.attachFile')" @click="onOpenFileTransfer" :disabled="repeating">📎</NButton>
+          <span class="send-btn-wrap" :class="{ 'is-looping': repeatOn && repeating }">
+            <NButton
+              size="small"
+              :type="repeatOn && repeating ? 'error' : 'primary'"
+              @click="repeatOn ? toggleRepeat() : onSend()"
+            >
+              <template v-if="repeatOn && repeating">
+                <span class="spinner" />
+                {{ t('composer.stop') }}
+              </template>
+              <template v-else>{{ t('composer.send') }}</template>
+            </NButton>
+          </span>
+        </div>
       </div>
-      <NButton :title="t('fileTransfer.attachFile')" @click="onOpenFileTransfer" :disabled="repeating" style="margin-right: 4px">📎</NButton>
-      <span class="send-btn-wrap" :class="{ 'is-looping': repeatOn && repeating }">
-        <NButton
-          :type="repeatOn && repeating ? 'error' : 'primary'"
-          @click="repeatOn ? toggleRepeat() : onSend()"
-        >
-          <template v-if="repeatOn && repeating">
-            <span class="spinner" />
-            {{ t('composer.stop') }}
-          </template>
-          <template v-else>{{ t('composer.send') }}</template>
-        </NButton>
-      </span>
     </div>
   </div>
 </template>
@@ -371,11 +376,29 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* fab-row 的定位参照（附件/发送悬浮在输入框右下角内侧） */
+  position: relative;
 }
 .mono :deep(textarea) {
   font-family: var(--mono-font);
   resize: none;
   background: var(--bg-elevated);
+  /* 右侧预留 fab-row（📎+发送）宽度，长行文字不被悬浮按钮遮挡 */
+  padding-right: 118px;
+}
+/* 附件/发送按钮组：悬浮输入框右下角内侧，随输入框高度自适应贴合 */
+.fab-row {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* 按钮自带底色，盖住下方文字；不拦截输入框其余区域的点击 */
+  pointer-events: none;
+}
+.fab-row > * {
+  pointer-events: auto;
 }
 /* 输入框上边缘横向拖拽手柄：向上拖增大、向下拖减小 */
 .grip {
