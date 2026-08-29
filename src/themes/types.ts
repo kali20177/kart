@@ -21,6 +21,43 @@ export type TokenKey = typeof TOKEN_KEYS[number]
 /** 单套 CSS 自定义属性 */
 export type ThemeTokens = Partial<Record<TokenKey, string>>
 
+/**
+ * 终端视口（xterm）配色。xterm 自绘文字/单元格（不走 CSS 变量），须逐主题显式给值；
+ * 键名与 xterm ITheme 颜色字段一致（结构兼容，可直接赋 term.options.theme）。
+ * 缺省键回落 isDark 对应的基线（见 themes/terminal.ts）。
+ */
+export interface TerminalPalette {
+  background?: string
+  foreground?: string
+  cursor?: string
+  cursorAccent?: string
+  selectionBackground?: string
+  selectionForeground?: string
+  black?: string
+  red?: string
+  green?: string
+  yellow?: string
+  blue?: string
+  magenta?: string
+  cyan?: string
+  white?: string
+  brightBlack?: string
+  brightRed?: string
+  brightGreen?: string
+  brightYellow?: string
+  brightBlue?: string
+  brightMagenta?: string
+  brightCyan?: string
+  brightWhite?: string
+}
+
+/** TerminalPalette 的全部键（完整性校验用） */
+export const TERMINAL_PALETTE_KEYS = [
+  'background', 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', 'selectionForeground',
+  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite',
+] as const
+
 /** 一个完整主题定义（单态：每个文件只定一种明暗） */
 export interface ThemeDefinition {
   id: string
@@ -30,6 +67,8 @@ export interface ThemeDefinition {
   isDark: boolean
   /** 该主题的 CSS 变量值 */
   tokens: ThemeTokens
+  /** 终端视口配色；未指定时按 isDark 回落基线（themes/terminal.ts） */
+  terminal?: TerminalPalette
   /** Naive UI 主题覆写（可选） */
   naiveOverrides?: GlobalThemeOverrides
 }

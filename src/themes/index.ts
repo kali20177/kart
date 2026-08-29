@@ -1,4 +1,5 @@
 export { register, getTheme, listThemes, applyTokens, applyTheme, applyFonts } from './registry'
+export { resolveTerminalPalette } from './terminal'
 export { migrateLegacyThemeFields } from './migrate'
-export type { ThemeDefinition, ThemeTokens, TokenKey } from './types'
-export { TOKEN_KEYS } from './types'
+export type { ThemeDefinition, ThemeTokens, TokenKey, TerminalPalette } from './types'
+export { TOKEN_KEYS, TERMINAL_PALETTE_KEYS } from './types'

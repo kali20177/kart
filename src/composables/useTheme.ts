@@ -55,6 +55,7 @@ export function useTheme() {
 
   return {
     themeId,
+    theme,
     isDark,
     naiveTheme,
     naiveOverrides,

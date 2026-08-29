@@ -6,6 +6,8 @@ import { useI18n } from 'vue-i18n'
 import { FitAddon } from '@xterm/addon-fit'
 import TerminalInput from './TerminalInput.vue'
 import { useSession } from '@/composables/useSession'
+import { useTheme } from '@/composables/useTheme'
+import { resolveTerminalPalette } from '@/themes'
 import { resolveCharHintKind } from '@/utils/terminal-hint'
 import { onViewTabReactivate } from '@/utils/dockview-events'
 import type { DockviewPanelApi } from 'dockview-vue'
@@ -31,6 +33,17 @@ const { terminal, serial, settings, pause } = useSession()
 const { t } = useI18n()
 const toast = useMessage()
 const { copy } = useClipboard()
+const { theme: appTheme } = useTheme()
+
+// 终端视口配色跟随主题：xterm 自绘不走 CSS 变量，须把主题的终端调色板
+// 灌进 ITheme（主题切换/组件重挂载都会经 immediate watch 重灌，幂等）。
+watch(
+  () => resolveTerminalPalette(appTheme.value),
+  (pal) => {
+    terminal.term.options.theme = pal
+  },
+  { immediate: true }
+)
 
 const endingOptions = [
   { label: '无', value: 'none' },
