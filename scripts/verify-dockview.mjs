@@ -246,8 +246,8 @@ try {
   check('收起后参数栏高度收缩（≥8px）', barH0 - barH1 >= 8, `h ${barH0} → ${barH1}`)
   check('收起后数据显示区变高', dockH1 > dockH0, `dock ${dockH0} → ${dockH1}`)
   await page.screenshot({ path: path.join(SHOT_DIR, '8-connbar-collapsed.png') })
-  // 恢复展开（避免残留影响后续流程）
-  await page.locator('.collapse-btn').click()
+  // 恢复展开（避免残留影响后续流程）。e3f7306 起收起态整行消失、展开入口上移会话 tab
+  await page.locator('.session-tab-expand').click()
   await page.waitForTimeout(400)
   check('再点展开恢复原高度', (await barH()) === barH0, `h=${await barH()}`)
 

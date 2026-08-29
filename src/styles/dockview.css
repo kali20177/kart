@@ -1,4 +1,7 @@
-/* dockview 主题变量 → 项目玻璃拟态令牌（自动跟随明暗主题） */
+/* dockview 主题变量 → 项目玻璃拟态令牌（自动跟随明暗主题）。
+   注意：变量族必须完整覆盖 dockview 基础规则消费的键——两个 DockviewVue 已显式传
+   自有主题（utils/dockview-theme）避免默认 abyss 暗色类下渗，但此处每漏定义一个键，
+   对应场景就会回落 dockview 内置暗色默认值（曾致亮色主题非激活 tab 露 #10192c）。 */
 .dv-dockview {  --dv-tabs-and-actions-container-height: 36px;
   --dv-tabs-and-actions-container-font-size: 12px;
   --dv-group-view-background-color: transparent;
@@ -10,6 +13,7 @@
   --dv-inactivegroup-visiblepanel-tab-background-color: transparent;
   --dv-inactivegroup-visiblepanel-tab-color: var(--text);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
   --dv-tab-divider-color: var(--glass-border);
   --dv-tabs-container-scrollbar-color: var(--text-dim);
   --dv-drag-over-background-color: color-mix(in srgb, var(--accent) 18%, transparent);

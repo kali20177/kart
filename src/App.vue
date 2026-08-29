@@ -13,6 +13,7 @@ import SettingsModal from './components/SettingsModal.vue'
 import FileTransferDialog from './components/FileTransferDialog.vue'
 import IncompatibleBrowser from './components/IncompatibleBrowser.vue'
 import { useTheme } from './composables/useTheme'
+import { createKartDockTheme } from './utils/dockview-theme'
 import {
   provideActiveSession,
   provideOccupiedPorts,
@@ -195,7 +196,10 @@ onBeforeUnmount(() => {
 // —— i18n / 主题 / 语言 ——
 const { t, locale } = useI18n()
 const title = useTitle()
-const { naiveTheme, naiveOverrides } = useTheme()
+const { naiveTheme, naiveOverrides, isDark } = useTheme()
+// dockview 显式主题：不传则 dockview 默认挂 abyss 暗色主题类（暗色变量下渗），
+// 见 utils/dockview-theme 注释
+const dockTheme = computed(() => createKartDockTheme(isDark.value))
 
 // 语言切换：同步 settings → vue-i18n + html lang
 watch(
@@ -254,6 +258,7 @@ onMounted(() => {
               :components="components"
               :default-tab-component="sessionTabComponent"
               :default-renderer="'always'"
+              :theme="dockTheme"
               class="dock"
               @ready="onDockReady"
             />

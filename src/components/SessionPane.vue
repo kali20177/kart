@@ -12,6 +12,8 @@ import DashboardPane from './DashboardPane.vue'
 import StatusBar from './StatusBar.vue'
 import ViewTab from './ViewTab.vue'
 import { provideOpenFileTransfer, provideSession, useOpenFileTransferHandler } from '@/composables/useSession'
+import { useTheme } from '@/composables/useTheme'
+import { createKartDockTheme } from '@/utils/dockview-theme'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
 import type { Session } from '@/session'
 
@@ -42,6 +44,11 @@ const components: Record<string, VueComponent> = {
 /** 视图 tab 组件（自定义 tab：图标 + 视图主题色）。default-tab-component 对
  *  无 tabComponent 字段的旧持久化布局同样生效，老布局切到新视觉无需清缓存 */
 const viewTabComponent = ViewTab as unknown as VueComponent
+
+// dockview 显式主题：不传则 dockview 默认挂 abyss 暗色主题类（暗色变量下渗，
+// 亮色主题下非激活 tab 会露 #10192c），见 utils/dockview-theme 注释
+const { isDark } = useTheme()
+const dockTheme = computed(() => createKartDockTheme(isDark.value))
 
 const panelTitle = (id: PanelId): string =>
   id === 'messages' ? t('app.msg') : id === 'waveform' ? t('app.waveform') : id === 'terminal' ? t('app.terminal') : t('app.dashboard')
@@ -178,6 +185,7 @@ function onViewMenuSelect(key: string) {
           :components="components"
           :default-tab-component="viewTabComponent"
           :default-renderer="'always'"
+          :theme="dockTheme"
           class="dock view-dock"
           @ready="onReady"
         />
