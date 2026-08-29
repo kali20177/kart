@@ -7,6 +7,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import TerminalInput from './TerminalInput.vue'
 import { useSession } from '@/composables/useSession'
 import { resolveCharHintKind } from '@/utils/terminal-hint'
+import { VIEW_TAB_REACTIVATE } from '@/utils/dockview-events'
 
 /**
  * 终端视图：xterm 视口（内置 cell 网格/SGR/回滚/alt-screen）+ 工具栏 + 输入条。
@@ -73,7 +74,16 @@ const charHintWarn = computed(() => charHintKind.value === 'tcpNoEcho')
 function ensureOpen() {
   if (opened || !termHost.value) return
   opened = true
-  terminal.term.open(termHost.value)
+  // xterm 实例是会话级（terminal store），本组件却可能被 dockview 重挂载（切端口触发
+  // restoreLayout→fromJSON，reuseExistingPanels 只复用面板对象不保组件）。此时 term 已绑在
+  // 前一组件树的 host 上，xterm 对二次 open() 是静默 no-op（CoreBrowserTerminal.open 对已
+  // 打开实例提前 return），必须把既有 .xterm DOM 迁移进新 host——否则终端空壳，focus/打字
+  // 全部落在一颗游离节点上（真机表现：终端空白、TX 0、琥珀焦点圈圈住内容区）。
+  if (terminal.term.element) {
+    termHost.value.appendChild(terminal.term.element)
+  } else {
+    terminal.term.open(termHost.value)
+  }
   fitAddon = new FitAddon()
   terminal.term.loadAddon(fitAddon)
   fit()
@@ -116,11 +126,29 @@ function focusTerm() {
 
 /** 面板激活时的聚焦：char 聚焦 xterm，line 聚焦本地输入条 */
 function focusActive() {
+  if (!isActive.value) return
   if (terminal.mode === 'char') {
     if (opened) terminal.term.focus()
   } else {
     inputRef.value?.focus()
   }
+}
+
+/**
+ * 激活后聚焦需躲开原生抢焦：dockview 在 pointerdown 激活面板，紧随其后的 mousedown
+ * 默认行为会把 DOM 焦点交给 .dv-tab（tabindex roving），nextTick 微任务聚焦会输给
+ * 这一步（真机埋点实测 focusout dv-tab 晚 textarea.focus 1ms）。rAF 已过 mousedown，
+ * 再补一个 setTimeout(0) 重申兜底；两次调用均幂等，isActive 守卫防失活后误聚焦。
+ */
+function focusSoon() {
+  nextTick(() => {
+    ensureOpen()
+    fit()
+    requestAnimationFrame(() => {
+      focusActive()
+      setTimeout(focusActive, 0)
+    })
+  })
 }
 
 async function onCopy() {
@@ -141,7 +169,15 @@ function onClear() {
 
 let apiSub: { dispose(): void } | null = null
 
+/** ViewTab 点击「已激活」的终端 tab：dockview 对此 no-op（无激活事件），
+ *  焦点此时滞留在 .dv-tab 上（Enter/打字会被 dockview 键盘处理吞掉），
+ *  按 api 对象同一性过滤后把输入焦点拉回 xterm/行输入条。 */
+function onViewTabReactivate(e: Event) {
+  if ((e as CustomEvent).detail === props.params.api) focusSoon()
+}
+
 onMounted(() => {
+  document.addEventListener(VIEW_TAB_REACTIVATE, onViewTabReactivate)
   ro = new ResizeObserver(() => {
     if (opened) fit()
   })
@@ -150,22 +186,17 @@ onMounted(() => {
   nextTick(() => {
     ensureOpen()
     fit()
-    if (isActive.value) focusActive()
+    if (isActive.value) focusSoon()
   })
   // 面板激活/失活（dockview 拖拽/切 tab 均触发）：激活时聚焦 + 自适应
   apiSub = props.params.api.onDidActiveChange((e) => {
     isActive.value = e.isActive
-    if (e.isActive) {
-      nextTick(() => {
-        ensureOpen()
-        fit()
-        focusActive()
-      })
-    }
+    if (e.isActive) focusSoon()
   })
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener(VIEW_TAB_REACTIVATE, onViewTabReactivate)
   apiSub?.dispose()
   apiSub = null
   ro?.disconnect()
@@ -182,6 +213,19 @@ watch(
       if (m === 'char') { if (opened) terminal.term.focus() }
       else inputRef.value?.focus()
     })
+  }
+)
+
+// 连接建立即回焦：点「连接」后焦点滞留按钮上，随后的打字/回车会被按钮吞掉
+// （回车=再次触发按钮，等于误触断连），终端是连接后最直接的输入面。
+// 用户正在可编辑元素打字时不抢（自动重连场景下保护发送框输入）。
+watch(
+  () => serial.connected,
+  (c) => {
+    if (!c || !isActive.value) return
+    const ae = document.activeElement
+    const editing = ae instanceof HTMLElement && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
+    if (!editing) focusSoon()
   }
 )
 </script>

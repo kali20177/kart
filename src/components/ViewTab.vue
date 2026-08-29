@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { DockviewPanelApi } from 'dockview-vue'
+import { VIEW_TAB_REACTIVATE } from '@/utils/dockview-events'
 
 /**
  * 会话内视图 tab（消息/波形/终端）：dockview 自定义 tab 组件。
@@ -20,6 +21,15 @@ const apiSub = api.onDidActiveChange((e) => {
 })
 onBeforeUnmount(() => apiSub.dispose())
 
+/** 点击已激活 tab：dockview 侧是 no-op（不重发激活事件），广播 refocus 事件
+ *  让面板内容组件把输入焦点拉回来（终端 xterm / 行输入条）。document 派发：
+ *  内容组件监听在 document 上（window 为 target 的事件不流经 document）。 */
+function onTabClick() {
+  if (isActive.value) {
+    document.dispatchEvent(new CustomEvent(VIEW_TAB_REACTIVATE, { detail: api }))
+  }
+}
+
 /** 视图类型 → 主题色（CSS 变量，明暗主题自动跟随） */
 const VIEW_META: Record<string, { color: string }> = {
   messages: { color: 'var(--accent)' },
@@ -37,7 +47,7 @@ function onClose() {
 </script>
 
 <template>
-  <div class="view-tab" :class="{ active: isActive }" :style="{ '--c': meta.color }" :title="title">
+  <div class="view-tab" :class="{ active: isActive }" :style="{ '--c': meta.color }" :title="title" @click="onTabClick">
     <svg
       v-if="api.id === 'messages'"
       class="tab-icon"
