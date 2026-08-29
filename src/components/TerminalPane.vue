@@ -7,19 +7,18 @@ import { FitAddon } from '@xterm/addon-fit'
 import TerminalInput from './TerminalInput.vue'
 import { useSession } from '@/composables/useSession'
 import { resolveCharHintKind } from '@/utils/terminal-hint'
-import { VIEW_TAB_REACTIVATE } from '@/utils/dockview-events'
+import { onViewTabReactivate } from '@/utils/dockview-events'
+import type { DockviewPanelApi } from 'dockview-vue'
 
 /**
  * 终端视图：xterm 视口（内置 cell 网格/SGR/回滚/alt-screen）+ 工具栏 + 输入条。
  * char 模式直接键入 xterm（onData 由 terminal store 下发）；line 模式渲染本地输入条。
  */
-/** dockview 面板内容组件 props：params 内携带面板 api（激活状态/事件）。 */
+/** dockview 面板内容组件 props：params 内携带面板 api（激活状态/事件）。
+ *  api 用完整类型（与 ViewTab 一致）——refocus 事件按 api 对象同一性过滤。 */
 interface TerminalPanelParams {
   params?: unknown
-  api: {
-    isActive: boolean
-    onDidActiveChange: (cb: (e: { isActive: boolean }) => void) => { dispose(): void }
-  }
+  api: DockviewPanelApi
   containerApi: unknown
   tabLocation: string
 }
@@ -169,25 +168,21 @@ function onClear() {
 
 let apiSub: { dispose(): void } | null = null
 
-/** ViewTab 点击「已激活」的终端 tab：dockview 对此 no-op（无激活事件），
- *  焦点此时滞留在 .dv-tab 上（Enter/打字会被 dockview 键盘处理吞掉），
- *  按 api 对象同一性过滤后把输入焦点拉回 xterm/行输入条。 */
-function onViewTabReactivate(e: Event) {
-  if ((e as CustomEvent).detail === props.params.api) focusSoon()
-}
+// ViewTab 点击「已激活」的终端 tab 时把输入焦点拉回 xterm/行输入条：
+// dockview 对此 no-op（无激活事件），焦点滞留 .dv-tab 上，Enter/打字会被吞掉。
+// 契约与 api 同一性过滤见 utils/dockview-events。
+let disposeReactivate: (() => void) | null = null
 
 onMounted(() => {
-  document.addEventListener(VIEW_TAB_REACTIVATE, onViewTabReactivate)
+  disposeReactivate = onViewTabReactivate(props.params.api, focusSoon)
   ro = new ResizeObserver(() => {
     if (opened) fit()
   })
   if (viewportRef.value) ro.observe(viewportRef.value)
-  // renderer:'always' 下组件常驻：挂载即初始化 xterm，尺寸由 ResizeObserver 跟随
-  nextTick(() => {
-    ensureOpen()
-    fit()
-    if (isActive.value) focusSoon()
-  })
+  // renderer:'always' 下组件常驻：挂载即初始化 xterm，尺寸由 ResizeObserver 跟随。
+  // focusSoon 内 ensureOpen/fit 无条件执行（失活面板也要渲染），聚焦由 focusActive
+  // 的 isActive 守卫按激活态放行。
+  focusSoon()
   // 面板激活/失活（dockview 拖拽/切 tab 均触发）：激活时聚焦 + 自适应
   apiSub = props.params.api.onDidActiveChange((e) => {
     isActive.value = e.isActive
@@ -196,7 +191,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener(VIEW_TAB_REACTIVATE, onViewTabReactivate)
+  disposeReactivate?.()
+  disposeReactivate = null
   apiSub?.dispose()
   apiSub = null
   ro?.disconnect()

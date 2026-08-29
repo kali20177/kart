@@ -2,6 +2,10 @@
  * 真机验证：布局重挂载后 xterm 不再孤儿化（修复 ensureOpen 迁移 term.element）。
  * 用户完整流程：重载 → 选 2303（restoreLayout 重挂载，终端自动激活）→ 连接 →
  * 免点击直接打字（用户踩坑路径）→ 点已激活 tab → 打字。同时回归点终端区域路径。
+ *
+ * 往返证据：打 `led off/on/blinky`（stm32f103-zephyr-demo 的 shell 命令）断言设备侧
+ * 应答 `led: xx`——该字符串只有 Zephyr shell 会打印，不依赖本地回显设置；固件较旧
+ * 没有 led 命令时兜底断言 `uart:~$` 提示符重打（shell 处理完一行必回提示符）。
  * 用法：KART_CDP=http://127.0.0.1:9333 node scripts/verify-stm32-remount.mjs /tmp/stm-remount-fix
  */
 import { chromium } from 'playwright-core'
@@ -35,6 +39,26 @@ const xtermDom = () => page.evaluate(() => ({
   status: document.querySelector('.status')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
 }))
 const termText = () => page.evaluate(() => document.querySelector('.xterm-rows')?.innerText ?? '')
+
+/** 打一行命令并断言设备侧往返：应答字符串（首选）或提示符重打（兜底）。
+ *  两者都只有设备能产生，与本地回显设置无关；打字渲染不再作为判据——
+ *  本地+设备双回显会把文本叠加成 'lleedd oofff'，属环境噪声而非失败。 */
+async function typeAndCheck(label, cmd, reply) {
+  const promptsBefore = ((await termText()).match(/uart:~\$/g) ?? []).length
+  await page.keyboard.type(cmd)
+  await page.waitForTimeout(300)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(900)
+  const dom = await xtermDom()
+  const text = await termText()
+  const replied = text.includes(reply)
+  const promptsAfter = (text.match(/uart:~\$/g) ?? []).length
+  check(
+    `${label} 设备往返（${reply}）`,
+    replied || promptsAfter > promptsBefore,
+    replied ? `focused=${dom.focused}` : `提示符 ${promptsBefore}→${promptsAfter}（兜底证据，固件可能无 led 命令）`
+  )
+}
 
 log('== S0 重载后（全新会话）==')
 let s = await xtermDom()
@@ -72,14 +96,8 @@ log(`  终端文本 len=${t0.length} tail=${JSON.stringify(t0.slice(-60))}`)
 await page.screenshot({ path: path.join(SHOT_DIR, 's2-connected.png') })
 
 log('== S3 连接后免点击直接打字（用户踩坑路径）==')
-await page.keyboard.type('echo k1')
-await page.waitForTimeout(300)
-await page.keyboard.press('Enter')
-await page.waitForTimeout(900)
-s = await xtermDom()
-const t3 = await termText()
-check('S3a 打字进终端（有回显）', t3.includes('echo k1'), `len=${t3.length}`)
-check('S3b xterm 聚焦或文本已进', s.focused || t3.includes('echo k1'), `focused=${s.focused}`)
+// 设备应答 = 打字进了 xterm 且 Enter 到达设备（聚焦滞留/孤儿化问题在此暴露）
+await typeAndCheck('S3 免点击打字', 'led off', 'led: off')
 await page.screenshot({ path: path.join(SHOT_DIR, 's3-type-no-click.png') })
 
 log('== S4 点击已激活终端 tab 后打字 ==')
@@ -87,25 +105,15 @@ await page.locator('.dv-tab', { hasText: '终端' }).first().click()
 await page.waitForTimeout(1200)
 s = await xtermDom()
 check('S4a 点已激活 tab 后 xterm 聚焦', s.focused, `active=${s.active.slice(0, 50)}`)
-await page.keyboard.type('echo k2')
-await page.waitForTimeout(300)
-await page.keyboard.press('Enter')
-await page.waitForTimeout(900)
-const t4 = await termText()
-check('S4b 打字进终端', t4.includes('echo k2'), '')
+await typeAndCheck('S4b', 'led on', 'led: on')
 await page.screenshot({ path: path.join(SHOT_DIR, 's4-after-active-tab-click.png') })
 
 log('== S5 点击终端区域（对照路径）==')
 await page.locator('.term-pane .viewport').first().click()
 await page.waitForTimeout(600)
 s = await xtermDom()
-check('S5 点终端区域后 xterm 聚焦', s.focused, `active=${s.active.slice(0, 50)}`)
-await page.keyboard.type('echo k3')
-await page.waitForTimeout(300)
-await page.keyboard.press('Enter')
-await page.waitForTimeout(900)
-const t5 = await termText()
-check('S5b 打字进终端', t5.includes('echo k3'), '')
+check('S5a 点终端区域后 xterm 聚焦', s.focused, `active=${s.active.slice(0, 50)}`)
+await typeAndCheck('S5b', 'led blinky', 'led: blinky')
 await page.screenshot({ path: path.join(SHOT_DIR, 's5-click-viewport.png') })
 
 log(fail === 0 ? '\n全部 PASS' : `\n${fail} 项 FAIL`)
