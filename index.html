@@ -4,54 +4,119 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data:; font-src 'self' data:">
-    <title>串口调试助手</title>
+    <title>KART</title>
+    <!-- 启动预载主题（bundle 解析前同步上色，见 public/splash-theme.js；调色板漂移由
+         src/themes/splash-theme.spec.ts 锁定） -->
+    <script src="./splash-theme.js"></script>
     <style>
-      /* 启动预载 —— Vue 挂载后 #app.innerHTML 被替换，此内容自动消失 */
+      /* 启动预载 —— Vue 挂载后 #app.innerHTML 被替换，此内容自动消失。
+         颜色全部走 --splash-* 变量（splash-theme.js 按持久化主题写入）；
+         fallback 值 = glass-industrial-dark（与 main.ts 无持久化设置时的默认主题一致）。
+         html/body margin 必须在此清零：base.css 此刻尚未加载，浏览器默认 8px 边距
+         会在深色加载页四周露出一圈原生白底。 */
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--splash-bg, #0d1117);
+      }
       .app-loader {
+        position: fixed;
+        inset: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        height: 100vh;
-        background: #0d1117;
-        color: #8b949e;
+        gap: 26px;
+        background: var(--splash-bg, #0d1117);
+        color: var(--splash-fg, #e6edf3);
         font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-        transition: opacity 0.15s;
-      }
-      .app-loader-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: #e6edf3;
-        margin-bottom: 20px;
-        letter-spacing: 1px;
-      }
-      .app-loader-bar {
-        width: 120px;
-        height: 2px;
-        background: #21262d;
-        border-radius: 2px;
         overflow: hidden;
       }
-      .app-loader-bar::after {
-        content: '';
-        display: block;
-        width: 40%;
-        height: 100%;
-        background: #58a6ff;
-        border-radius: 2px;
-        animation: loader-slide 1.2s ease-in-out infinite;
+      /* —— UART 波形动画：线路空闲高电平 → 起始位低 → 'K'(0x4B) 8 数据位 LSB 低位在先
+         （1,1,0,1,0,0,1,0）→ 停止位高；帧周期 240px，路径画两帧、平移一帧无缝循环 —— */
+      .app-loader-wave-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
       }
-      @keyframes loader-slide {
-        0%   { transform: translateX(-100%); }
-        100% { transform: translateX(350%); }
+      .app-loader-wave {
+        width: 220px;
+        height: 46px;
+        /* 两端渐隐：信号流入/流出的方向感 */
+        -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+        mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+      }
+      .app-loader-wave-path {
+        fill: none;
+        stroke: var(--splash-accent, #58a6ff);
+        stroke-width: 2;
+        animation: loader-wave-slide 3s linear infinite;
+      }
+      @keyframes loader-wave-slide {
+        from { transform: translateX(0); }
+        to   { transform: translateX(-240px); }
+      }
+      /* RX/TX 指示：与状态栏同语义（RX=主题蓝/青系、TX=主题绿系），交替闪烁似收发繁忙 */
+      .app-loader-tag {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        font-size: 9px;
+        letter-spacing: 1px;
+        color: var(--splash-dim, #8b949e);
+      }
+      .app-loader-tag::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      .app-loader-tag.rx::before {
+        background: var(--splash-accent, #58a6ff);
+        animation: loader-blink 1.6s ease-in-out infinite;
+      }
+      .app-loader-tag.tx::before {
+        background: var(--splash-ok, #50c878);
+        animation: loader-blink 1.6s ease-in-out infinite 0.8s;
+      }
+      @keyframes loader-blink {
+        0%, 100% { opacity: 0.25; }
+        50%      { opacity: 1; }
+      }
+      .app-loader-title {
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: 6px;
+        text-indent: 6px; /* 抵消末字符 letter-spacing，保证视觉居中 */
+        color: var(--splash-fg, #e6edf3);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .app-loader-wave-path,
+        .app-loader-tag.rx::before,
+        .app-loader-tag.tx::before {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
     <div id="app">
       <div class="app-loader">
-        <div class="app-loader-title">串口调试助手</div>
-        <div class="app-loader-bar"></div>
+        <div class="app-loader-wave-row">
+          <span class="app-loader-tag rx">RX</span>
+          <svg class="app-loader-wave" viewBox="0 0 220 46" aria-hidden="true">
+            <!-- 两帧 UART 波形（每帧 240px：空闲高→起始位低→K 的 8 数据位→停止位高），
+                 translateX 一帧宽度后跳回，视觉无缝 -->
+            <path
+              class="app-loader-wave-path"
+              d="M0 13 H20 V29 H40 V13 H80 V29 H100 V13 H120 V29 H160 V13 H180 V29 H200 V13
+                 H260 V29 H280 V13 H320 V29 H340 V13 H360 V29 H400 V13 H420 V29 H440 V13 H480"
+            />
+          </svg>
+          <span class="app-loader-tag tx">TX</span>
+        </div>
+        <div class="app-loader-title">KART</div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
