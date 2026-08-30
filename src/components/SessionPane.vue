@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, h, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { DropdownOption } from 'naive-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { DockviewVue, type DockviewReadyEvent, type DockviewApi, type DockviewGroupPanel, type VueComponent } from 'dockview-vue'
 import ConnectionBar from './ConnectionBar.vue'
@@ -157,11 +158,21 @@ onBeforeUnmount(() => {
 })
 
 // —— 面板恢复入口：dockview 面板被关闭后可重新打开 / 聚焦 ——
-const viewMenuOptions = computed(() =>
-  PANEL_IDS.map((id) => ({
-    label: `${openPanels.value.has(id) ? '✓' : '＋'} ${panelTitle(id)}`,
-    key: id,
-  }))
+// ✓（窄字符）与 ＋（全角）字宽不同会把文本顶歪，统一收进等宽槽位，
+// 与菜单栏下拉（MenuBar menuLabel）一致的左缘对齐方式；
+// 槽宽 24px：全角 ＋（约 12px）居中后两侧各留 ~6px，符号与文字不贴
+const viewMenuOptions = computed<DropdownOption[]>(() =>
+  PANEL_IDS.map((id) => {
+    const open = openPanels.value.has(id)
+    return {
+      label: () =>
+        h('span', null, [
+          h('span', { style: 'display:inline-block;width:24px;text-align:center' }, open ? '✓' : '＋'),
+          panelTitle(id),
+        ]),
+      key: id,
+    }
+  })
 )
 
 function onViewMenuSelect(key: string, group?: DockviewGroupPanel) {

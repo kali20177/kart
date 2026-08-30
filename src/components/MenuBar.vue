@@ -86,42 +86,66 @@ function copyAbout() {
   message.success(t('about.versionCopied'))
 }
 
-/** 勾选标记：选中项左侧显示 ✓，未选中留出等宽占位以对齐 */
-function check(selected: boolean) {
-  return () => h('span', { style: 'display:inline-block;width:12px;text-align:center' }, selected ? '✓' : '')
+/** 统一文本槽位：所有菜单项在文本前留等宽 ✓ 列（选中显示 ✓、未选中留空），
+ *  保证两个菜单、各项的文本左缘对齐。不走 naive-ui 的 icon 前缀槽——该槽只给
+ *  带 icon 的项缩进（主题 optionIconPrefixWidth 24px），无 icon 项顶格，会错位。
+ *  槽宽 20px：✓（约 8px）居中后两侧各留 ~6px，符号与文字不贴 */
+function menuLabel(selected: boolean, text: string) {
+  return () =>
+    h('span', null, [
+      h('span', { style: 'display:inline-block;width:20px;text-align:center' }, selected ? '✓' : ''),
+      text,
+    ])
+}
+
+/** naive-ui 给无 icon 的选项也渲染 10px 空前缀列（主题 optionPrefixWidth），
+ *  会把菜单项文本整体推离面板左缘——本菜单全为文本型选项，归零；
+ *  与按钮 20px 文字内边距 + menuLabel 20px 勾选槽配合：面板左缘（=按钮左缘，
+ *  bottom-start）+20 即按钮文字 x，菜单项文本与「文件/帮助」文字精确重合。
+ *  字号同步为菜单按钮的 tiny 12px（Dropdown 默认 13px 会比标题大一号，不协调） */
+const menuDropdownOverrides = {
+  fontSizeSmall: '12px',
+  fontSizeMedium: '12px',
+  optionPrefixWidthSmall: '0px',
+  optionPrefixWidthMedium: '0px',
+  optionPrefixWidthLarge: '0px',
+  optionPrefixWidthHuge: '0px',
 }
 
 const fileMenu = computed<DropdownOption[]>(() => [
-  { label: t('menu.autoSave'), key: 'auto-save', icon: check(settingsStore.autoSave) },
+  { label: menuLabel(settingsStore.autoSave, t('menu.autoSave')), key: 'auto-save' },
   { type: 'divider', key: 'd1' },
-  { label: t('menu.exportLog'), key: 'export-log' },
+  { label: menuLabel(false, t('menu.exportLog')), key: 'export-log' },
   { type: 'divider', key: 'd2' },
   {
-    label: recorder.value.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording'),
+    label: menuLabel(
+      false,
+      recorder.value.state.status === 'idle' ? t('record.startRecording') : t('record.stopRecording')
+    ),
     key: 'toggle-recording',
     disabled: !recorder.value.supported || recorder.value.state.status === 'stopping'
   },
   { type: 'divider', key: 'd3' },
-  { label: t('menu.resetDefaults'), key: 'reset-defaults' }
+  { label: menuLabel(false, t('menu.resetDefaults')), key: 'reset-defaults' }
 ])
 
 const helpMenu = computed<DropdownOption[]>(() => [
-  { label: t('menu.knowBase'), key: 'know-base' },
+  { label: menuLabel(false, t('menu.knowBase')), key: 'know-base' },
   { type: 'divider', key: 'd1' },
-  { label: t('menu.shortcuts'), key: 'shortcuts' },
+  { label: menuLabel(false, t('menu.shortcuts')), key: 'shortcuts' },
   // 「检查更新」仅桌面版（Electron）存在；浏览器无 updater 桥不展示
   ...(window.electron?.updater
     ? [
         { type: 'divider' as const, key: 'd2' },
-        { label: t('menu.checkUpdate'), key: 'check-update' }
+        { label: menuLabel(false, t('menu.checkUpdate')), key: 'check-update' }
       ]
     : []),
   { type: 'divider', key: 'd3' },
-  { label: t('menu.about'), key: 'about' },
+  { label: menuLabel(false, t('menu.about')), key: 'about' },
   { type: 'divider', key: 'd4' },
-  { label: t('menu.license'), key: 'license' },
+  { label: menuLabel(false, t('menu.license')), key: 'license' },
   { type: 'divider', key: 'd5' },
-  { label: t('menu.devtools'), key: 'devtools' }
+  { label: menuLabel(false, t('menu.devtools')), key: 'devtools' }
 ])
 
 function handleSelect(key: string) {
@@ -203,10 +227,25 @@ function handleSelect(key: string) {
 
 <template>
   <div class="menubar">
-    <NDropdown trigger="click" :options="fileMenu" @select="handleSelect">
+    <!-- bottom-start：面板左缘对齐菜单按钮左缘；配合按钮 12px 文字内边距与菜单项
+         12px 勾选槽，菜单项文本与「文件/帮助」按钮文字左缘精确重合（默认 bottom
+         居中放置，面板比按钮宽时会整体左漂，与按钮错位） -->
+    <NDropdown
+      trigger="click"
+      placement="bottom-start"
+      :options="fileMenu"
+      :theme-overrides="menuDropdownOverrides"
+      @select="handleSelect"
+    >
       <NButton size="tiny" quaternary>{{ t('menu.file') }}</NButton>
     </NDropdown>
-    <NDropdown trigger="click" :options="helpMenu" @select="handleSelect">
+    <NDropdown
+      trigger="click"
+      placement="bottom-start"
+      :options="helpMenu"
+      :theme-overrides="menuDropdownOverrides"
+      @select="handleSelect"
+    >
       <NButton size="tiny" quaternary>{{ t('menu.help') }}</NButton>
     </NDropdown>
     <!-- 右侧插槽：全局功能按钮（ASCII/设置）复用本行，不额外占行高 -->
@@ -290,6 +329,11 @@ function handleSelect(key: string) {
 }
 .menubar-spacer {
   flex: 1;
+}
+/* 菜单按钮文字内边距 = 菜单项勾选槽宽度（menuLabel 20px）：
+   bottom-start 下面板左缘=按钮左缘，两项相加后菜单项文本与按钮文字左缘重合 */
+.menubar :deep(.n-button) {
+  padding: 0 20px;
 }
 .about,
 .license {

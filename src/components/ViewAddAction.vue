@@ -16,13 +16,28 @@ const props = defineProps<{ params: { group: DockviewGroupPanel } }>()
 const { t } = useI18n()
 const { options, select } = useViewAddMenu()
 
+/** 无 icon 选项也带 10px 空前缀列（naive-ui 默认），归零让 ✓/＋ 槽贴面板左缘 */
+const dropdownOverrides = {
+  optionPrefixWidthSmall: '0px',
+  optionPrefixWidthMedium: '0px',
+  optionPrefixWidthLarge: '0px',
+  optionPrefixWidthHuge: '0px',
+}
+
 function onSelect(key: string | number) {
   select(String(key), props.params.group)
 }
 </script>
 
 <template>
-  <NDropdown trigger="click" :options="options" @select="onSelect">
+  <!-- bottom-start：面板左缘对齐＋按钮左缘（默认 bottom 居中会让面板随宽度左漂） -->
+  <NDropdown
+    trigger="click"
+    placement="bottom-start"
+    :options="options"
+    :theme-overrides="dropdownOverrides"
+    @select="onSelect"
+  >
     <button type="button" class="view-add" :title="t('app.addView')">＋</button>
   </NDropdown>
 </template>
