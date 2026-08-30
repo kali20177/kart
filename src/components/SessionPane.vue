@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NDropdown } from 'naive-ui'
 import { useDebounceFn } from '@vueuse/core'
-import { DockviewVue, type DockviewReadyEvent, type DockviewApi, type VueComponent } from 'dockview-vue'
+import { DockviewVue, type DockviewReadyEvent, type DockviewApi, type DockviewGroupPanel, type VueComponent } from 'dockview-vue'
 import ConnectionBar from './ConnectionBar.vue'
 import MessagePanel from './MessagePanel.vue'
 import WaveformChart from './WaveformChart.vue'
@@ -11,7 +10,9 @@ import TerminalPane from './TerminalPane.vue'
 import DashboardPane from './DashboardPane.vue'
 import StatusBar from './StatusBar.vue'
 import ViewTab from './ViewTab.vue'
+import ViewAddAction from './ViewAddAction.vue'
 import { provideOpenFileTransfer, provideSession, useOpenFileTransferHandler } from '@/composables/useSession'
+import { provideViewAddMenu } from '@/composables/useViewAddMenu'
 import { useTheme } from '@/composables/useTheme'
 import { createKartDockTheme } from '@/utils/dockview-theme'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
@@ -44,6 +45,8 @@ const components: Record<string, VueComponent> = {
 /** 视图 tab 组件（自定义 tab：图标 + 视图主题色）。default-tab-component 对
  *  无 tabComponent 字段的旧持久化布局同样生效，老布局切到新视觉无需清缓存 */
 const viewTabComponent = ViewTab as unknown as VueComponent
+/** tab 条「添加视图」按钮（渲染在最后一个视图 tab 右侧，点击弹菜单）。header-actions 类型同为 VueComponent */
+const viewAddComponent = ViewAddAction as unknown as VueComponent
 
 // dockview 显式主题：不传则 dockview 默认挂 abyss 暗色主题类（暗色变量下渗，
 // 亮色主题下非激活 tab 会露 #10192c），见 utils/dockview-theme 注释
@@ -161,16 +164,20 @@ const viewMenuOptions = computed(() =>
   }))
 )
 
-function onViewMenuSelect(key: string) {
+function onViewMenuSelect(key: string, group?: DockviewGroupPanel) {
   if (!api) return
   const id = key as PanelId
   const panel = api.getPanel(id)
   if (panel) {
     panel.api.setActive()
   } else {
-    api.addPanel({ id, component: id, title: panelTitle(id) })
+    // 指定落组：视图并排分栏时在哪个组的 tab 条点＋就在哪个组开；缺省落活动组
+    api.addPanel({ id, component: id, title: panelTitle(id), position: group ? { referenceGroup: group } : undefined })
   }
 }
+
+// 「添加视图」菜单注入（ViewAddAction：tab 条＋按钮在 dockview 内渲染，无法走 emit 链）
+provideViewAddMenu({ options: viewMenuOptions, select: onViewMenuSelect })
 
 // —— 发送框联动（发送框在消息面板内，状态存 session.composerText/viewMode） ——
 // ASCII 插入 / 快速命令「调到发送框」由 App.vue 直接操作活动会话（utils/composer），不再走组件暴露
@@ -184,14 +191,12 @@ function onViewMenuSelect(key: string) {
         <DockviewVue
           :components="components"
           :default-tab-component="viewTabComponent"
+          :left-header-actions-component="viewAddComponent"
           :default-renderer="'always'"
           :theme="dockTheme"
           class="dock view-dock"
           @ready="onReady"
         />
-        <NDropdown trigger="click" :options="viewMenuOptions" @select="onViewMenuSelect">
-          <button class="view-add" :title="t('app.addView')">＋</button>
-        </NDropdown>
       </div>
     </div>
     <StatusBar />
@@ -215,34 +220,5 @@ function onViewMenuSelect(key: string) {
   flex: 1;
   min-width: 0;
   min-height: 0;
-}
-/* 面板恢复入口：悬浮在 dockview 右上角（tab 栏右侧留白处） */
-.view-add {
-  position: absolute;
-  top: 4px;
-  right: 8px;
-  z-index: 10;
-  appearance: none;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur-sm));
-  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
-  color: var(--text-dim);
-  font-size: 14px;
-  line-height: 1;
-  width: 22px;
-  height: 22px;
-  /* 字面量「＋」用文本基线排列会偏上，flex 居中保证字形在方框正中 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.view-add:hover {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 </style>
