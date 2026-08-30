@@ -3,10 +3,11 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useStorage, useEventListener, useTitle } from '@vueuse/core'
 import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { DockviewVue, type DockviewReadyEvent, type DockviewApi, type VueComponent } from 'dockview-vue'
+import { DockviewVue, type DockviewReadyEvent, type DockviewApi, type DockviewGroupPanel, type VueComponent } from 'dockview-vue'
 import MenuBar from './components/MenuBar.vue'
 import SessionPanel from './components/SessionPanel.vue'
 import SessionTab from './components/SessionTab.vue'
+import SessionAddAction from './components/SessionAddAction.vue'
 import QuickCommandsPanel from './components/QuickCommandsPanel.vue'
 import AsciiTable from './components/AsciiTable.vue'
 import SettingsModal from './components/SettingsModal.vue'
@@ -16,6 +17,7 @@ import { useTheme } from './composables/useTheme'
 import { createKartDockTheme } from './utils/dockview-theme'
 import {
   provideActiveSession,
+  provideNewSessionHandler,
   provideOccupiedPorts,
   provideOpenFileTransferHandler,
   provideSessions,
@@ -44,6 +46,8 @@ provideOccupiedPorts(
 )
 // 会话列表注入（SessionTab 用：数量→末会话不可关闭、序号→默认标题）
 provideSessions(sessions)
+// 新建会话回调注入（SessionAddAction：tab 条「+」按钮在 dockview 内渲染，无法走 emit 链）
+provideNewSessionHandler(onNewSession)
 
 // —— 根级 dockview：会话面板可拖动停靠（并排对比双串口） ——
 // 面板 id = `session:<id>`；内容组件 SessionPanel 经 params 拿到会话；tab 组件 SessionTab
@@ -53,6 +57,8 @@ const components: Record<string, VueComponent> = {
 }
 /** 会话 tab 组件（自定义 tab：标题/连接点/末会话不可关闭）。default-tab-component 类型为 VueComponent，需 cast */
 const sessionTabComponent = SessionTab as unknown as VueComponent
+/** tab 条「新建会话」按钮（渲染在最后一个会话 tab 右侧）。header-actions 类型同为 VueComponent */
+const sessionAddComponent = SessionAddAction as unknown as VueComponent
 
 let dockApi: DockviewApi | null = null
 const SESSION_PANEL = (id: number) => `session:${id}`
@@ -71,20 +77,22 @@ function onDockReady(event: DockviewReadyEvent) {
   })
 }
 
-function ensureSessionPanel(s: Session) {
+function ensureSessionPanel(s: Session, group?: DockviewGroupPanel) {
   if (!dockApi || dockApi.getPanel(SESSION_PANEL(s.id))) return
   dockApi.addPanel({
     id: SESSION_PANEL(s.id),
     component: 'session',
     title: s.serial.selectedPort ?? t('session.tabLabel', { n: sessions.value.length }),
     params: s,
+    // 指定落组：多组并排时在哪个组的 tab 条点 + 就在哪个组开新会话；缺省落活动组
+    position: group ? { referenceGroup: group } : undefined,
   })
 }
 
-function onNewSession() {
+function onNewSession(group?: DockviewGroupPanel) {
   const s = createSession()
   sessions.value.push(s)
-  ensureSessionPanel(s) // addPanel 会激活新面板 → onDidActivePanelChange → activeSessionId 跟随
+  ensureSessionPanel(s, group) // addPanel 会激活新面板 → onDidActivePanelChange → activeSessionId 跟随
   // 新会话独立驱动，端口列表为空，需主动拉取一次（初始会话在 onMounted 拉取）
   s.serial.refreshPorts()
 }
@@ -257,13 +265,12 @@ onMounted(() => {
             <DockviewVue
               :components="components"
               :default-tab-component="sessionTabComponent"
+              :left-header-actions-component="sessionAddComponent"
               :default-renderer="'always'"
               :theme="dockTheme"
               class="dock"
               @ready="onDockReady"
             />
-            <!-- 新建会话入口：悬浮在 dockview 右上角（tab 栏右侧留白处） -->
-            <button class="session-add" :title="t('session.new')" @click="onNewSession">＋</button>
           </div>
 
           <div
@@ -348,35 +355,6 @@ onMounted(() => {
   flex: 1;
   min-width: 0;
   min-height: 0;
-}
-/* 新建会话入口：悬浮在 dockview 右上角（tab 栏右侧留白处） */
-.session-add {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  z-index: 10;
-  appearance: none;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur-sm));
-  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
-  color: var(--text-dim);
-  font-size: 14px;
-  line-height: 1;
-  width: 22px;
-  height: 22px;
-  /* 字面量「＋」用文本基线排列会偏上，flex 居中保证字形在方框正中 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.session-add:hover {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 .right {
   flex: none;

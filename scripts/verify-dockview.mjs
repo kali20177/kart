@@ -194,7 +194,7 @@ try {
   check('初始 1 个会话 tab（会话 1）', (await sessionTabs().count()) === 1, `tabs=${JSON.stringify(await tabNames(page))}`)
   check('末会话无关闭按钮', (await closeBtns().count()) === 0)
 
-  // 8. 新建会话：右上角 ＋ → 2 个会话 tab，均可关闭
+  // 8. 新建会话：tab 条末尾的 ＋（最后一个 tab 右侧）→ 2 个会话 tab，均可关闭
   await page.locator('.session-add').click()
   await page.waitForTimeout(600)
   check('新建会话后 2 个会话 tab', (await sessionTabs().count()) === 2, `sessionTabs=${await sessionTabs().count()}`)

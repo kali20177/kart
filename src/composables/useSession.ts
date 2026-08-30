@@ -1,4 +1,5 @@
 import { inject, provide, ref, type InjectionKey, type Ref } from 'vue'
+import type { DockviewGroupPanel } from 'dockview-vue'
 import type { Session } from '@/session'
 
 /** 会话注入 key。Symbol 保证跨实例唯一，避免与字符串 key 冲突。 */
@@ -18,6 +19,9 @@ const SESSIONS_KEY: InjectionKey<Ref<Session[]>> = Symbol('sessions')
 
 /** 文件传输对话框根处理器注入 key（SessionPane 经注入回调触发 App.vue 对话框，替换组件 emit 链）。 */
 const OPEN_FILE_TRANSFER_HANDLER_KEY: InjectionKey<(session: Session, file?: File) => void> = Symbol('open-file-transfer-handler')
+
+/** 新建会话回调注入 key（会话 tab 条「+」按钮触发 → App.vue 创建会话并挂面板；参数为按钮所在 group）。 */
+const NEW_SESSION_HANDLER_KEY: InjectionKey<(group?: DockviewGroupPanel) => void> = Symbol('new-session-handler')
 
 /**
  * 提供当前组件子树使用的会话。SessionPane 为每个 tab 调用一次，传入对应会话。
@@ -116,6 +120,20 @@ export function provideOpenFileTransferHandler(fn: (session: Session, file?: Fil
 /** 获取「打开文件传输对话框」根处理器。未 provide（如单测）时返回 no-op。 */
 export function useOpenFileTransferHandler(): (session: Session, file?: File) => void {
   return inject(OPEN_FILE_TRANSFER_HANDLER_KEY, () => {})
+}
+
+/**
+ * 提供「新建会话」回调。App.vue 根级调用一次，绑定 sessions 数组与根级 dockview；
+ * tab 条「+」按钮（SessionAddAction，由 dockview 渲染、无法走 emit 链）经注入回调触发。
+ * 回调参数为按钮所在 group：多组并排对比时，在哪个组的 tab 条点 + 就在哪个组开新会话。
+ */
+export function provideNewSessionHandler(fn: (group?: DockviewGroupPanel) => void): void {
+  provide(NEW_SESSION_HANDLER_KEY, fn)
+}
+
+/** 获取「新建会话」回调。未 provide（如单测）时返回 no-op。 */
+export function useNewSessionHandler(): (group?: DockviewGroupPanel) => void {
+  return inject(NEW_SESSION_HANDLER_KEY, () => {})
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set()

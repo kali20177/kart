@@ -35,6 +35,22 @@
   border-bottom: 1px solid var(--glass-border);
 }
 
+/* 会话 tab 条左动作区（dockview leftHeaderActionsComponent → SessionAddAction 的
+   「新建会话」+ 按钮）：该容器紧跟最后一个 tab 之后、tab 条留白之前，dockview 默认
+   未给样式，这里补纵向居中并禁止被 tab 挤压 */
+.dv-tabs-and-actions-container .dv-left-actions-container {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+/* 渲染器宿主 div 自带 width/height:100%（内联样式），在内容自适应的父容器里会
+   互相依赖导致宽度塌陷，改为内容宽度并维持按钮纵向居中 */
+.dv-tabs-and-actions-container .dv-left-actions-container .dv-vue-part {
+  width: auto;
+  display: flex;
+  align-items: center;
+}
+
 /* 面板内容区背景（避免玻璃半透明透出下层文字） */
 .dv-content-container {
   background: var(--bg-panel);
