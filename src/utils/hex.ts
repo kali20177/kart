@@ -66,6 +66,47 @@ export function findByteRanges(
   return ranges
 }
 
+/**
+ * HEX 输入框实时排版：把任意输入规范成「按字节空格分隔」的大写 hex 串
+ * （"aabb cD" → "AA BB CD"），非法字符被剔除。
+ * 同时把输入串中的光标位置（或选区终点）映射到格式化串中的对应位置，
+ * 供输入后原地恢复光标。
+ * opts.stripZeroX（默认 true）控制是否把 "0x"/"0X" 当作标记剔除：粘贴
+ * 完整串时与 parseHexInput 语义一致；逐字输入时逐个字符是 hex 校验，
+ * "x" 本身是非法字符（被忽略），不应连带擦掉前面的 "0"。
+ */
+export function formatHexInput(
+  input: string,
+  caret: number,
+  opts: { stripZeroX?: boolean } = {}
+): { value: string; caret: number } {
+  const stripZeroX = opts.stripZeroX ?? true
+  // 光标前的有效 hex 字符个数（"0x" 标记与空格/逗号等分隔符不计数）
+  let k = 0
+  for (let i = 0; i < caret && i < input.length; ) {
+    if (
+      stripZeroX &&
+      input[i] === '0' &&
+      (input[i + 1] === 'x' || input[i + 1] === 'X')
+    ) {
+      i += 2
+      continue
+    }
+    if (/[0-9a-fA-F]/.test(input[i])) k++
+    i++
+  }
+
+  // 顺序与 parseHexInput 一致：先剔除 "0x" 标记，再移除其余非 hex 字符
+  let digits = stripZeroX ? input.replace(/0[xX]/g, '') : input
+  digits = digits.replace(/[^0-9a-fA-F]/g, '').toUpperCase()
+  const parts: string[] = []
+  for (let i = 0; i < digits.length; i += 2) parts.push(digits.slice(i, i + 2))
+
+  // 第 k 个字符之后的格式化位置：k 个 hex 字符 + 它们之间已有的空格数
+  const formattedCaret = k > 0 ? k + Math.floor((k - 1) / 2) : 0
+  return { value: parts.join(' '), caret: formattedCaret }
+}
+
 /** 字节数组转空格分隔的大写 hex 字符串："AA 55 01" */
 export function bytesToHex(bytes: Uint8Array, separator = ' '): string {
   const parts: string[] = []

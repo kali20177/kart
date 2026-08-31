@@ -7,7 +7,7 @@ import { useSession } from '@/composables/useSession'
 import { useSendHistory } from '@/composables/useSendHistory'
 import SendHistoryPopover from './SendHistoryPopover.vue'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
-import { parseHexInput, bytesToHex } from '@/utils/hex'
+import { parseHexInput, bytesToHex, formatHexInput } from '@/utils/hex'
 import { encodeWithEscapes } from '@/utils/encoding'
 import type { DataMode, LineEnding } from '@/types'
 
@@ -128,21 +128,102 @@ function onKeydown(e: KeyboardEvent) {
     // Ctrl/Cmd+Enter 发送；普通 Enter 留给 textarea 插入换行（仅视觉分隔，不发送字节）
     e.preventDefault()
     onSend()
+  } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')) {
+    if (onHexUndoRedo(e)) return
   } else if (e.key === 'ArrowUp' && (e.ctrlKey || e.altKey)) {
     e.preventDefault()
+    clearHexHistory()
     const v = history.prev()
     if (v != null) text.value = v
   } else if (e.key === 'ArrowDown' && (e.ctrlKey || e.altKey)) {
     e.preventDefault()
+    clearHexHistory()
     const v = history.next()
     if (v != null) text.value = v
   }
+}
+
+// —— HEX 排版专用撤销/重做 ——
+// 程序化改写 textarea.value 会清掉 Chrome 的原生撤销栈（实测 Ctrl+Z 失效），
+// 这里自维护栈：每次排版改写前排入改写前的显示态，Ctrl/Cmd+Z（重做 Shift+Z 或 Y）恢复。
+// 仅 HEX 模式拦截；ASCII 模式原样走浏览器原生撤销。
+interface HexEditState { value: string; caret: number }
+const hexUndo: HexEditState[] = []
+const hexRedo: HexEditState[] = []
+const HEX_UNDO_LIMIT = 64
+
+function pushHexUndo(state: HexEditState) {
+  const top = hexUndo[hexUndo.length - 1]
+  if (!top || top.value !== state.value || top.caret !== state.caret) {
+    hexUndo.push(state)
+    if (hexUndo.length > HEX_UNDO_LIMIT) hexUndo.shift()
+  }
+  hexRedo.length = 0
+}
+
+function clearHexHistory() {
+  hexUndo.length = 0
+  hexRedo.length = 0
+}
+
+function onHexUndoRedo(e: KeyboardEvent): boolean {
+  if (mode.value !== 'hex') return false
+  const key = e.key.toLowerCase()
+  const isUndo = key === 'z' && !e.shiftKey
+  const isRedo = (key === 'y' && !e.shiftKey) || (key === 'z' && e.shiftKey)
+  if (!isUndo && !isRedo) return false
+  const from = isUndo ? hexUndo : hexRedo
+  const to = isUndo ? hexRedo : hexUndo
+  const state = from.pop()
+  if (!state) return false
+  e.preventDefault()
+  const ta = getTextarea()
+  to.push({ value: text.value, caret: ta ? ta.selectionStart : text.value.length })
+  text.value = state.value
+  if (ta) {
+    ta.value = state.value
+    ta.setSelectionRange(state.caret, state.caret)
+  }
+  return true
 }
 
 // 关掉循环开关时自动停止
 watch(repeatOn, (on) => { if (!on) stopRepeat('manual') })
 // 断开连接时自动停止
 watch(() => serial.connected, (c) => { if (!c) stopRepeat('disconnect') })
+// 模式切换＝新的输入上下文，历史导航/弹窗回填在 onKeydown / to-composer 处清理
+watch(mode, clearHexHistory)
+
+/**
+ * HEX 模式输入实时按字节排版：每两个 hex 字符自动插入一个空格（"aabb" → "AA BB"）。
+ * 挂在 .composer 根上的 capture 阶段监听：在 naive-ui 读取输入值之前改写 textarea
+ * 的 value 与光标，模型收到的始终是已排版串；naive 随后 $forceUpdate 重渲染写回的
+ * 也是相同 value（Vue 对相等 value 不写 DOM），光标因此不会被重置到末尾。
+ * 仅处理发送 textarea，NSelect/NInputNumber 的内部输入不受影响。
+ */
+function onHexFormatInput(e: Event) {
+  if (mode.value !== 'hex') return
+  const el = e.target
+  if (!(el instanceof HTMLTextAreaElement) || el !== getTextarea()) return
+  const ie = e as InputEvent
+  if (ie.isComposing) return
+  const caret = el.selectionEnd ?? el.value.length
+  // 逐字键入时 "x" 只是个非法字符，不把前面合法的 "0" 一起吞掉；
+  // 粘贴/拖入等整串输入才按 parseHexInput 语义剔除 "0x" 标记
+  const r = formatHexInput(el.value, caret, { stripZeroX: ie.inputType !== 'insertText' })
+  // capture 阶段模型尚未更新：此时 text.value 就是改写前的显示态，入撤销栈；
+  // 仅当显示态真的变化时压栈（如键入非法字符不会产生一个空转的撤销点）
+  if (text.value !== r.value) {
+    pushHexUndo({ value: text.value, caret: Math.min(el.selectionStart, text.value.length) })
+  }
+  if (r.value === el.value) {
+    // 已规范：仅矫正可能落在字节空格两侧的光标
+    if (el.selectionStart !== r.caret) el.setSelectionRange(r.caret, r.caret)
+    return
+  }
+  el.value = r.value
+  el.setSelectionRange(r.caret, r.caret)
+}
 
 onBeforeUnmount(() => stopRepeat('silent'))
 
@@ -244,7 +325,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="composer" :class="{ 'drag-over': dragOver }" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
+  <div class="composer" :class="{ 'drag-over': dragOver }" @input.capture="onHexFormatInput" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
     <div class="chips">
       <NButtonGroup size="tiny">
         <NButton :type="mode === 'ascii' ? 'primary' : 'default'" @click="mode = 'ascii'">ASCII</NButton>
@@ -270,7 +351,7 @@ onBeforeUnmount(() => {
       </template>
 
       <div class="spacer" />
-      <SendHistoryPopover @to-composer="(t: string) => text = t" />
+      <SendHistoryPopover @to-composer="(t: string) => { clearHexHistory(); text = t }" />
     </div>
 
     <div v-if="sendPreview" class="preview-row" :class="{ bad: !sendPreview.ok }">{{ sendPreview.msg }}</div>
