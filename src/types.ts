@@ -4,11 +4,11 @@ import type { DecodeInfo } from '@/decoders/types'
 /** 数据方向 */
 export type Direction = 'rx' | 'tx'
 
-/** 驱动/传输类型标识（serialport/webserial 是串口的两个后端，tcp 是独立传输，mock/pty 是开发后端） */
-export type DriverType = 'serialport' | 'webserial' | 'tcp' | 'mock' | 'pty' | 'unsupported'
+/** 驱动/传输类型标识（serialport/webserial 是串口的两个后端，tcp/rtt 是独立传输，mock/pty 是开发后端） */
+export type DriverType = 'serialport' | 'webserial' | 'tcp' | 'rtt' | 'mock' | 'pty' | 'unsupported'
 
-/** 用户可切换的传输类型：serial=环境解析的串口后端（serialport/webserial/mock/pty），tcp=TCP client */
-export type TransportType = 'serial' | 'tcp'
+/** 用户可切换的传输类型：serial=环境解析的串口后端（serialport/webserial/mock/pty），rtt/tcp=网络传输（RTT 复用 TCP 字节流通路，仅驱动标识/默认端口不同） */
+export type TransportType = 'serial' | 'rtt' | 'tcp'
 
 /** 日志级别 */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -85,13 +85,13 @@ export interface EndpointInfo {
 }
 
 /**
- * 传输驱动接口（传输无关核心）：串口/TCP/pty/mock 统一契约，端点统一用字符串标识。
+ * 传输驱动接口（传输无关核心）：串口/TCP/RTT/pty/mock 统一契约，端点统一用字符串标识。
  * - 串口信号线方法（getSignals/setSignals/setBreak）为可选扩展：非串口传输不实现，
  *   store 用可选链访问、UI 按传输类型隐藏（PtyDriver 固定假值先例）。
  * - open 的 options 为传输专属参数（串口=PortOptions；TCP/pty 忽略）。
  */
 export interface IoTransport {
-  /** 传输类型标识（serialport/webserial/tcp/mock/pty/unsupported） */
+  /** 传输类型标识（serialport/webserial/tcp/rtt/mock/pty/unsupported） */
   readonly type: DriverType
   listEndpoints(): Promise<EndpointInfo[]>
   /** 触发浏览器原生选择器（Web Serial 专属），返回新端点标识；用户取消返回 null */

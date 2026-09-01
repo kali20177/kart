@@ -604,9 +604,12 @@ export default {
   },
   transport: {
     serial: 'Serial',
+    rtt: 'RTT',
     tcp: 'TCP',
     tcpHost: 'Host / IP',
     tcpPort: 'Port',
     tcpHint: 'Enter host and port before connecting',
+    rttPort: 'Port (default 19021)',
+    rttHint: 'Start a J-Link/OpenOCD RTT Server (default 19021) first',
   },
 }

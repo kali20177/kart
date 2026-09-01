@@ -203,7 +203,8 @@ async function onBreak() {
     <span v-else class="port" :class="{ stale: hasSessionData && !serial.connected }">
       {{ serial.connected || hasSessionData ? serial.selectedPort : t('status.notConnected') }}
     </span>
-    <span v-if="(serial.connected || hasSessionData) && serial.driverType !== 'tcp'" class="summary" :class="{ stale: !serial.connected }">
+    <!-- 波特率摘要仅串口有意义（RTT/TCP 无波特率） -->
+    <span v-if="(serial.connected || hasSessionData) && serial.driverType !== 'tcp' && serial.driverType !== 'rtt'" class="summary" :class="{ stale: !serial.connected }">
       {{ serial.summary }}
     </span>
 
@@ -283,8 +284,8 @@ async function onBreak() {
       <div class="divider" />
     </template>
 
-    <!-- 输出线控制：DTR/RTS 持久切换 + Break 瞬态脉冲（仅串口；TCP 无调制解调器线） -->
-    <template v-if="serial.driverType !== 'tcp'">
+    <!-- 输出线控制：DTR/RTS 持久切换 + Break 瞬态脉冲（仅串口；RTT/TCP 无调制解调器线） -->
+    <template v-if="serial.driverType !== 'tcp' && serial.driverType !== 'rtt'">
       <div class="divider" />
       <button
         class="signal-btn"

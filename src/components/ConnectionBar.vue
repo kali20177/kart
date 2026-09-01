@@ -41,12 +41,17 @@ const checksumTip = computed(() => {
     : t('checksum.tooltipDisabled')
 })
 
-// 传输类型选择：串口 / TCP。TCP 实际收发依赖主进程 net 桥（Electron）；
+// 传输类型选择：串口 / RTT / TCP。RTT/TCP 实际收发依赖主进程 net 桥（Electron）；
 // DEV 下放开选择——浏览器开发态可预览 UI/校验流程，无桥时连接会明确报「TCP 不可用」。
-const tcpAvailable = isDev || !!window.electron?.tcp
+const netAvailable = isDev || !!window.electron?.tcp
 const transportOptions = computed(() => [
   { label: t('transport.serial'), value: 'serial' as const },
-  ...(tcpAvailable ? [{ label: t('transport.tcp'), value: 'tcp' as const }] : [])
+  ...(netAvailable
+    ? [
+        { label: t('transport.rtt'), value: 'rtt' as const },
+        { label: t('transport.tcp'), value: 'tcp' as const }
+      ]
+    : [])
 ])
 
 // —— 参数栏收起（默认展开）——
@@ -450,12 +455,12 @@ onBeforeUnmount(() => {
       </template>
       </template>
 
-      <!-- TCP 传输：主机 + 端口 -->
+      <!-- 网络传输（RTT/TCP）：主机 + 端口。RTT 模式端口预填/提示 J-Link RTT Server 默认 19021，仍可改 -->
       <template v-else>
         <NInput
           :value="serial.tcpOptions.host"
           size="small"
-          :placeholder="t('transport.tcpHost')"
+          :placeholder="serial.transportType === 'rtt' ? '127.0.0.1' : t('transport.tcpHost')"
           style="width: 130px"
           :disabled="serial.connected"
           @update:value="(v: string) => { serial.tcpOptions.host = v }"
@@ -466,11 +471,11 @@ onBeforeUnmount(() => {
           :max="65535"
           size="small"
           style="width: 110px"
-          :placeholder="t('transport.tcpPort')"
+          :placeholder="serial.transportType === 'rtt' ? t('transport.rttPort') : t('transport.tcpPort')"
           :disabled="serial.connected"
           @update:value="(v: number | null) => { serial.tcpOptions.port = v }"
         />
-        <span class="tcp-hint">{{ t('transport.tcpHint') }}</span>
+        <span class="tcp-hint">{{ serial.transportType === 'rtt' ? t('transport.rttHint') : t('transport.tcpHint') }}</span>
       </template>
     </template>
 
@@ -620,7 +625,10 @@ onBeforeUnmount(() => {
 .tcp-hint {
   font-size: 11px;
   color: var(--text-dim);
-  opacity: 0.85;
+  /* 参数栏内联提示：超宽截断省略而非换行（换行会致字符悬空破坏单行布局） */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* —— REC 胶囊录制按钮 —— */

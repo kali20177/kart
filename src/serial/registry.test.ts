@@ -6,11 +6,12 @@ import type { DriverType, IoTransport } from '@/types'
 describe('transport registry', () => {
   it('内置传输已注册（导入 index 即注册）', () => {
     const types = listTransports().map((t) => t.type)
-    expect(types).toEqual(expect.arrayContaining(['serialport', 'webserial', 'tcp', 'mock', 'pty', 'unsupported']))
+    expect(types).toEqual(expect.arrayContaining(['serialport', 'webserial', 'tcp', 'rtt', 'mock', 'pty', 'unsupported']))
   })
 
   it('getTransportDef 按类型查询；create 产生对应类型驱动实例', () => {
     expect(getTransportDef('tcp')?.create().type).toBe('tcp')
+    expect(getTransportDef('rtt')?.create().type).toBe('rtt')
     expect(getTransportDef('serialport')?.create().type).toBe('serialport')
     expect(getTransportDef('no-such' as DriverType)).toBeUndefined()
   })

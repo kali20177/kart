@@ -68,9 +68,9 @@ const showDroppedBar = computed(() => terminal.droppedLines > 0 && !droppedBarDi
 /** 调试：原始 RX 字节 hex 视图 */
 const showRaw = ref(false)
 
-// 直通模式底部提示：仅 TCP 传输渲染（见 resolveCharHintKind）。串口设备回显无歧义，
-// 不显示提示；TCP 对端（如 nc）常无回显，本地回显关闭时输入不可见，必须警示。
-const isTcpTransport = computed(() => serial.driverType === 'tcp')
+// 直通模式底部提示：仅网络传输（RTT/TCP）渲染（见 resolveCharHintKind）。串口设备回显无歧义，
+// 不显示提示；网络对端（如 nc、RTT Server）常无回显，本地回显关闭时输入不可见，必须警示。
+const isTcpTransport = computed(() => serial.driverType === 'tcp' || serial.driverType === 'rtt')
 const charHintKind = computed(() => resolveCharHintKind(serial.connected, terminal.echo, isTcpTransport.value))
 const charHint = computed(() => {
   switch (charHintKind.value) {

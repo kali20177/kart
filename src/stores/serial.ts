@@ -44,6 +44,9 @@ const DEFAULT_OPTS: PortOptions = {
 /** TCP 默认端口（嵌入式上下文，Modbus TCP 等常用） */
 const DEFAULT_TCP_PORT = 502
 
+/** RTT 默认端口：J-Link RTT Server 的默认监听端口（OpenOCD rtt server 常为 9090，用户自定义） */
+const DEFAULT_RTT_PORT = 19021
+
 /** 端口号合法范围校验（1-65535 整数） */
 function isValidTcpPort(n: number): boolean {
   return Number.isInteger(n) && n >= 1 && n <= 65535
@@ -73,8 +76,10 @@ export function createSerialStore(deps: SerialDeps) {
     (val) => storage.set('tcpOptions', val),
     { deep: true }
   )
-  /** 用户可见的传输类型：driverType==='tcp' 即 TCP，其余（serialport/webserial/mock/pty）都是串口后端 */
-  const transportType = computed<TransportType>(() => (driverType.value === 'tcp' ? 'tcp' : 'serial'))
+  /** 用户可见的传输类型：rtt/tcp 单独标识，其余（serialport/webserial/mock/pty）都是串口后端 */
+  const transportType = computed<TransportType>(() =>
+    driverType.value === 'rtt' ? 'rtt' : driverType.value === 'tcp' ? 'tcp' : 'serial'
+  )
   const scenario = ref<MockScenarioId>('at-reply')
   const signals = ref<SerialSignals>({ dcd: false, cts: false, dsr: false, ri: false })
   // 输出控制线：记录「最后一次请求」的 DTR/RTS 电平（驱动无法读回输出线，UI 据此显示
@@ -163,15 +168,15 @@ export function createSerialStore(deps: SerialDeps) {
   }
 
   async function connect() {
-    // TCP 传输：连接前从 host/port 组端点（统一写入 selectedPort——显示/录制文件名/decoder-config 键共用）。
+    // TCP/RTT 传输：连接前从 host/port 组端点（统一写入 selectedPort——显示/录制文件名/decoder-config 键共用）。
     // 无效端点抛错而非静默返回——ConnectionBar 的 toggle() 捕获后弹 toast，用户能感知原因。
-    if (driverType.value === 'tcp') {
+    if (driverType.value === 'tcp' || driverType.value === 'rtt') {
       const host = tcpOptions.host.trim()
-      if (!host) throw new Error('TCP 主机不能为空')
+      if (!host) throw new Error('主机不能为空')
       // IPv6 暂不支持：host 含 ':'（含 [::1] 方括号形式）明确拒绝，避免静默误解析成错误 host
       if (host.includes(':')) throw new Error('暂不支持 IPv6 地址，请使用 IPv4 或主机名')
-      if (tcpOptions.port == null) throw new Error('TCP 端口不能为空')
-      if (!isValidTcpPort(tcpOptions.port)) throw new Error(`TCP 端口无效: ${tcpOptions.port}（范围 1-65535）`)
+      if (tcpOptions.port == null) throw new Error('端口不能为空')
+      if (!isValidTcpPort(tcpOptions.port)) throw new Error(`端口无效: ${tcpOptions.port}（范围 1-65535）`)
       selectedPort.value = `${host}:${tcpOptions.port}`
     }
     if (connected.value || !selectedPort.value) return
@@ -284,8 +289,8 @@ export function createSerialStore(deps: SerialDeps) {
       // 列举失败不致命，继续尝试 open
     }
     // 设备重新枚举后仍未归位（仍被拔出）→ 跳过本次，排程下一次。
-    // TCP 无枚举（listEndpoints 恒空），跳过在位检查直接尝试连接。
-    if (driverType.value !== 'tcp' && !ports.value.some((p) => p.path === selectedPort.value)) {
+    // TCP/RTT 无枚举（listEndpoints 恒空），跳过在位检查直接尝试连接。
+    if (driverType.value !== 'tcp' && driverType.value !== 'rtt' && !ports.value.some((p) => p.path === selectedPort.value)) {
       scheduleReconnect()
       return
     }
@@ -360,10 +365,10 @@ export function createSerialStore(deps: SerialDeps) {
     reconnectNextAt.value = null
     reconnectAttempts.value = 0
     const prevDriver = driver
-    // DEV 下更新模块解析状态（生产 no-op）。仅串口后端持久化——tcp 是用户传输态，
+    // DEV 下更新模块解析状态（生产 no-op）。仅串口后端持久化——tcp/rtt 是用户传输态，
     // 写进模块级解析会让 getDriverType() 返回 'tcp'，setTransport('serial') 据此解析
     // 串口后端时命中早退，DEV 下切不回串口（round-trip 卡死）。
-    if (type !== 'tcp') setDriverType(type)
+    if (type !== 'tcp' && type !== 'rtt') setDriverType(type)
     driver = createDriverOfType(type)
     driverType.value = type
     unsupportedReason.value = type === 'unsupported' ? getUnsupportedReason() : null
@@ -377,10 +382,17 @@ export function createSerialStore(deps: SerialDeps) {
     await refreshPorts()
   }
 
-  /** 用户切换传输类型（串口/TCP）。回串口 = 环境解析的串口后端（serialport/webserial/mock/pty）。 */
+  /** 用户切换传输类型（串口/RTT/TCP）。回串口 = 环境解析的串口后端（serialport/webserial/mock/pty）。 */
   async function setTransport(t: TransportType) {
     if (t === transportType.value) return
-    await switchDriver(t === 'tcp' ? 'tcp' : getDriverType())
+    await switchDriver(t === 'serial' ? getDriverType() : t)
+    if (t === 'serial') return
+    // 整理网络传输默认值：端口仍是「另一类型默认」或空（用户未自定义）→ 换成当前类型默认
+    // （TCP 502 / RTT 19021）；已自定义（如 TCP 下填 9090、RTT 下填 OpenOCD 端口）则保留。
+    const typeDefault = t === 'rtt' ? DEFAULT_RTT_PORT : DEFAULT_TCP_PORT
+    const otherDefault = t === 'rtt' ? DEFAULT_TCP_PORT : DEFAULT_RTT_PORT
+    if (tcpOptions.port === null || tcpOptions.port === otherDefault) tcpOptions.port = typeDefault
+    if (!tcpOptions.host) tcpOptions.host = '127.0.0.1'
   }
 
   /** 新增自定义波特率（非法值/预设档位/已存在项会被忽略） */

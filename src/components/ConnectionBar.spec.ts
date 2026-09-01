@@ -71,10 +71,10 @@ describe('ConnectionBar · TCP 传输输入', () => {
     window.electron = undefined as unknown as NonNullable<typeof window.electron>
     const { wrapper, session } = mountBar()
 
-    // 传输选择器仍提供 TCP 选项（DEV 放开选择，不依赖桥是否存在）——回归 gate: isDev || !!electron.tcp
+    // 传输选择器仍提供网络传输选项（DEV 放开选择，不依赖桥是否存在）——回归 gate: isDev || !!electron.tcp
     const transportSelect = wrapper.findAllComponents(NSelect)[0]
     const options = transportSelect?.props('options') as Array<{ value: string }> | undefined
-    expect(options?.map((o) => o.value)).toEqual(['serial', 'tcp'])
+    expect(options?.map((o) => o.value)).toEqual(['serial', 'rtt', 'tcp'])
 
     // 切换到 TCP → 主机/端口输入框渲染
     await session.serial.setTransport('tcp')
@@ -85,6 +85,36 @@ describe('ConnectionBar · TCP 传输输入', () => {
     session.serial.tcpOptions.host = '192.168.1.5'
     session.serial.tcpOptions.port = 502
     await expect(session.serial.connect()).rejects.toThrow('TCP 不可用')
+  })
+})
+
+describe('ConnectionBar · RTT 传输输入', () => {
+  it('切换到 RTT → 端口自动预填 J-Link RTT Server 默认 19021，host 预填 127.0.0.1，placeholder 体现默认端口', async () => {
+    const { wrapper, session } = mountBar()
+    await session.serial.setTransport('rtt')
+    await nextTick()
+    expect(session.serial.transportType).toBe('rtt')
+    expect(session.serial.tcpOptions.port).toBe(19021)
+    expect(session.serial.tcpOptions.host).toBe('127.0.0.1')
+    expect(wrapper.find('input[placeholder="端口（默认 19021）"]').exists()).toBe(true)
+  })
+
+  it('已自定义端口/主机不被切换覆盖（TCP 下填 9090 → 切 RTT 保留）', async () => {
+    const { session } = mountBar()
+    await session.serial.setTransport('tcp')
+    session.serial.tcpOptions.host = '192.168.1.5'
+    session.serial.tcpOptions.port = 9090
+    await session.serial.setTransport('rtt')
+    expect(session.serial.tcpOptions.port).toBe(9090)
+    expect(session.serial.tcpOptions.host).toBe('192.168.1.5')
+  })
+
+  it('端口仍是另一类型默认（未自定义）→ 切换时换成当前类型默认（502 ⇄ 19021）', async () => {
+    const { session } = mountBar()
+    await session.serial.setTransport('rtt') // 初始 TCP 默认 502 → RTT 默认 19021
+    expect(session.serial.tcpOptions.port).toBe(19021)
+    await session.serial.setTransport('tcp') // 19021 是 RTT 默认 → 恢复 TCP 默认 502
+    expect(session.serial.tcpOptions.port).toBe(502)
   })
 })
 

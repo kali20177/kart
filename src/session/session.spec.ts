@@ -304,11 +304,11 @@ describe('createSession · TCP 传输', () => {
     expect(session.serial.transportType).toBe('tcp')
 
     session.serial.tcpOptions.host = '   '
-    await expect(session.serial.connect()).rejects.toThrow('TCP 主机不能为空')
+    await expect(session.serial.connect()).rejects.toThrow('主机不能为空')
 
     session.serial.tcpOptions.host = '192.168.1.5'
     session.serial.tcpOptions.port = 70000
-    await expect(session.serial.connect()).rejects.toThrow('TCP 端口无效')
+    await expect(session.serial.connect()).rejects.toThrow('端口无效')
     expect(session.serial.connected).toBe(false)
   })
 
@@ -336,7 +336,7 @@ describe('createSession · TCP 传输', () => {
     await session.serial.setTransport('tcp')
     session.serial.tcpOptions.host = '192.168.1.5'
     session.serial.tcpOptions.port = null
-    await expect(session.serial.connect()).rejects.toThrow('TCP 端口不能为空')
+    await expect(session.serial.connect()).rejects.toThrow('端口不能为空')
   })
 })
 

@@ -3,6 +3,7 @@ import { WebSerialDriver } from './WebSerialDriver'
 import { SerialPortDriver } from './SerialPortDriver'
 import { PtyDriver } from './PtyDriver'
 import { TcpDriver } from './TcpDriver'
+import { RttDriver } from './RttDriver'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { UnsupportedDriver } from './UnsupportedDriver'
 import { registerTransport, getTransportDef } from './registry'
@@ -14,6 +15,7 @@ export type { DriverType } from '@/types'
 registerTransport({ type: 'serialport', create: () => new SerialPortDriver() })
 registerTransport({ type: 'webserial', create: () => new WebSerialDriver() })
 registerTransport({ type: 'tcp', create: () => new TcpDriver() })
+registerTransport({ type: 'rtt', create: () => new RttDriver() })
 registerTransport({ type: 'mock', create: () => new MockSerialSource() })
 registerTransport({ type: 'pty', create: () => new PtyDriver() })
 registerTransport({ type: 'unsupported', create: () => new UnsupportedDriver() })

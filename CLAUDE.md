@@ -54,11 +54,12 @@ npm run verify:dockview # 验证多会话 dockview 布局（并排/关闭/新建
 | `serialport` | `src/serial/SerialPortDriver.ts` | Electron | 通过 IPC 委托主进程 serialport npm 库，返回真实 COM 口名 |
 | `webserial` | `src/serial/WebSerialDriver.ts` | 浏览器 | Web Serial API（Chromium 89+），需 HTTPS + 用户授权 |
 | `tcp` | `src/serial/TcpDriver.ts` | Electron | TCP client，主进程 `TcpManager`（Node `net`）；浏览器 DEV 放开预览但连接报「TCP 不可用」 |
+| `rtt` | `src/serial/RttDriver.ts` | Electron | SEGGER RTT 日志/字节流查看，复用 TCP 通路（`RttDriver extends TcpDriver`，仅 type 标识为 `rtt`）；默认端口 J-Link RTT Server 19021，OpenOCD rtt server 也可（用户自定义），须先由用户外部启动 RTT Server |
 | `mock` | `src/mock/MockSerialSource.ts` | 浏览器 DEV | 模拟串口数据，可切换场景（AT 应答/二进制帧/压测/modbus/shell 等）；仅 `?mock` 参数触发，不兜底 |
 | `pty` | `src/serial/PtyDriver.ts` | Electron | 本地终端（node-pty spawn 真实 shell），开发验证用；`?pty` 参数触发 |
 | `unsupported` | `src/serial/UnsupportedDriver.ts` | 不兼容浏览器 | 占位驱动（方法抛错/no-op）；配合 `IncompatibleBrowser` 全屏遮罩引导用户 |
 
-**用户可切换的是「传输类型」**（`TransportType = 'serial' | 'tcp'`，见 ConnectionBar 下拉），`serial` 内部再按环境解析具体后端驱动。**驱动判定优先级**（`resolveDriverType` 纯函数，有单测）：Electron+`?pty` → pty；Electron → serialport；DEV `?mock` → mock；非安全上下文 → unsupported(insecure-context)；浏览器有 Web Serial → webserial；兜底 → unsupported(no-web-serial)。
+**用户可切换的是「传输类型」**（`TransportType = 'serial' | 'rtt' | 'tcp'`，见 ConnectionBar 下拉），`serial` 内部再按环境解析具体后端驱动。**驱动判定优先级**（`resolveDriverType` 纯函数，有单测）：Electron+`?pty` → pty；Electron → serialport；DEV `?mock` → mock；非安全上下文 → unsupported(insecure-context)；浏览器有 Web Serial → webserial；兜底 → unsupported(no-web-serial)。
 
 > mock 仅 DEV 调试用，不对普通用户暴露。浏览器不兼容时**不再兜底 mock**，而是由 `src/components/IncompatibleBrowser.vue` 全屏阻断遮罩引导用户切换/升级浏览器或改用 HTTPS，避免普通用户误把模拟数据当成真实串口流量。
 
@@ -89,7 +90,7 @@ src/utils/                — 纯工具函数（hex、encoding、checksum、comp
                              terminal-hint、text-parser、usb-vendors、waveform-parser、log-level）—— 无框架依赖
 src/utils/logger.ts       — 渲染进程 Logger 单例（IDB 持久化 + console 劫持 + window 全局错误兜底 + 日志导出）
 src/mock/                 — MockSerialSource + 场景生成器
-src/serial/               — 传输驱动工厂 + 注册表 + WebSerialDriver + SerialPortDriver + TcpDriver + PtyDriver
+src/serial/               — 传输驱动工厂 + 注册表 + WebSerialDriver + SerialPortDriver + TcpDriver + RttDriver + PtyDriver
 src/main/                 — Electron 主进程（SerialPortManager、TcpManager、PtyManager、JsonStore、logger）
 src/preload/              — Electron 预加载（contextBridge 暴露 serial/tcp/recorder/platform API）
 src/composables/          — Vue composables（useFrameSplitter、useSendHistory、useStorage、useMessageSearch、
@@ -152,7 +153,8 @@ KnowledgeBaseModal → knowledge-base/utils
 - **校验和**：发送/接收校验配置会话级按端口持久化（`session.checksum`，`ChecksumConfig`），ConnectionBar 弹窗编辑（ChecksumSettingsModal），多会话可各配各的校验方式；RX 校验算法独立于发送侧（支持收发不对称协议），校验前自动剥离帧尾分隔符。未配置端口默认不启用校验。
 - **信号控制（DTR/RTS/Break）**：StatusBar 信号区可切换 DTR/RTS 电平、发送 Break 脉冲（250ms，TX 拉低），用于 ESP32/STM32 bootloader / 复位 / ISP。断开时禁用，自动重连后重放上次电平。链路：`IoTransport.setSignals/setBreak` → Web Serial `port.setSignals` / Electron IPC → 主进程 `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言。
 - **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示，重连成功弹一次 toast。判定集中在纯函数 `src/utils/reconnect.ts`（有单测）。
-- **TCP 传输**：Electron 主进程 `TcpManager`（Node `net`）经 IPC 暴露，TcpDriver 实现 `IoTransport`；支持 IPv6 校验、同端点并发用 connId 区分、断连窗口处理。终端直通提示仅 TCP 传输渲染（设备回显无歧义，串口不提示）。
+- **TCP 传输**：Electron 主进程 `TcpManager`（Node `net`）经 IPC 暴露，TcpDriver 实现 `IoTransport`；支持 IPv6 校验、同端点并发用 connId 区分、断连窗口处理。终端直通提示仅网络传输（RTT/TCP）渲染（设备回显无歧义，串口不提示）。
+- **RTT 传输**：SEGGER RTT 字节流经 TCP 承载（`RttDriver extends TcpDriver`，type='rtt'），**不 spawn 调试器进程**——J-Link RTT Server（默认 19021）/OpenOCD rtt server 由用户外部启动，KART 只做客户端。tcpOptions（host/port）与 TCP 共享一份持久化；`setTransport` 切换时仅当端口仍是「另一类型默认值」或空才替换成当前类型默认（TCP 502 / RTT 19021），用户自定义值保留；rtt 与 tcp 同属用户传输态，`switchDriver` 不写模块级解析（round-trip 早退）。
 - **终端模式**：xterm.js 渲染（cell 网格/光标/ANSI/alt-screen/滚动区域等全能力，vim/nano 全屏可用）。传输模式 line（本地行编辑 Enter 发送）/char（按键直通设备侧回显），本地回显/退格字节（del 0x7F/bs 0x08）/行尾符/回滚上限可配；pty 数据源强制 UTF-8（忽略用户编码设置）。设置：字号缩放、终端字体。
 - **快速命令**：增删改、拖拽排序、JSON 导入导出、点击直发、调到发送框；每条命令可独立配置校验和（inherit 会话默认或覆盖）。
 - **文件发送**：分包切片、三种协议封装（raw/len-prefix/seq-crc）、限速（字节速率 + 包间延时，取更严者）、ACK 流控（any/byte/echo-crc + 超时/NACK 重试）、循环下发、断点续传、错误注入（破坏 CRC/跳过 ACK）、断线自动中止。`FileTransferDialog` 预设（原始整包/STM32-ISP/ESP32/压测/自定义）+ 拖拽；限速输入框实时显示波特率对应物理层上限。

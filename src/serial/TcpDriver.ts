@@ -1,4 +1,5 @@
 // TCP client 驱动 —— 通过 IPC 委托主进程 net 模块建立 TCP 连接。
+// RTT 驱动复用本实现（SEGGER RTT 数据流经 TCP 承载），仅以构造参数区分 type。
 //
 // 实际收发依赖 window.electron.tcp（Electron preload 桥）；浏览器 dev 下
 // UI 可选 TCP 但无桥，open() 会明确抛「TCP 不可用（需 Electron 环境）」。
@@ -11,17 +12,19 @@
 // 断连语义：远端断开/错误经 onError 置 _isOpen=false，serial store 的 500ms
 // signalTimer 轮询检测后走断连/自动重连流程（与 SerialPortDriver 一致）。
 
-import type { EndpointInfo, IoTransport, DriverType } from '@/types'
+import type { DriverType, EndpointInfo, IoTransport } from '@/types'
 
 export class TcpDriver implements IoTransport {
-  readonly type: DriverType = 'tcp'
+  constructor(
+    private _apiOverride?: ElectronTcp,
+    readonly type: DriverType = 'tcp'
+  ) {}
+
   private _isOpen = false
   private _connId: string | null = null
   private _listeners = new Set<(bytes: Uint8Array) => void>()
   private _unsubData: (() => void) | null = null
   private _unsubError: (() => void) | null = null
-
-  constructor(private _apiOverride?: ElectronTcp) {}
 
   get isOpen(): boolean {
     return this._isOpen

@@ -615,9 +615,12 @@ export default {
   },
   transport: {
     serial: '串口',
+    rtt: 'RTT',
     tcp: 'TCP',
     tcpHost: '主机 / IP',
     tcpPort: '端口',
     tcpHint: '连接前填写主机与端口',
+    rttPort: '端口（默认 19021）',
+    rttHint: '需先启动 J-Link/OpenOCD RTT Server（默认 19021）再连接',
   },
 }

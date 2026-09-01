@@ -4,12 +4,16 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useSerialStore, createSerialStore, type SerialDeps } from './serial'
 import type { EndpointInfo, PortOptions, SerialSignals, IoTransport, DriverType } from '@/types'
 import { STORAGE_PREFIX } from '@/composables/useStorage'
+import { registerTransport } from '@/serial/registry'
 
 const KEY = STORAGE_PREFIX + 'customBaudRates'
 
 beforeEach(() => {
   setActivePinia(createPinia())
   // localStorage 由 src/test/setup.ts 统一提供（内存版，每用例重置）
+  // registry 覆盖 rtt → 可 open 的假驱动：switchDriver/createDriverOfType 从注册表创建，
+  // 真 RttDriver 无桥会拒 open，连接类用例需要可成功打开的驱动实例
+  registerTransport({ type: 'rtt', create: () => new FakeRttDriver() })
 })
 
 describe('serial store · 自定义波特率', () => {
@@ -272,6 +276,63 @@ describe('serial store · 切换驱动时旧驱动销毁', () => {
     const driver = new FakeDriver() // FakeDriver 无 destroy 方法
     const { store, scope } = makeStore(driver)
     await expect(store.switchDriver('tcp')).resolves.toBeUndefined()
+    scope.stop()
+  })
+})
+
+// ── RTT 传输类型（复用 TCP 通路，独立驱动标识/默认端口）──
+
+/** 可成功 open 的 rtt 假驱动（registry 覆盖用；真 RttDriver 无桥会拒 open） */
+class FakeRttDriver extends FakeDriver {
+  readonly type: DriverType = 'rtt'
+}
+
+describe('serial store · RTT 传输类型', () => {
+  it('transportType 三态映射：rtt 驱动 → rtt，tcp → tcp，其余串口后端 → serial', async () => {
+    const { store, scope } = makeStore(new FakeDriver())
+    await store.switchDriver('rtt')
+    expect(store.transportType.value).toBe('rtt')
+    await store.switchDriver('tcp')
+    expect(store.transportType.value).toBe('tcp')
+    await store.switchDriver('serialport')
+    expect(store.transportType.value).toBe('serial')
+    scope.stop()
+  })
+
+  it('rtt 连接前从 host/port 组装端点并打开 rtt 驱动', async () => {
+    const { store, scope } = makeStore(new FakeDriver())
+    await store.switchDriver('rtt')
+    store.tcpOptions.host = '127.0.0.1'
+    store.tcpOptions.port = 19021
+    await store.connect()
+    expect(store.selectedPort.value).toBe('127.0.0.1:19021')
+    expect(store.connected.value).toBe(true)
+    scope.stop()
+  })
+
+  it('rtt 端点校验：空主机/空端口明确报错（文案与 TCP 通用）', async () => {
+    const { store, scope } = makeStore(new FakeDriver())
+    await store.switchDriver('rtt')
+    store.tcpOptions.port = 19021
+    store.tcpOptions.host = ''
+    await expect(store.connect()).rejects.toThrow('主机不能为空')
+    store.tcpOptions.host = '1.2.3.4'
+    store.tcpOptions.port = null
+    await expect(store.connect()).rejects.toThrow('端口不能为空')
+    scope.stop()
+  })
+
+  it('setTransport 切换默认端口：rtt → 19021 + host 127.0.0.1，tcp → 502（未自定义时）', async () => {
+    const { store, scope } = makeStore(new FakeDriver())
+    await store.setTransport('rtt')
+    expect(store.tcpOptions.port).toBe(19021)
+    expect(store.tcpOptions.host).toBe('127.0.0.1')
+    expect(store.transportType.value).toBe('rtt')
+    await store.setTransport('tcp')
+    expect(store.tcpOptions.port).toBe(502)
+    await store.setTransport('serial')
+    // 回串口：默认端口整理不适用，保留当前网络态值
+    expect(store.transportType.value).toBe('serial')
     scope.stop()
   })
 })
