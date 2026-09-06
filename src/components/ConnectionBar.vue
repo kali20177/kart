@@ -348,12 +348,16 @@ onBeforeUnmount(() => {
   <div class="bar" :class="{ collapsed }">
     <!-- 展开态：完整参数控件 -->
     <template v-if="!collapsed">
-      <!-- 传输类型选择器：串口 / TCP（TCP 仅 Electron） -->
+      <!-- 传输类型选择器：串口 / TCP（TCP 仅 Electron）。
+           参数栏在默认窗口下拥挤，控件会被 flex 压缩——下面几个小下拉必须
+           consistent-menu-width=false 让菜单按内容取宽，否则菜单跟随被压缩的
+           触发器同宽，选中行的对勾留白会把选项文字裁成竖缝（端口/波特率同理已有）。 -->
       <NSelect
         :value="serial.transportType"
         :options="transportOptions"
         size="small"
         style="width: 88px"
+        :consistent-menu-width="false"
         :disabled="serial.connected"
         @update:value="(v: TransportType) => serial.setTransport(v)"
       />
@@ -412,6 +416,7 @@ onBeforeUnmount(() => {
             :options="dataBitsOptions"
             size="small"
             style="width: 64px"
+            :consistent-menu-width="false"
             :disabled="serial.connected"
           />
         </template>
@@ -424,6 +429,7 @@ onBeforeUnmount(() => {
             :options="parityOptions"
             size="small"
             style="width: 86px"
+            :consistent-menu-width="false"
             :disabled="serial.connected"
           />
         </template>
@@ -436,6 +442,7 @@ onBeforeUnmount(() => {
             :options="stopBitsOptions"
             size="small"
             style="width: 64px"
+            :consistent-menu-width="false"
             :disabled="serial.connected"
           />
         </template>
