@@ -29,7 +29,8 @@
     "icon": "build/icon.ico"
   },
   "nsis": {
-    "license": "LICENSE"
+    "license": "LICENSE",
+    "artifactName": "${productName}-${version}-${arch}.${ext}"
   },
   "linux": {
     "target": ["AppImage", "deb"],

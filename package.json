@@ -1,6 +1,6 @@
 {
   "name": "kart",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "description": "嵌入式串口调试助手",
   "author": "kali20177",
