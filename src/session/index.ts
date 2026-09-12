@@ -8,6 +8,7 @@ import { createSerialStore } from '@/stores/serial'
 import { createMessagesStore } from '@/stores/messages'
 import { createPauseStore } from '@/stores/pause'
 import { createWaveformStore } from '@/stores/waveform'
+import { resolveClockDomain } from '@/utils/waveform-clock'
 import { createRecorderStore } from '@/stores/recorder'
 import { createTransferStore } from '@/stores/transfer'
 import { createTerminalStore } from '@/stores/terminal'
@@ -190,6 +191,15 @@ export function createSession(overrides: SessionOverrides = {}): Session {
       paused: pause.paused,
       pauseStartTime: pause.pauseStartTime,
       togglePause: () => pause.toggle(),
+      // X 轴时钟权威：按实时 driverType/串口参数分流——串口系合成位时钟，网络系到达时间。
+      // 闭包每批读取最新值：运行中切传输/改波特率无需重建 store，域切换由解析器重置锚点。
+      clock: () => ({
+        domain: resolveClockDomain(serial.driverType.value),
+        baudRate: serial.options.baudRate,
+        dataBits: serial.options.dataBits,
+        parity: serial.options.parity,
+        stopBits: serial.options.stopBits,
+      }),
     })
     _clearWaveform = () => waveform.clear()
 

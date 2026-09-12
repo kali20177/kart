@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
+import { createPinia, setActivePinia, storeToRefs } from 'pinia'
 import { nextTick } from 'vue'
-import { useWaveformStore } from './waveform'
+import { createWaveformStore, useWaveformStore } from './waveform'
 import { useSettingsStore } from './settings'
+import { usePauseStore } from './pause'
 import { waveformTextChunk, waveformTextLabeledChunk } from '@/mock/scenarios'
 
 const enc = (s: string) => new TextEncoder().encode(s)
@@ -104,6 +105,42 @@ describe('waveform store ingest（文本行解析）', () => {
     vi.setSystemTime(2000)
     wf.ingest(enc('2\n'))
     expect(wf.data[0][1]).toBe(2000)
+
+    vi.useRealTimers()
+  })
+
+  it('串口域注入 clock：多行批按位时间均摊，批间空档保留', () => {
+    vi.useFakeTimers()
+    const settings = useSettingsStore().settings
+    const pause = usePauseStore()
+    const { paused, pauseStartTime } = storeToRefs(pause)
+    const wf = createWaveformStore({
+      onData: () => () => {},
+      settings,
+      paused,
+      pauseStartTime,
+      togglePause: () => pause.toggle(),
+      clock: () => ({
+        domain: 'wire',
+        baudRate: 115200,
+        dataBits: 8,
+        parity: 'none',
+        stopBits: 1,
+      }),
+    })
+
+    // 批内：'1\n2\n3\n' = 6 字节 / 3 行 → 每行步长 = 6 * (10/115200*1000) / 3
+    vi.setSystemTime(1000)
+    wf.ingest(enc('1\n2\n3\n'))
+    const step = (6 * (10 / 115200) * 1000) / 3
+    expect(wf.data.value[0]).toHaveLength(3)
+    expect(wf.data.value[0][1] - wf.data.value[0][0]).toBeCloseTo(step, 9)
+    expect(wf.data.value[0][2] - wf.data.value[0][1]).toBeCloseTo(step, 9)
+
+    // 批间：设备暂停 1s 后，X 保留空档而非压成毫秒级
+    vi.setSystemTime(2000)
+    wf.ingest(enc('4\n'))
+    expect(wf.data.value[0][3]).toBeGreaterThan(1999)
 
     vi.useRealTimers()
   })

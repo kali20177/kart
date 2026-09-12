@@ -6,6 +6,7 @@ import { useSettingsStore } from './settings'
 import { useSerialStore } from './serial'
 import { usePauseStore } from './pause'
 import { TextLineParser, type WaveformParser } from '@/utils/waveform-parser'
+import type { WireClockConfig } from '@/utils/waveform-clock'
 import type { WaveformParseConfig } from '@/types'
 
 /** waveform store 的外部依赖——原始字节流来自 serial.onData，波形配置来自全局设置，暂停与清空来自 pause。 */
@@ -21,6 +22,11 @@ export interface WaveformDeps {
   paused: Ref<boolean>
   pauseStartTime: Ref<number>
   togglePause: () => void
+  /**
+   * X 轴时钟配置提供者（每次 ingest 实时读取）——串口域返回 wire（按波特率位时间合成），
+   * 网络域返回 arrival。缺省不注入 = 全程到达时间（单例/测试兼容路径）。
+   */
+  clock?: () => WireClockConfig
 }
 
 /**
@@ -49,10 +55,9 @@ export interface WaveformDeps {
  * 订阅在 store 初始化时建立（早于 connect 也安全：listener 静等，连接后即有数据流入）。
  * 单例 store 生命周期 = 应用生命周期，缓冲受 maxHistoryPoints 约束，无需反订阅。
  *
- * X 时间戳：由解析器用真实到达时间 Date.now() 构造（与消息时间戳对齐）。
- * 文本行到达速率未知且可变——Arduino Serial.println 间隔取决于 loop() 周期与
- * `delay()`，无法假设固定频率——故不用合成时间。
- * 同一批多行近似同时到达，逐行 +1ms 仅保单调（uPlot 要求 X 严格递增）。
+ * X 时间戳由解析器按时钟域构造（见 utils/waveform-clock.ts）：串口域（注入 clock）按
+ * 波特率位时间合成「线缆时刻」并保留批间空档；网络域（TCP/RTT）用真实到达时间，
+ * 与消息时间戳对齐。X 恒为 epoch 毫秒——uPlot 时间轴 / tooltip / CSV 相对秒全部兼容。
  */
 export function createWaveformStore(deps: WaveformDeps) {
   // 应用级全局暂停（与消息视图共享）——见 pause store 说明。
@@ -85,9 +90,10 @@ export function createWaveformStore(deps: WaveformDeps) {
   // watch(length) 会停止触发，导致图表不再刷新（数据其实在变）。
   const version = ref(0)
 
-  // 解析器实例（自持 carryover / labelIndex / lastSampleX 等协议状态）。
-  // 切换协议 = 换实例 + clear()；当前固定为文本行解析器。
-  const parser: WaveformParser = new TextLineParser()
+  // 解析器实例（自持 carryover / labelIndex / lastSampleX / 时钟锚点等状态）。
+  // 切换协议 = 换实例 + clear()；当前固定为文本行解析器（时钟由 deps.clock 注入，
+  // 串口会话为合成位时钟，网络会话为到达时间）。
+  const parser: WaveformParser = new TextLineParser(deps.clock)
   // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
   const resumeBreakX = ref(-1)
 

@@ -264,6 +264,6 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 - **消息列表 bufferLimit 上限**：调大 bufferLimit 不会让巨型帧硬冻结复发（帧大小已封顶），但持续收数据时每次刷入仍对全部条目做 O(n) 重算（DynamicScroller `sizes`/`itemsWithSize` + `filtered` + `computeDeltas`），条目数 5 万～10 万时会渐进卡顿掉帧（变慢而非硬冻结）。若要支撑超大 bufferLimit，需换固定高度虚拟化（RecycleScroller）或对条目数封顶。
 - **gap-timeout 把帧率锁在 ~1/gapMs**（默认 20ms → 约 20 帧/秒）；`buffer-flood` 灌满压测需用「分隔符 \n」帧策略才能秒级灌满缓冲验证丢弃提示。
 - **巨型帧渲染截断**：超 4096B 的帧折叠为前 512B 预览（`MessageBubble` 两档截断），单次展开全量可接受；若有「导出/复制巨帧」之外的批量全量渲染需求，需重新评估截断策略。
-- **波形二进制解析模式已移除**（仅文本行解析，X 轴用真实到达时间无漂移）；未来重引入二进制/结构化字节流协议时，重新评估时间对齐策略。
+- **波形二进制解析模式已移除**（仅文本行解析）；X 轴采用时钟权威：串口域按波特率位时间合成「线缆时刻」（`utils/waveform-clock.ts`，批内均摊 + 批锚定保留空档），网络域（TCP/RTT）用到达时间。未来重引入二进制/结构化字节流协议时，复用同一时钟接缝（解析器构造注入 `clock`）。
 
 设计文档见 [docs/](./docs/)（multi-session-ui、terminal-mode、dashboard、file-transfer、multi-port、theme-system）。
