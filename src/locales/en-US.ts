@@ -608,7 +608,7 @@ export default {
     tcp: 'TCP',
     tcpHost: 'Host / IP',
     tcpPort: 'Port',
-    tcpHint: 'Enter host and port before connecting',
+    tcpHint: 'Confirm the target server is running and the host/port are correct',
     rttPort: 'Port (default 19021)',
     rttHint: 'Start a J-Link/OpenOCD RTT Server (default 19021) first',
   },

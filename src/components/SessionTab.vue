@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useMessage } from 'naive-ui'
 import type { DockviewPanelApi } from 'dockview-vue'
 import { useSessions } from '@/composables/useSession'
 import { useConnbarCollapse } from '@/composables/useConnbarCollapse'
+import { useConnectFailure } from '@/composables/useConnectFailure'
 import type { Session } from '@/session'
 
 /**
@@ -21,10 +21,12 @@ import type { Session } from '@/session'
 const props = defineProps<{ params: { params: Session; api: DockviewPanelApi } }>()
 
 const { t } = useI18n()
-const message = useMessage()
 const sessions = useSessions()
 const session = props.params.params
 const { collapsed } = useConnbarCollapse(session)
+
+// 连接失败上报：与 ConnectionBar 共用，网络传输追加操作提示（见 useConnectFailure）
+const reportConnectFailure = useConnectFailure(() => session.serial.transportType)
 
 /** 未连接端口时的默认标题：按会话列表序号（与旧 tab 条「会话{n}」一致） */
 const fallbackTitle = computed(() => {
@@ -51,7 +53,7 @@ async function toggleConnect() {
     if (session.serial.connected) await session.serial.userDisconnect()
     else await session.serial.connect()
   } catch (e) {
-    message.error(e instanceof Error ? e.message : t('conn.connectFailed'))
+    reportConnectFailure(e)
   }
 }
 </script>

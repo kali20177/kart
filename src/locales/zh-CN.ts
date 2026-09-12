@@ -619,7 +619,7 @@ export default {
     tcp: 'TCP',
     tcpHost: '主机 / IP',
     tcpPort: '端口',
-    tcpHint: '连接前填写主机与端口',
+    tcpHint: '请确认目标服务器已启动，且主机与端口填写正确',
     rttPort: '端口（默认 19021）',
     rttHint: '需先启动 J-Link/OpenOCD RTT Server（默认 19021）再连接',
   },

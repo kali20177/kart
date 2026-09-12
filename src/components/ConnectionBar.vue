@@ -4,6 +4,7 @@ import { NSelect, NButton, NTooltip, NModal, NInput, NInputNumber, useMessage } 
 import type { SelectOption } from 'naive-ui'
 import { useSession, useOccupiedPorts } from '@/composables/useSession'
 import { useConnbarCollapse } from '@/composables/useConnbarCollapse'
+import { useConnectFailure } from '@/composables/useConnectFailure'
 import { SCENARIOS } from '@/mock/scenarios'
 import { BAUD_NOTES, BAUD_MAX, BAUD_MIN, PRESET_BAUDS, isValidBaud } from '@/utils/baud'
 import { listDecoders } from '@/decoders'
@@ -60,6 +61,9 @@ const transportOptions = computed(() => [
 const session = useSession()
 const { collapsed } = useConnbarCollapse(session)
 const { serial, recorder, decoder, checksum } = session
+
+// 连接失败上报：网络传输（RTT/TCP）在错误信息下追加操作提示（见 useConnectFailure）
+const reportConnectFailure = useConnectFailure(() => serial.transportType)
 
 const portOptions = computed(() =>
   serial.ports.map((p) => ({
@@ -271,7 +275,7 @@ async function toggle() {
     try {
       await serial.connect()
     } catch (e) {
-      message.error(e instanceof Error ? e.message : t('conn.connectFailed'))
+      reportConnectFailure(e)
     }
   }
 }
@@ -462,7 +466,8 @@ onBeforeUnmount(() => {
       </template>
       </template>
 
-      <!-- 网络传输（RTT/TCP）：主机 + 端口。RTT 模式端口预填/提示 J-Link RTT Server 默认 19021，仍可改 -->
+      <!-- 网络传输（RTT/TCP）：主机 + 端口。RTT 模式端口预填/提示 J-Link RTT Server 默认 19021，仍可改。
+           操作提示（先启动 Server / 核对主机端口）不再内联占位，改在连接失败横幅追加（见 useConnectFailure）。 -->
       <template v-else>
         <NInput
           :value="serial.tcpOptions.host"
@@ -482,7 +487,6 @@ onBeforeUnmount(() => {
           :disabled="serial.connected"
           @update:value="(v: number | null) => { serial.tcpOptions.port = v }"
         />
-        <span class="tcp-hint">{{ serial.transportType === 'rtt' ? t('transport.rttHint') : t('transport.tcpHint') }}</span>
       </template>
     </template>
 
@@ -628,14 +632,6 @@ onBeforeUnmount(() => {
 .mock-label {
   font-size: 12px;
   color: var(--text-dim);
-}
-.tcp-hint {
-  font-size: 11px;
-  color: var(--text-dim);
-  /* 参数栏内联提示：超宽截断省略而非换行（换行会致字符悬空破坏单行布局） */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* —— REC 胶囊录制按钮 —— */
