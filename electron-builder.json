@@ -30,7 +30,9 @@
   },
   "nsis": {
     "license": "LICENSE",
-    "artifactName": "${productName}-${version}-${arch}.${ext}"
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
   },
   "linux": {
     "target": ["AppImage", "deb"],
