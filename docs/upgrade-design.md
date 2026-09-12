@@ -157,6 +157,7 @@ updater: {
 | error | 错误原因 + 断网提示 | 「重试」「手动下载」（openReleases） |
 | not-available | 不弹窗，toast「已是最新版本」 | — |
 
+- **releaseNotes 清洗**：GitHub provider 的 releaseNotes 不是 markdown——`latest.yml` 无该字段时 electron-updater 回退读 Atom feed 的 `<content>`，即 Release body 的 **HTML 渲染**（`<p>/<ul>/<a>` 标签）。`src/utils/updater.ts` 的 `sanitizeReleaseNotes` 在纯逻辑边界剥标签（块级边界转行、`<li>` 转 `- `、链接附 URL、HTML 实体解码）为可读纯文本，`toVersionInfo` 统一走清洗；渲染端明文展示（不经 v-html，规避 CSP/注入）。有单测覆盖（`updater.test.ts`）。
 - **重启保护**：点「立即重启」前检查当前活动会话——录制中（`recorder.state.status !== 'idle'`）或有活跃文件下发（transfer）时弹确认框提示「正在录制/下发，重启会中断」，用户确认才 `quitAndInstall`。
 - 「稍后」文案明确「更新将在下次退出应用时自动安装」，与 `autoInstallOnAppQuit=true` 语义对齐。
 
@@ -176,6 +177,23 @@ updater: {
 > **实测印证（2026-08-16 本地打包冒烟）**：本地构建的未签名 `KART.app` 直接启动即被 Gatekeeper 拦截并弹窗「未打开 KART.app，因其包含恶意软件」——连本地打包产物都如此，macOS 无签名路径的"手动下载兜底"是必须的。本地验证打包产物时需右键→打开（或 `xattr -dr com.apple.quarantine`）；日常迭代验证走 `KART_UPDATE_DEV=1` dev 流程（不经 Gatekeeper）。
 
 macOS 处理（v1 简洁方案）：正常走 `check()`，若下载/安装阶段抛错，错误状态里展示「macOS 自动更新不可用」+「手动下载」按钮（openReleases）。后续若购买 Apple Developer 证书（$99/年），在 electron-builder mac 块补 `identity`/`hardenedRuntime` + 公证，升级功能即全自动生效，渲染端无需改动（升级能力位由构建产物决定）。是否买证书属产品决策，见「十一、待确认」。
+
+### 8.1 差分更新（Windows NSIS）——何时差分、何时回退全量
+
+electron-updater 对 NSIS 目标**默认走差分**（客户端零配置，`disableDifferentialDownload` 本项目未设）：下载前依序
+1. 取新安装包 URL 的 `.blockmap`（如 `KART-0.1.3-x64.exe.blockmap`）；
+2. 旧 blockmap：优先读缓存 `%LOCALAPPDATA%\kart-updater\current.blockmap`（上次下载完成时写入）；
+   否则把 URL 路径中的新版本号**字符串替换**为当前版本，去 Releases 下载（如 `KART-0.1.2-x64.exe.blockmap`）；
+3. 与本机旧安装包（NSIS 安装器安装时自写 `%LOCALAPPDATA%\kart-updater\installer.exe`，见 electron-builder `installer.nsh` 的 `copyFile "$EXEPATH" ...`）用 blockmap 比对，只下载差异块再合成新包。
+
+差分时进度条 `total` 是**差异字节数**，不是全量包大小。
+
+任一环缺失即**静默回退全量下载**（不报错，仅日志：`Cannot download differentially, fallback to full download: <原因>`，走 mainLogger 可在导出日志看到）：
+
+1. **旧版本 `.blockmap` 资产缺失或命名对不上**（2026-09 实测）：v0.1.1/v0.1.0 的 Windows 包按 electron-builder 默认名发布为 `KART.Setup.0.1.0.exe(.blockmap)`，而 v0.1.2 起 `nsis.artifactName` 改为 `KART-0.1.2-x64.exe`；由新包 URL 版本替换推导出的 `KART-0.1.1-x64.exe.blockmap` 404 → 本次更新全量下载（82MB）。**发布纪律：artifactName/产物命名一经定形不再改动**；命名一致后（0.1.2 → 后续版）每次更新即差分。已定形的 `KART-${version}-${arch}.${ext}` 三平台一致。
+2. 本机无 `installer.exe`（非 NSIS 安装器安装、缓存被清理）→ 读旧文件失败回退全量。
+3. 新旧 blockmap 版本不匹配（换构建机/未重出 blockmap）→ 回退全量。
+4. 服务器不支持 Range 请求（GitHub 支持；自定义 generic feed 的 http 服务器需支持 `Accept-Ranges`，否则差分中间步骤失败回退全量）。
 
 ## 九、网络与镜像
 

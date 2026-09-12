@@ -97,13 +97,96 @@ export function totalUpdateSize(info: RawUpdateInfo | null | undefined): number 
   return total > 0 ? total : undefined
 }
 
-/** 原始 UpdateInfo → 渲染端契约（只保留公开字段 + 求和大小） */
+/** HTML 命名实体 → 字符（覆盖 GitHub Atom feed 常见转义） */
+const HTML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  hellip: '…',
+  mdash: '—',
+  ndash: '–',
+  rsquo: '’',
+  lsquo: '‘',
+  rdquo: '”',
+  ldquo: '“',
+  middot: '·',
+  bull: '•',
+  copy: '©',
+  reg: '®',
+  trade: '™',
+  times: '×',
+  divide: '÷',
+  plusmn: '±',
+  sect: '§'
+}
+
+/** 闭合（或自闭合）后应换行的块级标签——GitHub Atom feed 把 Release body 渲染为 HTML，
+ *  不转成换行的话 `</p>` 等被整体剥掉后内容会挤成一行 */
+const BLOCK_TAGS = [
+  'p', 'div', 'li', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'blockquote', 'pre', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+  'br', 'hr', 'section', 'article', 'header', 'footer', 'figure', 'figcaption'
+]
+
+/**
+ * releaseNotes → 可读纯文本。
+ *
+ * electron-updater（GitHub provider）拿到的 releaseNotes 是 GitHub Atom feed 的
+ * `<content>`——即 Release body 的 **HTML 渲染**（`<p>/<ul>/<a>` 等）；本函数在
+ * 主进程/纯逻辑边界把标签剥掉、块级边界转成换行、实体解码，得到客户端可直接展示的
+ * 纯文本（渲染端明文渲染，不经 v-html，规避 CSP/注入）。输入若是 markdown（本地
+ * 元数据/ReleaseNoteInfo[] 场景）则原样透传——不含标签与实体时不会被改动。
+ */
+export function sanitizeReleaseNotes(notes: string | null | undefined): string | undefined {
+  if (notes == null || notes.trim() === '') return undefined
+  // <a href="...">可见文本</a> → 可见文本（URL 不同且为 http(s) 时附上链接，纯文本不丢跳转目标）
+  const withLinks = notes.replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, inner: string) => {
+    const label = inner.replace(/<[^>]+>/g, '').trim()
+    if (!label) return ''
+    return /^https?:\/\//i.test(href) && !href.includes(label) ? `${label} (${href})` : label
+  })
+  // <img alt="..."> → [alt]（无 alt 的装饰图直接丢弃）
+  const withImgs = withLinks.replace(/<img\b[^>]*\balt=["']([^"']*)["'][^>]*\/?>/gi, (_m, alt: string) => (alt ? `[${alt}]` : ''))
+  // <li> 开头转列表符号
+  const withList = withImgs.replace(/<li\b[^>]*>/gi, '\n- ')
+  // 其余块级标签（开/闭）→ 换行
+  const withBreaks = withList.replace(new RegExp(`</?(?:${BLOCK_TAGS.join('|')})\\b[^>]*>`, 'gi'), '\n')
+  // 剥掉剩余全部标签（内联样式/字体等）
+  const noTags = withBreaks.replace(/<[^>]+>/g, '')
+  // 实体解码：命名 + 十进制/十六进制字符引用
+  const decoded = noTags.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g, (m, ent: string) => {
+    if (ent.startsWith('#x')) {
+      const code = parseInt(ent.slice(2), 16)
+      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : m
+    }
+    if (ent.startsWith('#')) {
+      const code = parseInt(ent.slice(1), 10)
+      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : m
+    }
+    return HTML_ENTITIES[ent] ?? m
+  })
+  // 行尾空白清理 + 连续空行收敛为单个换行（HTML 块级边界产生的空行压平）+ 首尾修剪
+  // （行首缩进保留，代码块/对齐不被破坏）
+  return (
+    decoded
+      .split('\n')
+      .map((line) => line.replace(/[ \t]+$/g, ''))
+      .join('\n')
+      .replace(/\n{2,}/g, '\n')
+      .trim() || undefined
+  )
+}
+
+/** 原始 UpdateInfo → 渲染端契约（只保留公开字段 + 求和大小；releaseNotes 清洗为纯文本） */
 export function toVersionInfo(info: RawUpdateInfo | null | undefined): UpdaterVersionInfo | null {
   if (!info) return null
   return {
     version: info.version,
     releaseDate: info.releaseDate,
-    releaseNotes: info.releaseNotes,
+    releaseNotes: sanitizeReleaseNotes(info.releaseNotes),
     totalSize: totalUpdateSize(info)
   }
 }

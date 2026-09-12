@@ -95,7 +95,8 @@ function onRestart(): void {
         </div>
         <div v-if="info.releaseNotes" class="notes">
           <div class="notes-title">{{ t('update.releaseNotes') }}</div>
-          <!-- 纯文本渲染：releaseNotes 来自远端（GitHub Release body），不经 v-html，规避 CSP/注入 -->
+          <!-- 纯文本渲染：releaseNotes 已在主进程边界清洗 HTML 标签为纯文本（utils/updater 的
+               sanitizeReleaseNotes——GitHub Atom feed 的 <content> 是 HTML），不经 v-html，规避 CSP/注入 -->
           <pre class="notes-body">{{ info.releaseNotes }}</pre>
         </div>
       </template>

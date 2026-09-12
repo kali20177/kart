@@ -4,6 +4,7 @@ import {
   isUpdaterActive,
   totalUpdateSize,
   toVersionInfo,
+  sanitizeReleaseNotes,
   updaterReducer,
   formatBytes,
   formatSpeed,
@@ -70,6 +71,55 @@ describe('totalUpdateSize / toVersionInfo（原始 UpdateInfo → 契约映射�
   it('null/undefined → null', () => {
     expect(toVersionInfo(null)).toBeNull()
     expect(toVersionInfo(undefined)).toBeNull()
+  })
+
+  it('HTML releaseNotes（GitHub Atom feed 形态）→ 清洗为纯文本', () => {
+    const html =
+      '<div class="markdown-body"><p>新增 <strong>RTT</strong> 传输</p><ul><li>修复 A&amp;B</li><li>优化 C &lt; 2</li></ul>' +
+      '<p>详见 <a href="https://github.com/kali20177/kart/issues/1">#1</a></p></div>'
+    const info = toVersionInfo({ version: '1.1.0', releaseNotes: html, files: [{ size: 10 }] })
+    expect(info?.releaseNotes).toBe('新增 RTT 传输\n- 修复 A&B\n- 优化 C < 2\n详见 #1 (https://github.com/kali20177/kart/issues/1)')
+  })
+
+  it('ReleaseNoteInfo[] 拼接的 markdown（### vX 头）无标签时透传，连续空行收敛为单个', () => {
+    const notes = '### v1.1.0\n- 新增 RTT 传输\n### v1.0.1\n修复若干问题'
+    expect(toVersionInfo({ version: '1.1.0', releaseNotes: notes })?.releaseNotes).toBe(notes)
+    expect(sanitizeReleaseNotes('### v1.1.0\n- 新增 RTT\n\n### v1.0.1\n修复')).toBe('### v1.1.0\n- 新增 RTT\n### v1.0.1\n修复')
+  })
+})
+
+describe('sanitizeReleaseNotes（HTML → 可读纯文本）', () => {
+  it('空/null/纯空白 → undefined', () => {
+    expect(sanitizeReleaseNotes(undefined)).toBeUndefined()
+    expect(sanitizeReleaseNotes(null)).toBeUndefined()
+    expect(sanitizeReleaseNotes('')).toBeUndefined()
+    expect(sanitizeReleaseNotes('   ')).toBeUndefined()
+  })
+
+  it('剥掉块级/内联标签并保留文本', () => {
+    expect(sanitizeReleaseNotes('<p>hello</p><p>world</p>')).toBe('hello\nworld')
+    expect(sanitizeReleaseNotes('<h2>标题</h2><p>正文 <code>x &lt; 3</code></p>')).toBe('标题\n正文 x < 3')
+  })
+
+  it('<li> 转列表符号，<br> 转换行', () => {
+    expect(sanitizeReleaseNotes('<ul><li>甲</li><li>乙</li></ul>')).toBe('- 甲\n- 乙')
+    expect(sanitizeReleaseNotes('第一行<br>第二行')).toBe('第一行\n第二行')
+  })
+
+  it('链接保留可见文本并附 http(s) URL，装饰图转 alt', () => {
+    expect(sanitizeReleaseNotes('<a href="https://a.b/c">文档</a>')).toBe('文档 (https://a.b/c)')
+    expect(sanitizeReleaseNotes('<a href="https://a.b/c">https://a.b/c</a>')).toBe('https://a.b/c')
+    expect(sanitizeReleaseNotes('<img alt="截图" src="x.png"> 见上')).toBe('[截图] 见上')
+  })
+
+  it('实体解码：命名 + 十进制 + 十六进制', () => {
+    expect(sanitizeReleaseNotes('A&amp;B &lt;C&gt; &quot;引号&quot;&nbsp;x')).toBe('A&B <C> "引号" x')
+    expect(sanitizeReleaseNotes('&#39;单引&#x27;')).toBe("'单引'")
+  })
+
+  it('纯文本透传（含 markdown 符号）', () => {
+    expect(sanitizeReleaseNotes('修复若干问题')).toBe('修复若干问题')
+    expect(sanitizeReleaseNotes('### v1.1.0\n- 新增 RTT')).toBe('### v1.1.0\n- 新增 RTT')
   })
 })
 

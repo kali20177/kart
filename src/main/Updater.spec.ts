@@ -242,6 +242,20 @@ describe('Updater（主进程单例）', () => {
     expect(u.getState().info).toBeNull()
   })
 
+  it('releaseNotes 为 HTML（GitHub Atom feed 形态）时经事件链路清洗为纯文本', async () => {
+    const u = new Updater()
+    await u.check()
+    mockAutoUpdater.emit('update-available', {
+      version: '1.1.0',
+      releaseNotes: '<p>新增 <strong>RTT</strong></p><ul><li>修复 A&amp;B</li></ul>',
+      files: [{ size: 100 }]
+    })
+    const info = u.getState().info
+    expect(info?.version).toBe('1.1.0')
+    expect(info?.releaseNotes).toBe('新增 RTT\n- 修复 A&B')
+    expect(info?.releaseNotes).not.toContain('<p>')
+  })
+
   it('error 事件 → error 状态并透传消息', async () => {
     const u = new Updater()
     await u.check()

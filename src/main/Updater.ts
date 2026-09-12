@@ -231,7 +231,8 @@ function isCancelledError(e: unknown): boolean {
 }
 
 /** 原始 UpdateInfo → 契约最小结构（files 仅保留 size，避免泄漏 url/sha512 等）。
- *  releaseNotes 可能是字符串（markdown）或 ReleaseNoteInfo[]（数组），统一为纯文本。 */
+ *  releaseNotes 可能是字符串（GitHub Atom feed 的 HTML 渲染，见 utils/updater 的
+ *  sanitizeReleaseNotes）或 ReleaseNoteInfo[]（数组），统一为纯文本拼接。 */
 function toRawInfo(info: UpdateInfo): { version: string; releaseDate?: string; releaseNotes?: string; files?: Array<{ size?: number }> } {
   const notes = Array.isArray(info.releaseNotes)
     ? info.releaseNotes.map((n) => (n.version ? `### v${n.version}\n${n.note}` : n.note)).join('\n\n')
