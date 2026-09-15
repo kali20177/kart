@@ -1,7 +1,7 @@
 /**
  * 启动加载页回归：主题自适应调色板 + 全屏无边距（白边）+ fallback。
  *
- * A. 浏览器矩阵（playwright + 系统 Chrome + dev vite）：route 延迟 /src/main.ts
+ * A. 浏览器矩阵（playwright + 系统 Chrome + dev vite）：route 延迟 /src/renderer.ts
  *    让 splash 停留可见，逐主题断言 loader 背景与该主题 --bg 一致、loader 铺满视口、
  *    body margin=0；未知 themeId 断言回落 glass-industrial-dark 默认。
  *    （浏览器 localStorage 与用户 Electron 数据隔离，主题可随意切换。）
@@ -74,7 +74,7 @@ try {
     )
     // 延迟主入口 → splash 停留可见。注意 DCL 会等模块脚本执行完，
     // reload 须以 commit 返回后轮询 splash 出现，否则 app 已挂载、splash 已被替换
-    await page.route('**/src/main.ts*', async (route) => {
+    await page.route('**/src/renderer.ts*', async (route) => {
       await sleep(2600)
       await route.continue()
     })
@@ -111,7 +111,7 @@ try {
     check(`[${id}] 波形动画就位`, info.hasWave)
     check(`[${id}] 标题为 KART`, info.title === 'KART', info.title)
     await page.screenshot({ path: `/tmp/splash-verify/${id}.png` }).catch(() => {})
-    await page.unroute('**/src/main.ts*')
+    await page.unroute('**/src/renderer.ts*')
     await page.waitForSelector('.session-pane', { timeout: 20000 })
   }
 
@@ -122,7 +122,7 @@ try {
     cfg.themeId = 'no-such-theme'
     localStorage.setItem('kart:settings', JSON.stringify(cfg))
   })
-  await page.route('**/src/main.ts*', async (route) => {
+  await page.route('**/src/renderer.ts*', async (route) => {
     await sleep(2600)
     await route.continue()
   })
@@ -135,7 +135,7 @@ try {
   check('未知 themeId 标记 fallback', fallback.splashTheme === 'fallback', fallback.splashTheme)
   check('未知 themeId 回落默认暗色', fallback.bg === 'rgb(13, 17, 23)', fallback.bg)
   await page.screenshot({ path: '/tmp/splash-verify/fallback.png' }).catch(() => {})
-  await page.unroute('**/src/main.ts*')
+  await page.unroute('**/src/renderer.ts*')
   if (orig !== null) await page.evaluate((o) => localStorage.setItem('kart:settings', o), orig)
   await page.waitForSelector('.session-pane', { timeout: 20000 })
 } catch (e) {
