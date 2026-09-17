@@ -32,6 +32,7 @@ function makeSettings(partial?: Partial<AppSettings['terminal']>): AppSettings {
     showPauseNotification: true,
     recordFormat: 'text',
     sendHistoryLimit: 50,
+    mcp: { mode: 'off', port: 19281, token: '', confirmConnect: false },
   }
 }
 

@@ -19,6 +19,7 @@
     "verify:terminal": "node scripts/verify-terminal.mjs",
     "verify:pty": "node scripts/verify-pty.mjs",
     "verify:dockview": "node scripts/verify-dockview.mjs",
+    "verify:mcp": "node scripts/verify-mcp.mjs",
     "postinstall": "node scripts/check-node-pty.mjs",
     "electron:dev": "cross-env ELECTRON=true vite",
     "electron:build": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit && cross-env ELECTRON=true vite build && electron-builder --publish never",
@@ -26,13 +27,15 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "dockview": "^7.0.4",
     "dockview-vue": "^7.0.4",
     "electron-updater": "^6.8.9",
     "node-pty": "^1.1.0",
-    "serialport": "^12.0.0"
+    "serialport": "^12.0.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@intlify/unplugin-vue-i18n": "^4.0.0",

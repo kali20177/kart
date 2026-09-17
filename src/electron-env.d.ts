@@ -6,6 +6,14 @@ import type { UpdaterState } from '@/utils/updater'
 // 从 env.d.ts 拆出独立模块文件，以便引用 SerialPortDriver 导出的 ElectronSerial
 // 类型，为 window.electron.serial 提供精确类型，替代此前的 (window as any) 断言。
 declare global {
+  /** MCP server 状态快照（主进程 get-status/start/stop 返回，docs/mcp-design.md） */
+  interface McpBridgeState {
+    running: boolean
+    port: number | null
+    token: string | null
+    mode: string
+  }
+
   interface Window {
     electron?: {
       platform: string
@@ -53,6 +61,18 @@ declare global {
         openReleases(): Promise<void>
         /** 订阅状态推送，返回退订函数 */
         onState(handler: (state: UpdaterState) => void): () => void
+      }
+      mcp?: {
+        /** 当前服务器状态快照（running/port/token/mode） */
+        getState(): Promise<McpBridgeState>
+        /** 启动（幂等；token 空则主进程随机生成）。返回最新状态 */
+        start(config: { port: number; token: string | null; mode: string }): Promise<McpBridgeState>
+        /** 停止（幂等）。返回最新状态 */
+        stop(): Promise<McpBridgeState>
+        /** 工具执行完毕应答（渲染端注册表 → 主进程挂起的 MCP 调用） */
+        toolResult(callId: number, ok: boolean, result: unknown): Promise<boolean>
+        /** 订阅主进程发来的工具调用请求（callId 关联应答），返回退订函数 */
+        onToolCall(handler: (payload: { callId: number; tool: string; args: unknown }) => void): () => void
       }
     }
     // Tauri 版原生桥（`window.kart`）在 Electron 分支不存在，声明为可选仅为让

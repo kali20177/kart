@@ -240,6 +240,23 @@ export interface AppSettings {
   // 输入
   /** 发送历史最大保留条数（输入框 ↑/↓ 翻阅与历史弹窗展示上限） */
   sendHistoryLimit: number
+  // 入站 MCP 服务器（docs/mcp-design.md）
+  mcp: McpSettings
+}
+
+/** MCP 服务器授权模式（与主进程 McpMode 对齐；off=不启动） */
+export type McpMode = 'off' | 'read-only' | 'read-write'
+
+/** 入站 MCP 服务器配置（全局共享；token 空 = 每次启动随机生成，见 McpServer.start） */
+export interface McpSettings {
+  /** off=关闭；read-only=仅读工具；read-write=全部工具（含连接/发送） */
+  mode: McpMode
+  /** 监听端口（127.0.0.1） */
+  port: number
+  /** 静态 token（可选）；空串 = 每次启动随机，UI 展示主进程生成的真实 token */
+  token: string
+  /** AI 连接/断开会话串口前是否弹确认框（默认不弹，连接状态可见即可审计） */
+  confirmConnect: boolean
 }
 
 /**

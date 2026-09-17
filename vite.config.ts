@@ -88,7 +88,10 @@ export default defineConfig({
                     // electron-builder 的 asarUnpack 把 .node 解出 asar。
                     // electron-updater 同列：含平台相关动态 require（mac 走
                     // Squirrel.Mac），保持 bundle 外置、运行时从 node_modules 解析。
-                    external: ['serialport', /^@serialport\//, 'node-pty', 'electron-updater']
+                    // @modelcontextprotocol/sdk：含传递依赖（zod/express 等），整包
+                    // external 后运行时按 SDK 自身 exports 子路径（server/mcp.js 等）
+                    // require，打包应用内的 node_modules 随 dependencies 树进 asar。
+                    external: ['serialport', /^@serialport\//, 'node-pty', 'electron-updater', /^@modelcontextprotocol\/sdk/]
                   }
                 }
               }

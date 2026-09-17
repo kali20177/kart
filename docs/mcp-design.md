@@ -113,9 +113,9 @@ Lissio（Rust + Tauri）在 `src-tauri/crates/desktop/mcp-server/` 实现入站 
 - **CSRF**：token 走 Authorization 头、不依赖 cookie，天然免疫 CSRF；curl/脚本误用时 UI 状态条实时可见（可审计）。
 - 不抄 Lissio 的“绑定 loopback 即无鉴权”，理由：本机其他进程（被攻破的浏览器扩展/后台程序）也可访问 loopback，串口写操作须有明确凭据。
 
-### D4 工具集 v1：13 个（读 7 / 写 6 含连接管理 2；get_session_status 含统计）
+### D4 工具集 v1：15 个（读 8 / 写 7，含连接管理 2 与 list_quick_commands；get_session_status 含统计）
 
-定义见 §6。范围裁剪：不做会话创建（会话面板是 UI 容器，见 §6.5）、不做解码器配置热改、不做 CAN/节点图（Kart 无此能力）。v2 预留：`create_session`、tcp/rtt 驱动连接、录制/下发启停、信号线（DTR/RTS/Break）、帧标注、流式推送（notifications）。
+定义见 §6。范围裁剪：不做会话创建（会话面板是 UI 容器，见 §6.5）、不做解码器配置热改、不做 CAN/节点图（Kart 无此能力）。v2 预留：`create_session`、tcp/rtt 驱动连接、录制/下发启停、信号线（DTR/RTS/Break）、帧标注、流式推送（notifications）。实施时新增 `list_quick_commands`（读）供 `run_quick_command` 查询命令 id/name。
 
 ### D5 工具契约静态共享
 
@@ -143,6 +143,7 @@ Lissio（Rust + Tauri）在 `src-tauri/crates/desktop/mcp-server/` 实现入站 
 | `get_waveform` | `sessionId, window?:{start_ms,end_ms}, recent?:count` | 通道列表 + `{ts, values[]}` 点列（读 waveform store，含历史缓冲） | 点数 ≤ 5000（与 `maxPoints` 同数量级） |
 | `get_dashboard` | `sessionId` | 解码字段最新值表 + 最近一帧快照（dashboard store 数据） | — |
 | `search_messages` | `sessionId, query, mode, since?, limit` | 命中帧列表（复用现有搜索纯函数 `search/utils`） | limit ≤ 100 |
+| `list_quick_commands` | — | 快速命令 `[{id,name,payload,mode,appendNewline,loopIntervalMs,loopCount}]`，配合 `run_quick_command` | — |
 
 ### 6.2 写工具（read-write 可用；连接管理作用于已有会话，语义见 §6.5）
 
@@ -271,7 +272,7 @@ main: 找到 callId → 清计时器 → ok ? success 结果 : 工具错误；�
 ## 十一、里程碑拆分
 
 1. **M1 契约与桥**：`src/mcp/contract.ts` + 主进程 `McpServer`（SDK 接入、鉴权、start/stop/status IPC）+ preload 桥 + 渲染进程 registry 骨架；单测全绿。
-2. **M2 读工具**：list_serial_ports / list_sessions / get_session_status / get_recent_messages / search_messages / get_waveform / get_dashboard；store 级测试。
+2. **M2 读工具**：list_serial_ports / list_sessions / get_session_status / get_recent_messages / search_messages / get_waveform / get_dashboard / list_quick_commands；store 级测试。
 3. **M3 写工具 + UI**：send_bytes / send_string / run_quick_command / set_paused / clear_messages；SettingsModal「AI」tab + i18n + 状态条标识。
 4. **M4 e2e 收口**：`verify-mcp.mjs` + 文档文案校对；635+ 测试全绿后提交。
 

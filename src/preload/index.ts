@@ -58,6 +58,15 @@ ipcRenderer.on('updater:event', (_e, state: UpdaterState) => {
   for (const h of updaterStateHandlers) h(state)
 })
 
+// ── 入站 MCP 服务器 ──
+// 主进程经 webContents.send('mcp:tool-call', {callId, tool, args}) 请求渲染端
+// 工具注册表执行，执行完毕经 mcp:tool-result invoke 应答（callId 关联）。
+type McpToolCallHandler = (payload: { callId: number; tool: string; args: unknown }) => void
+const mcpToolCallHandlers = new Set<McpToolCallHandler>()
+ipcRenderer.on('mcp:tool-call', (_e, payload: { callId: number; tool: string; args: unknown }) => {
+  for (const h of mcpToolCallHandlers) h(payload)
+})
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   versions: process.versions,
@@ -228,6 +237,40 @@ contextBridge.exposeInMainWorld('electron', {
     onState: (handler: UpdaterStateHandler) => {
       updaterStateHandlers.add(handler)
       return () => { updaterStateHandlers.delete(handler) }
+    }
+  },
+
+  // ── 入站 MCP 服务器（docs/mcp-design.md；主进程 McpServer）──
+  mcp: {
+    /** 当前服务器状态快照（running/port/token/mode） */
+    getState: () => ipcRenderer.invoke('mcp:get-state') as Promise<{
+      running: boolean
+      port: number | null
+      token: string | null
+      mode: string
+    }>,
+    /** 启动（幂等；token 空则主进程随机生成）。返回最新状态 */
+    start: (config: { port: number; token: string | null; mode: string }) =>
+      ipcRenderer.invoke('mcp:start', config) as Promise<{
+        running: boolean
+        port: number | null
+        token: string | null
+        mode: string
+      }>,
+    /** 停止（幂等）。返回最新状态 */
+    stop: () => ipcRenderer.invoke('mcp:stop') as Promise<{
+      running: boolean
+      port: number | null
+      token: string | null
+      mode: string
+    }>,
+    /** 工具执行完毕应答（渲染端注册表 → 主进程挂起的 MCP 调用） */
+    toolResult: (callId: number, ok: boolean, result: unknown) =>
+      ipcRenderer.invoke('mcp:tool-result', { callId, ok, result }) as Promise<boolean>,
+    /** 订阅主进程发来的工具调用请求（callId 关联应答），返回退订函数 */
+    onToolCall: (handler: McpToolCallHandler) => {
+      mcpToolCallHandlers.add(handler)
+      return () => { mcpToolCallHandlers.delete(handler) }
     }
   }
 })

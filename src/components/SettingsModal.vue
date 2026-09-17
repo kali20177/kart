@@ -22,7 +22,13 @@ import type { TokenKey } from '@/themes'
 import { listSystemFonts } from '@/utils/fonts'
 import type { Session } from '@/session'
 
-const props = defineProps<{ session?: Session }>()
+const props = defineProps<{
+  session?: Session
+  /** MCP server 运行状态（App.vue useMcpServer 唯一实例，docs/mcp-design.md §九） */
+  mcpStatus?: { running: boolean; port: number | null; token: string | null; mode: string }
+  /** 「重新生成 token」回调（清静态 token 回随机模式并强制重启） */
+  onRegenerateToken?: () => Promise<unknown>
+}>()
 
 const show = defineModel<boolean>('show', { default: false })
 // settings 为全局共享 store（应用级设置弹窗）；serial 来自 opener 会话（打开那一刻绑定的 tab）
@@ -213,8 +219,45 @@ const navItems = computed<NavItem[]>(() => [
     key: 'record',
     label: t('settings.record'),
     icon: 'M8 2v10M4 8l4 4 4-4M2 14h12'
+  },
+  {
+    key: 'mcp',
+    label: t('settings.mcp'),
+    icon: 'M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.7 3.7l2.1 2.1M10.2 10.2l2.1 2.1M12.3 3.7l-2.1 2.1M5.8 10.2l-2.1 2.1'
   }
 ])
+
+// —— 入站 MCP 服务器（docs/mcp-design.md §九）——
+const mcpModeOptions = computed(() => [
+  { label: t('mcp.modeOff'), value: 'off' },
+  { label: t('mcp.modeReadOnly'), value: 'read-only' },
+  { label: t('mcp.modeReadWrite'), value: 'read-write' }
+])
+async function handleRegenerateToken() {
+  if (!props.onRegenerateToken) return
+  await props.onRegenerateToken()
+  message.success(t('mcp.regenerated'))
+}
+async function copyMcpToken() {
+  if (!props.mcpStatus?.token) return
+  await navigator.clipboard.writeText(props.mcpStatus.token)
+  message.success(t('mcp.copied'))
+}
+async function copyClientConfig() {
+  const st = props.mcpStatus
+  if (!st?.running || !st.token) return
+  const cfg = {
+    mcpServers: {
+      kart: {
+        type: 'streamable-http',
+        url: `http://127.0.0.1:${st.port}/mcp`,
+        headers: { Authorization: `Bearer ${st.token}` }
+      }
+    }
+  }
+  await navigator.clipboard.writeText(JSON.stringify(cfg, null, 2))
+  message.success(t('mcp.copied'))
+}
 </script>
 
 <template>
@@ -500,6 +543,46 @@ const navItems = computed<NavItem[]>(() => [
             </NFormItem>
           </NForm>
         </div>
+
+        <!-- ========== AI（MCP 服务器）========== -->
+        <NForm v-if="activeTab === 'mcp'" label-placement="top" size="small">
+          <div class="section-title">{{ t('settings.mcp') }}</div>
+          <NFormItem :label="t('mcp.mode')">
+            <NSelect v-model:value="s.mcp.mode" :options="mcpModeOptions" />
+          </NFormItem>
+          <NFormItem v-if="s.mcp.mode !== 'off'" :label="t('mcp.port')">
+            <NInputNumber v-model:value="s.mcp.port" :min="1024" :max="65535" style="width: 100%" />
+          </NFormItem>
+          <NFormItem v-if="s.mcp.mode !== 'off'" :label="t('mcp.status')">
+            <div class="mcp-status-row">
+              <span class="mcp-status-dot" :class="{ on: mcpStatus?.running }" />
+              <span v-if="mcpStatus?.running">{{ t('mcp.statusRunning', { port: mcpStatus.port ?? s.mcp.port }) }}</span>
+              <span v-else>{{ t('mcp.statusStopped') }}</span>
+            </div>
+          </NFormItem>
+          <NFormItem v-if="mcpStatus?.running" :label="t('mcp.url')">
+            <NInput :value="`http://127.0.0.1:${mcpStatus.port ?? s.mcp.port}/mcp`" readonly />
+          </NFormItem>
+          <NFormItem v-if="mcpStatus?.running" :label="t('mcp.token')">
+            <div class="mcp-token-row">
+              <NInput :value="mcpStatus.token ?? ''" readonly class="mcp-token-input" />
+              <NButton size="small" @click="copyMcpToken">{{ t('mcp.copy') }}</NButton>
+              <NButton size="small" @click="handleRegenerateToken">{{ t('mcp.regenerate') }}</NButton>
+            </div>
+          </NFormItem>
+          <NFormItem v-if="mcpStatus?.running" :label="t('mcp.clientConfig')">
+            <div class="mcp-token-row">
+              <NButton size="small" @click="copyClientConfig">{{ t('mcp.copyClientConfig') }}</NButton>
+              <span class="mcp-hint">{{ t('mcp.clientConfigHint') }}</span>
+            </div>
+          </NFormItem>
+          <NFormItem v-if="s.mcp.mode !== 'off'" :label="t('mcp.confirmConnect')">
+            <div class="mcp-confirm-row">
+              <NSwitch v-model:value="s.mcp.confirmConnect" />
+              <span class="mcp-hint">{{ t('mcp.confirmConnectHint') }}</span>
+            </div>
+          </NFormItem>
+        </NForm>
         </div>
       </div>
     </div>
@@ -701,6 +784,39 @@ const navItems = computed<NavItem[]>(() => [
   line-height: 1.5;
   color: var(--text-dim);
   opacity: 0.85;
+}
+
+/* ===== AI（MCP）===== */
+.mcp-status-row,
+.mcp-token-row,
+.mcp-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.mcp-status-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.5;
+}
+.mcp-status-dot.on {
+  background: var(--ok);
+  opacity: 1;
+  box-shadow: 0 0 6px var(--ok);
+}
+.mcp-token-input {
+  flex: 1;
+  font-family: var(--mono-font);
+  font-size: 12px;
+}
+.mcp-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
 }
 
 /* ===== NForm 内间距微调 ===== */

@@ -39,6 +39,13 @@ const DEFAULTS: AppSettings = {
   showPauseNotification: true,
   recordFormat: 'text' as const,
   sendHistoryLimit: 50,
+  // 入站 MCP 服务器（docs/mcp-design.md）：默认 off 不启动，用户显式开启
+  mcp: {
+    mode: 'off' as const,
+    port: 19281,
+    token: '',
+    confirmConnect: false
+  },
 }
 
 /** 全局共享 store：应用设置跨会话统一（组件经 session.settings 或单例均可读同一 proxy）。 */
@@ -87,6 +94,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // terminal 浅合并兜底：persisted 若有旧值会整体覆盖 DEFAULTS.terminal，缺字段时补默认
   settings.terminal = { ...DEFAULTS.terminal, ...settings.terminal }
+  // mcp 浅合并兜底（同 terminal）：旧存档无 mcp 字段/缺字段时补默认（默认 off）
+  settings.mcp = { ...DEFAULTS.mcp, ...settings.mcp }
 
   // 是否自动把配置落盘（菜单「文件 ▸ 自动保存配置」开关）。
   // 开关标志本身始终持久化；它只决定 settings 内容是否自动写入本地存储。

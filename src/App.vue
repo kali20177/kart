@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useStorage, useEventListener, useTitle } from '@vueuse/core'
-import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN, enUS, dateEnUS, createDiscreteApi } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { DockviewVue, type DockviewReadyEvent, type DockviewApi, type DockviewGroupPanel, type VueComponent } from 'dockview-vue'
 import MenuBar from './components/MenuBar.vue'
@@ -23,6 +23,12 @@ import {
   provideSessions,
 } from './composables/useSession'
 import { createSession } from './session'
+import { mcpSessionRegistry } from './mcp/session-registry'
+import { createMcpToolRegistry } from './mcp/registry'
+import { initMcpToolBridge } from './mcp/bridge'
+import { useMcpServer } from './composables/useMcpServer'
+import { useSettingsStore } from './stores/settings'
+import { useCommandsStore } from './stores/commands'
 import { STORAGE_PREFIX } from './composables/useStorage'
 import { applyAsciiInsert, setComposer } from './utils/composer'
 import type { Session } from './session'
@@ -36,8 +42,15 @@ const sessions = ref<Session[]>([])
 const activeSessionId = ref(0)
 const activeSession = computed(() => sessions.value[activeSessionId.value])
 
+// 会话创建统一入口：登记到 MCP 会话注册表（工具按 sessionId 路由），销毁时注销
+function createTrackedSession(): Session {
+  const s = createSession()
+  mcpSessionRegistry.register(s)
+  return s
+}
+
 // 初始建第 1 个会话（单会话默认行为，与改造前一致）
-sessions.value.push(createSession())
+sessions.value.push(createTrackedSession())
 // 传 ref/computed 本身（非 .value）：provide 只执行一次，传解包值会固定为会话 0
 provideActiveSession(activeSession)
 // 被其他会话已连接占用的端口集合（各 ConnectionBar 下拉禁用提示）
@@ -90,7 +103,7 @@ function ensureSessionPanel(s: Session, group?: DockviewGroupPanel) {
 }
 
 function onNewSession(group?: DockviewGroupPanel) {
-  const s = createSession()
+  const s = createTrackedSession()
   sessions.value.push(s)
   ensureSessionPanel(s, group) // addPanel 会激活新面板 → onDidActivePanelChange → activeSessionId 跟随
   // 新会话独立驱动，端口列表为空，需主动拉取一次（初始会话在 onMounted 拉取）
@@ -101,11 +114,12 @@ function removeSession(panelId: string) {
   const idx = sessions.value.findIndex((s) => SESSION_PANEL(s.id) === panelId)
   if (idx === -1) return
   const [s] = sessions.value.splice(idx, 1)
+  mcpSessionRegistry.unregister(s.id)
   s.dispose()
   // 末会话保护：dockview 无 closable 开关，靠 SessionTab 不渲染 ×（UI 层拦截）；
   // 其他路径（如未来代码调用 close）关掉最后一个时立即补一个新会话，保证至少 1 个
   if (sessions.value.length === 0) {
-    const ns = createSession()
+    const ns = createTrackedSession()
     sessions.value.push(ns)
     ensureSessionPanel(ns)
     ns.serial.refreshPorts()
@@ -203,6 +217,52 @@ onBeforeUnmount(() => {
 
 // —— i18n / 主题 / 语言 ——
 const { t, locale } = useI18n()
+
+// —— 入站 MCP 工具注册表（docs/mcp-design.md §八）——
+// handler 直读会话 stores（同一 reactive 面）；命令 store 经闭包在调用时取（pinia 运行期安全）。
+// confirmConnect：settings.mcp.confirmConnect 开启时 AI 连接/断开弹确认框，默认放行。
+const mcpSettingsStore = useSettingsStore()
+const mcpCommandsStore = useCommandsStore()
+// AI 连接确认框：组件自身 setup 消费不到自己模板渲染的 n-dialog-provider，
+// 用 naive 离散 API（lazy 创建，主题/语言跟随首次调用时刻，确认框为瞬时弹窗）
+let _mcpConfirmDialog: ReturnType<typeof createDiscreteApi>['dialog'] | null = null
+function mcpConfirmDialog() {
+  if (!_mcpConfirmDialog) {
+    _mcpConfirmDialog = createDiscreteApi(['dialog'], {
+      configProviderProps: {
+        theme: naiveTheme?.value,
+        themeOverrides: naiveOverrides?.value,
+        locale: naiveLocale?.value,
+        dateLocale: naiveDateLocale?.value,
+      },
+    }).dialog
+  }
+  return _mcpConfirmDialog
+}
+const mcpToolRegistry = createMcpToolRegistry({
+  sessions: mcpSessionRegistry,
+  commands: {
+    list: () => mcpCommandsStore.commands,
+    nextSeq: (id) => mcpCommandsStore.nextSeq(id),
+  },
+  confirmConnect: async (port, action) => {
+    if (!mcpSettingsStore.settings.mcp.confirmConnect) return true
+    return await new Promise<boolean>((resolve) => {
+      mcpConfirmDialog().warning({
+        title: t('mcp.confirmTitle'),
+        content: t(action === 'connect' ? 'mcp.confirmConnectContent' : 'mcp.confirmDisconnectContent', { port }),
+        positiveText: t('mcp.allow'),
+        negativeText: t('mcp.deny'),
+        onPositiveClick: () => resolve(true),
+        onNegativeClick: () => resolve(false),
+        onClose: () => resolve(false),
+      })
+    })
+  },
+})
+initMcpToolBridge(mcpToolRegistry)
+// settings.mcp 变化 → 主进程 start/stop（浏览器构建 no-op）
+const { status: mcpStatus, regenerateToken: mcpRegenerateToken } = useMcpServer()
 const title = useTitle()
 const { naiveTheme, naiveOverrides, isDark } = useTheme()
 // dockview 显式主题：不传则 dockview 默认挂 abyss 暗色主题类（暗色变量下渗），
@@ -293,7 +353,12 @@ onMounted(() => {
       </div>
 
       <AsciiTable v-model:show="showAscii" @insert="onInsertAscii" />
-      <SettingsModal v-model:show="showSettings" :session="openerSession ?? activeSession" />
+      <SettingsModal
+        v-model:show="showSettings"
+        :session="openerSession ?? activeSession"
+        :mcp-status="mcpStatus"
+        :on-regenerate-token="mcpRegenerateToken"
+      />
       <FileTransferDialog
         v-model:show="showFileTransfer"
         :drop-file="fileTransferDropFile"
