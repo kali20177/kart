@@ -15,7 +15,7 @@ const mockIsConfigured = computed(() => mockDirName.value !== null)
 let mockCreateFile = vi.fn().mockResolvedValue(mockWriter)
 const mockPick = vi.fn().mockResolvedValue(undefined)
 
-vi.mock('@/utils/record-directory', () => ({
+vi.mock('@/utils/session/record-directory', () => ({
   useRecordDirectory: () => ({
     dirName: mockDirName,
     isConfigured: mockIsConfigured,

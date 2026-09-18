@@ -30,9 +30,9 @@ import { useMcpServer } from '@/composables/useMcpServer'
 import { useSettingsStore } from '@/stores/settings'
 import { useCommandsStore } from '@/stores/commands'
 import { STORAGE_PREFIX } from '@/utils/storage'
-import { applyAsciiInsert, setComposer } from '@/utils/composer'
+import { applyAsciiInsert, setComposer } from '@/utils/session/composer'
 import type { Session } from '@/session'
-import type { AsciiEntry } from '@/utils/ascii-table'
+import type { AsciiEntry } from '@/utils/codec/ascii-table'
 import type { DataMode } from '@/types'
 
 // 多会话：每个会话一个 Session（独立驱动 + 独立 store 六件套），settings 为全局共享

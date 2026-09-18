@@ -1,7 +1,7 @@
 import { ref, shallowRef, watch, onScopeDispose } from 'vue'
 import type { Ref } from 'vue'
-import { TextLineParser, type WaveformParser } from '@/utils/waveform-parser'
-import type { WireClockConfig } from '@/utils/waveform-clock'
+import { TextLineParser, type WaveformParser } from '@/utils/waveform/waveform-parser'
+import type { WireClockConfig } from '@/utils/waveform/waveform-clock'
 import type { WaveformParseConfig } from '@/types'
 
 /** waveform store 的外部依赖——原始字节流来自 serial.onData，波形配置来自全局设置，暂停与清空来自 pause。 */
@@ -50,7 +50,7 @@ export interface WaveformDeps {
  * 订阅在 store 初始化时建立（早于 connect 也安全：listener 静等，连接后即有数据流入）。
  * 单例 store 生命周期 = 应用生命周期，缓冲受 maxHistoryPoints 约束，无需反订阅。
  *
- * X 时间戳由解析器按时钟域构造（见 utils/waveform-clock.ts）：串口域（注入 clock）按
+ * X 时间戳由解析器按时钟域构造（见 utils/waveform/waveform-clock.ts）：串口域（注入 clock）按
  * 波特率位时间合成「线缆时刻」并保留批间空档；网络域（TCP/RTT）用真实到达时间，
  * 与消息时间戳对齐。X 恒为 epoch 毫秒——uPlot 时间轴 / tooltip / CSV 相对秒全部兼容。
  */

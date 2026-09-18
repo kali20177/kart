@@ -2,8 +2,8 @@
 // 字段 offset 省略 = 接续上一字段末尾；帧长不足任一字段或 header 不匹配 → 不匹配。
 
 import type { DecodeField, DecoderDefinition, FieldDef, FieldDecoderOptions, FieldFormat } from '@/decoders/types'
-import { bytesToHex, parseHexInput } from '@/utils/hex'
-import { decodeBytes } from '@/utils/encoding'
+import { bytesToHex, parseHexInput } from '@/utils/codec/hex'
+import { decodeBytes } from '@/utils/codec/encoding'
 
 /** 各格式要求的最小字节数（DataView 越界会抛 RangeError，须前置校验） */
 const FORMAT_MIN_LEN: Record<FieldFormat, number> = {

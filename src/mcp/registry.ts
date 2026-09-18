@@ -1,10 +1,10 @@
 import type { Message, QuickCommand, LineEnding, DataMode, Encoding, ChecksumAlgorithm } from '@/types'
 import type { DecodeInfo } from '@/decoders/types'
-import { bytesToHex, parseHexInput, findByteRanges } from '@/utils/hex'
-import { decodeBytes, encodeText, concatBytes, lineEndingBytes } from '@/utils/encoding'
-import { computeChecksum } from '@/utils/checksum'
-import { findTextRanges } from '@/utils/search'
-import { expandCommandVars } from '@/utils/command-vars'
+import { bytesToHex, parseHexInput, findByteRanges } from '@/utils/codec/hex'
+import { decodeBytes, encodeText, concatBytes, lineEndingBytes } from '@/utils/codec/encoding'
+import { computeChecksum } from '@/utils/codec/checksum'
+import { findTextRanges } from '@/utils/session/search'
+import { expandCommandVars } from '@/utils/session/command-vars'
 import type { McpSessionRegistry } from '@/mcp/session-registry'
 import { MCP_TOOL_BY_NAME } from '@/mcp/contract'
 
@@ -201,7 +201,7 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolRegistry {
       const needle = mode === 'hex' ? (parseHexInput(query).ok ? parseHexInput(query).bytes! : null) : null
       if (mode === 'hex' && !needle) return { hits: [] }
 
-      // 复用界面同一搜索纯函数（findTextRanges/findByteRanges，src/utils/search|hex）；
+      // 复用界面同一搜索纯函数（findTextRanges/findByteRanges，src/utils/session/search|codec/hex）；
       // 从新到旧遍历，since 过滤最早时间戳，limit 截断（上限 100 写死 description，这里 clamp）
       const hits: Message[] = []
       for (let i = s.messages.messages.length - 1; i >= 0 && hits.length < limit; i--) {

@@ -5,7 +5,7 @@ import type { RecordConfig, RecordFormat, RecordState } from '@/types'
 import { useSerialStore } from '@/stores/singletons'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settings'
-import { useRecordDirectory } from '@/utils/record-directory'
+import { useRecordDirectory } from '@/utils/session/record-directory'
 import type { IFileWriter } from '@/utils/file-writer'
 import { logger } from '@/utils/logger'
 

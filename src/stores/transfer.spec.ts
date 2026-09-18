@@ -3,8 +3,8 @@ import { ref, effectScope } from 'vue'
 import { createTransferStore } from '@/stores/transfer'
 import type { TransferDeps } from '@/stores/transfer'
 import type { FileTransferConfig, FileTransferState } from '@/types'
-import { frameChunk, sliceChunk } from '@/utils/chunk-framer'
-import { crc16modbus } from '@/utils/checksum'
+import { frameChunk, sliceChunk } from '@/utils/transfer/chunk-framer'
+import { crc16modbus } from '@/utils/codec/checksum'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 

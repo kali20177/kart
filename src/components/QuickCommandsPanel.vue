@@ -16,7 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { useActiveSession } from '@/composables/useSession'
 import { useCommandsStore } from '@/stores/commands'
 import { useSendHistory } from '@/composables/useSendHistory'
-import { expandCommandVars } from '@/utils/command-vars'
+import { expandCommandVars } from '@/utils/session/command-vars'
 import type { DataMode, LineEnding, QuickCommand } from '@/types'
 
 const sendHistory = useSendHistory()

@@ -191,7 +191,7 @@ function onViewMenuSelect(key: string, group?: DockviewGroupPanel) {
 provideViewAddMenu({ options: viewMenuOptions, select: onViewMenuSelect })
 
 // —— 发送框联动（发送框在消息面板内，状态存 session.composerText/viewMode） ——
-// ASCII 插入 / 快速命令「调到发送框」由 App.vue 直接操作活动会话（utils/composer），不再走组件暴露
+// ASCII 插入 / 快速命令「调到发送框」由 App.vue 直接操作活动会话（utils/session/composer），不再走组件暴露
 </script>
 
 <template>

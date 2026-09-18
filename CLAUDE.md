@@ -85,9 +85,14 @@ src/types.ts              — 共享类型（Message、EndpointInfo、IoTranspor
 src/i18n.ts               — vue-i18n 实例 + 编译期 zh/en 结构互检
 src/session/              — 会话工厂：createSession 组装每会话 store 八件套 + 按端口持久化解码/仪表盘配置
 src/decoders/             — 帧解码器注册表 + 内置解码器（field / modbus-rtu），decode 为纯函数可单测
-src/utils/                — 纯工具函数（hex、encoding、checksum、composer、search、export-*、message-format、
-                             ascii-table、baud、download、fonts、knowledge-base、persist、reconnect、size、
-                             terminal-hint、text-parser、usb-vendors、waveform-parser、log-level）—— 无框架依赖
+src/utils/                — 纯工具函数，无框架依赖，按领域分子目录：codec/（hex、encoding、checksum、
+                             ascii-table、message-format）、transfer/（chunk-source、chunk-framer、ack、
+                             rate-limit）、waveform/（waveform-clock、waveform-parser、text-parser、
+                             export-waveform-csv）、session/（search、command-vars、composer、
+                             frame-splitter、connect-hint、terminal-hint、reconnect、record-directory）、
+                             export/（export-csv、export-json）、device/（baud、usb-vendors）；
+                             通用原语留根（storage、persist、logger、log-level、size、download、
+                             file-writer、fonts、updater、knowledge-base、dockview-events、dockview-theme）
 src/utils/logger.ts       — 渲染进程 Logger 单例（IDB 持久化 + console 劫持 + window 全局错误兜底 + 日志导出）
 src/mock/                 — MockSerialSource + 场景生成器
 src/serial/               — 传输驱动工厂 + 注册表 + WebSerialDriver + SerialPortDriver + TcpDriver + RttDriver + PtyDriver
@@ -152,7 +157,7 @@ KnowledgeBaseModal → knowledge-base/utils
 - **发送**：行尾符可选、循环发送（周期 + 次数）、Enter 发送、Ctrl+↑/↓ 翻历史、HEX 输入容错解析（`AA 55`/`0xAA,0x55`/`aa55`）、发送时自动计算校验和（CRC16-Modbus/SUM8/XOR8/CRC32，取会话默认）。
 - **校验和**：发送/接收校验配置会话级按端口持久化（`session.checksum`，`ChecksumConfig`），ConnectionBar 弹窗编辑（ChecksumSettingsModal），多会话可各配各的校验方式；RX 校验算法独立于发送侧（支持收发不对称协议），校验前自动剥离帧尾分隔符。未配置端口默认不启用校验。
 - **信号控制（DTR/RTS/Break）**：StatusBar 信号区可切换 DTR/RTS 电平、发送 Break 脉冲（250ms，TX 拉低），用于 ESP32/STM32 bootloader / 复位 / ISP。断开时禁用，自动重连后重放上次电平。链路：`IoTransport.setSignals/setBreak` → Web Serial `port.setSignals` / Electron IPC → 主进程 `port.set({ dtr/rts/brk })`；mock 记录状态供测试断言。
-- **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示，重连成功弹一次 toast。判定集中在纯函数 `src/utils/reconnect.ts`（有单测）。
+- **自动重连**：设置「掉线自动重连」开启后，驱动检测到物理掉线（`driver.isOpen` 转 false，非用户主动断开）即按固定 2s 间隔无限次重试连接；重连前刷新端口确认设备归位（`WebSerialDriver.listPorts` 重新拉取 `getPorts()` 自愈拔插后的授权端口列表）。用户断开/切驱动标记原因不重连，关闭开关立即取消挂起重连。状态栏橙色 LED + 倒计时指示，重连成功弹一次 toast。判定集中在纯函数 `src/utils/session/reconnect.ts`（有单测）。
 - **TCP 传输**：Electron 主进程 `TcpManager`（Node `net`）经 IPC 暴露，TcpDriver 实现 `IoTransport`；支持 IPv6 校验、同端点并发用 connId 区分、断连窗口处理。终端直通提示仅网络传输（RTT/TCP）渲染（设备回显无歧义，串口不提示）。
 - **RTT 传输**：SEGGER RTT 字节流经 TCP 承载（`RttDriver extends TcpDriver`，type='rtt'），**不 spawn 调试器进程**——J-Link RTT Server（默认 19021）/OpenOCD rtt server 由用户外部启动，KART 只做客户端。tcpOptions（host/port）与 TCP 共享一份持久化；`setTransport` 切换时仅当端口仍是「另一类型默认值」或空才替换成当前类型默认（TCP 502 / RTT 19021），用户自定义值保留；rtt 与 tcp 同属用户传输态，`switchDriver` 不写模块级解析（round-trip 早退）。
 - **终端模式**：xterm.js 渲染（cell 网格/光标/ANSI/alt-screen/滚动区域等全能力，vim/nano 全屏可用）。传输模式 line（本地行编辑 Enter 发送）/char（按键直通设备侧回显），本地回显/退格字节（del 0x7F/bs 0x08）/行尾符/回滚上限可配；pty 数据源强制 UTF-8（忽略用户编码设置）。设置：字号缩放、终端字体。
@@ -264,6 +269,6 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 - **消息列表 bufferLimit 上限**：调大 bufferLimit 不会让巨型帧硬冻结复发（帧大小已封顶），但持续收数据时每次刷入仍对全部条目做 O(n) 重算（DynamicScroller `sizes`/`itemsWithSize` + `filtered` + `computeDeltas`），条目数 5 万～10 万时会渐进卡顿掉帧（变慢而非硬冻结）。若要支撑超大 bufferLimit，需换固定高度虚拟化（RecycleScroller）或对条目数封顶。
 - **gap-timeout 把帧率锁在 ~1/gapMs**（默认 20ms → 约 20 帧/秒）；`buffer-flood` 灌满压测需用「分隔符 \n」帧策略才能秒级灌满缓冲验证丢弃提示。
 - **巨型帧渲染截断**：超 4096B 的帧折叠为前 512B 预览（`MessageBubble` 两档截断），单次展开全量可接受；若有「导出/复制巨帧」之外的批量全量渲染需求，需重新评估截断策略。
-- **波形二进制解析模式已移除**（仅文本行解析）；X 轴采用时钟权威：串口域按波特率位时间合成「线缆时刻」（`utils/waveform-clock.ts`，批内均摊 + 批锚定保留空档），网络域（TCP/RTT）用到达时间。未来重引入二进制/结构化字节流协议时，复用同一时钟接缝（解析器构造注入 `clock`）。
+- **波形二进制解析模式已移除**（仅文本行解析）；X 轴采用时钟权威：串口域按波特率位时间合成「线缆时刻」（`utils/waveform/waveform-clock.ts`，批内均摊 + 批锚定保留空档），网络域（TCP/RTT）用到达时间。未来重引入二进制/结构化字节流协议时，复用同一时钟接缝（解析器构造注入 `clock`）。
 
 设计文档见 [docs/](./docs/)（multi-session-ui、terminal-mode、dashboard、file-transfer、multi-port、theme-system）。

@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import { useSession } from '@/composables/useSession'
 import { useSendHistory } from '@/composables/useSendHistory'
-import { concatBytes, lineEndingBytes } from '@/utils/encoding'
+import { concatBytes, lineEndingBytes } from '@/utils/codec/encoding'
 import type { LineEnding } from '@/types'
 
 /**

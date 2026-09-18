@@ -2,8 +2,8 @@
 // CRC16（Modbus）校验通过且长度 ≥8 才匹配——坏帧保持原始视图，不渲染错误字段。
 
 import type { DecodeField, DecoderDefinition } from '@/decoders/types'
-import { verifyChecksum } from '@/utils/checksum'
-import { bytesToHex } from '@/utils/hex'
+import { verifyChecksum } from '@/utils/codec/checksum'
+import { bytesToHex } from '@/utils/codec/hex'
 
 /** Modbus 标准功能码名（显示用，协议固定名不随 UI 语言变化） */
 const FC_NAMES: Record<number, string> = {

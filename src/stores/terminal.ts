@@ -1,7 +1,7 @@
 import { ref, onScopeDispose, watch, markRaw, type Ref } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import type { AppSettings, LineEnding } from '@/types'
-import { lineEndingBytes } from '@/utils/encoding'
+import { lineEndingBytes } from '@/utils/codec/encoding'
 
 /** terminal store 的外部依赖——原始字节来自 serial.onData（帧切分之前），
  *  发送走 serial.sendRaw（不追加校验和/不建 TX 气泡），暂停与消息/波形共享同一 paused。

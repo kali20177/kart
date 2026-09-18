@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import type { FileTransferState, TransferStatus } from '@/types'
 import { useSession } from '@/composables/useSession'
-import { formatTimestamp } from '@/utils/message-format'
+import { formatTimestamp } from '@/utils/codec/message-format'
 
 const props = defineProps<{
   transferId: string

@@ -8,7 +8,7 @@ import TerminalInput from '@/components/TerminalInput.vue'
 import { useSession } from '@/composables/useSession'
 import { useTheme } from '@/composables/useTheme'
 import { resolveTerminalPalette } from '@/themes'
-import { resolveCharHintKind } from '@/utils/terminal-hint'
+import { resolveCharHintKind } from '@/utils/session/terminal-hint'
 import { onViewTabReactivate } from '@/utils/dockview-events'
 import type { DockviewPanelApi } from 'dockview-vue'
 

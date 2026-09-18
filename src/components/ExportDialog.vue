@@ -19,11 +19,11 @@ import type { Message, ExportPreferences } from '@/types'
 import { useSession } from '@/composables/useSession'
 import { storage } from '@/utils/storage'
 import { persistNow } from '@/utils/persist'
-import { formatMessageLine, computeDeltas } from '@/utils/message-format'
-import { exportMessagesAsCsv } from '@/utils/export-csv'
-import { exportMessagesAsJson, type SessionMeta } from '@/utils/export-json'
+import { formatMessageLine, computeDeltas } from '@/utils/codec/message-format'
+import { exportMessagesAsCsv } from '@/utils/export/export-csv'
+import { exportMessagesAsJson, type SessionMeta } from '@/utils/export/export-json'
 import { downloadTextFile, downloadBinaryFile } from '@/utils/download'
-import { concatBytes } from '@/utils/encoding'
+import { concatBytes } from '@/utils/codec/encoding'
 
 const props = defineProps<{
   messages: Message[]

@@ -3,7 +3,7 @@ import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useSession } from '@/composables/useSession'
 import { useI18n } from 'vue-i18n'
-import { countdownSecs } from '@/utils/reconnect'
+import { countdownSecs } from '@/utils/session/reconnect'
 
 const { serial, messages, settings, transfer: transferStore, recorder } = useSession()
 const { t } = useI18n()

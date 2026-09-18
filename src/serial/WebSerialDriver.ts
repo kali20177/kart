@@ -1,5 +1,5 @@
 import type { EndpointInfo, IoTransport, PortOptions, SerialSignals, DriverType } from '@/types'
-import { lookupVendorName, toHexId } from '@/utils/usb-vendors'
+import { lookupVendorName, toHexId } from '@/utils/device/usb-vendors'
 import { logger } from '@/utils/logger'
 
 interface PortEntry {

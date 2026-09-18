@@ -1,7 +1,7 @@
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import type { TransportType } from '@/types'
-import { formatConnectFailure, transportHintKey } from '@/utils/connect-hint'
+import { formatConnectFailure, transportHintKey } from '@/utils/session/connect-hint'
 
 /**
  * 连接失败横幅（托盘 toast）的统一上报：网络传输（RTT/TCP）在错误信息下方换行追加

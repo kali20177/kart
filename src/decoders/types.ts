@@ -1,7 +1,7 @@
 // 解码器注册表契约 —— 把「帧 → 结构化字段视图」的解析做成可注册扩展点。
 // 本阶段仅内置 TS 解码器；将来 JS 脚本解码器（CSP 禁 eval，需 vm/worker 沙箱）可复用同一契约。
 
-import type { ChecksumAlgorithm } from '@/utils/checksum'
+import type { ChecksumAlgorithm } from '@/utils/codec/checksum'
 
 /** 一个已解码的字段：名称 + 已格式化的显示值 + 在帧中的位置 */
 export interface DecodeField {

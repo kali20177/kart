@@ -7,8 +7,8 @@ import { useSession } from '@/composables/useSession'
 import { useSendHistory } from '@/composables/useSendHistory'
 import SendHistoryPopover from '@/components/SendHistoryPopover.vue'
 import { STORAGE_PREFIX } from '@/utils/storage'
-import { parseHexInput, bytesToHex, formatHexInput } from '@/utils/hex'
-import { encodeWithEscapes } from '@/utils/encoding'
+import { parseHexInput, bytesToHex, formatHexInput } from '@/utils/codec/hex'
+import { encodeWithEscapes } from '@/utils/codec/encoding'
 import type { DataMode, LineEnding } from '@/types'
 
 const text = defineModel<string>('text', { default: '' })

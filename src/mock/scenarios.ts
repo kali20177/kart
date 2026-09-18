@@ -1,5 +1,5 @@
 import type { MockScenarioId } from '@/types'
-import { crc16modbus } from '@/utils/checksum'
+import { crc16modbus } from '@/utils/codec/checksum'
 
 export interface ScenarioDef {
   id: MockScenarioId

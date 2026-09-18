@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NDrawer, NDrawerContent } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { ASCII_TABLE, type AsciiEntry } from '@/utils/ascii-table'
+import { ASCII_TABLE, type AsciiEntry } from '@/utils/codec/ascii-table'
 
 const show = defineModel<boolean>('show', { default: false })
 const emit = defineEmits<{ (e: 'insert', entry: AsciiEntry): void }>()

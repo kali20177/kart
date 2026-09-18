@@ -3,8 +3,8 @@ import type { Ref } from 'vue'
 import type { ChecksumConfig, Direction, FrameConfig, Message } from '@/types'
 import type { DecodeField, DecoderConfig } from '@/decoders/types'
 import { getDecoder } from '@/decoders'
-import { FrameSplitter } from '@/utils/frame-splitter'
-import { verifyChecksum, checksumByteLength } from '@/utils/checksum'
+import { FrameSplitter } from '@/utils/session/frame-splitter'
+import { verifyChecksum, checksumByteLength } from '@/utils/codec/checksum'
 
 /** 帧解码成功后的广播负载：字段（含数值）喂给仪表盘等数值消费方 */
 export interface DecodeBroadcast {

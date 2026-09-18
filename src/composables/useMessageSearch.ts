@@ -1,10 +1,10 @@
 // 消息搜索/过滤 composable —— 从 MessageList 抽离，便于测试与复用。
-// 纯响应式编排：匹配算法在 src/utils/search.ts 与 hex.ts，本文件只做组合。
+// 纯响应式编排：匹配算法在 src/utils/session/search.ts 与 codec/hex.ts，本文件只做组合。
 import { computed, type ComputedRef, type Ref } from 'vue'
 import type { Direction, Encoding, Message } from '@/types'
-import { decodeBytes } from '@/utils/encoding'
-import { findByteRanges, parseHexInput } from '@/utils/hex'
-import { findTextRanges, mergeRanges, timeOfDay } from '@/utils/search'
+import { decodeBytes } from '@/utils/codec/encoding'
+import { findByteRanges, parseHexInput } from '@/utils/codec/hex'
+import { findTextRanges, mergeRanges, timeOfDay } from '@/utils/session/search'
 
 export interface SearchOptions {
   messages: Ref<readonly Message[]>

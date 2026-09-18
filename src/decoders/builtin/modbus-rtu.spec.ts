@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { modbusRtuDecoder } from '@/decoders/builtin/modbus-rtu'
 import { modbusFrame } from '@/mock/scenarios'
-import { crc16modbus } from '@/utils/checksum'
+import { crc16modbus } from '@/utils/codec/checksum'
 
 describe('modbus-rtu decoder', () => {
   it('fc03 读保持寄存器请求：slave/fc/reg/count', () => {

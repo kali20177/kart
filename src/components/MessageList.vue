@@ -8,9 +8,9 @@ import type { DropdownOption, DropdownDividerOption } from 'naive-ui'
 import MessageBubble from '@/components/MessageBubble.vue'
 import { useSession } from '@/composables/useSession'
 import { useMessageSearch } from '@/composables/useMessageSearch'
-import { parseTimeInput } from '@/utils/search'
+import { parseTimeInput } from '@/utils/session/search'
 import type { Direction, Message } from '@/types'
-import { formatMessageLine, formatTimestamp, computeDeltas } from '@/utils/message-format'
+import { formatMessageLine, formatTimestamp, computeDeltas } from '@/utils/codec/message-format'
 import ExportDialog from '@/components/ExportDialog.vue'
 
 const session = useSession()
