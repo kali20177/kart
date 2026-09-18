@@ -1,11 +1,11 @@
 import http from 'node:http'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { McpServer as SdkMcpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { MCP_TOOLS, type McpToolDef } from '../mcp/contract'
+import type { McpMode } from '../types'
 
-/** MCP 授权模式（与 settings.mcp.mode 对齐）。 */
-export type McpMode = 'off' | 'read-only' | 'read-write'
+export type { McpMode }
 
 /**
  * 桥接层——把 MCP call_tool 转发到渲染进程的工具注册表执行。
@@ -61,7 +61,7 @@ export class McpServer {
   async start(port: number, token: string | null, mode: McpMode): Promise<number> {
     if (this.httpServer) return this.port ?? port
 
-    this.token = token?.trim() || randomUUID().replaceAll('-', '').slice(0, 32)
+    this.token = token?.trim() || randomBytes(24).toString('base64url')
     this.mode = mode
     const sdk = new SdkMcpServer(
       { name: 'kart', version: '0.1.0' },
@@ -178,16 +178,20 @@ export class McpServer {
         isError: true
       }
     }
+    // 竞速计时器须在成功/失败两路径都清理，避免每次调用留一个挂起的 15s timer
+    let timer: NodeJS.Timeout | undefined
     try {
       const result = await Promise.race([
         this.bridge.invoke(def.name, args ?? {}),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`tool timeout after ${this.toolTimeoutMs}ms`)), this.toolTimeoutMs)
-        )
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`tool timeout after ${this.toolTimeoutMs}ms`)), this.toolTimeoutMs)
+        })
       ])
+      if (timer) clearTimeout(timer)
       this.log(`tool ok: ${def.name}`)
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (e) {
+      if (timer) clearTimeout(timer)
       const msg = e instanceof Error ? e.message : String(e)
       this.log(`tool error: ${def.name}: ${msg}`)
       return { content: [{ type: 'text', text: msg }], isError: true }

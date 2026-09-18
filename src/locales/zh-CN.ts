@@ -216,6 +216,10 @@ export default {
     confirmDisconnectContent: 'AI 请求断开串口 {port}，是否允许？',
     allow: '允许',
     deny: '拒绝',
+    manageConnect: '允许 AI 管理连接',
+    manageConnectHint: '读写模式下 AI 可直接连接/断开会话串口，连接状态实时显示在连接栏，全程可审计',
+    startFailed: 'MCP 启动失败',
+    indicatorTitle: 'MCP 运行中 :{port}（点击打开设置）',
   },
   export: {
     title: '导出日志',

@@ -11,6 +11,7 @@ import {
   NButton,
   NButtonGroup,
   NColorPicker,
+  NAlert,
   useMessage,
   type SelectOption,
 } from 'naive-ui'
@@ -26,6 +27,8 @@ const props = defineProps<{
   session?: Session
   /** MCP server 运行状态（App.vue useMcpServer 唯一实例，docs/mcp-design.md §九） */
   mcpStatus?: { running: boolean; port: number | null; token: string | null; mode: string }
+  /** MCP 启动失败信息（端口占用/绑定失败等，UI 红条提示） */
+  mcpError?: string | null
   /** 「重新生成 token」回调（清静态 token 回随机模式并强制重启） */
   onRegenerateToken?: () => Promise<unknown>
 }>()
@@ -582,6 +585,12 @@ async function copyClientConfig() {
               <span class="mcp-hint">{{ t('mcp.confirmConnectHint') }}</span>
             </div>
           </NFormItem>
+          <NFormItem :label="t('mcp.manageConnect')">
+            <span class="mcp-hint">{{ t('mcp.manageConnectHint') }}</span>
+          </NFormItem>
+          <NAlert v-if="mcpError && s.mcp.mode !== 'off'" type="error" :bordered="false" size="small">
+            {{ t('mcp.startFailed') }}：{{ mcpError }}
+          </NAlert>
         </NForm>
         </div>
       </div>

@@ -6,7 +6,8 @@ import { TcpManager } from './TcpManager'
 import { PtyManager } from './PtyManager'
 import { JsonStore } from './JsonStore'
 import { Updater } from './Updater'
-import { McpServer, type McpBridge, type McpMode } from './McpServer'
+import { McpServer, type McpMode } from './McpServer'
+import { createMcpBridge, type ToolCallPayload, type ToolResultPayload } from './mcp-bridge'
 import { mainLogger } from './logger'
 
 // ── 全局错误拦截（必须在最前面注册） ──
@@ -409,38 +410,14 @@ function registerPersistIpc(store: JsonStore): void {
 
 // call_tool 桥转发到渲染进程 tool registry：callId 关联 pending promise，
 // 渲染端执行后经 'mcp:tool-result' 应答；15s 超时（渲染挂起不卡死 MCP 调用）。
-interface PendingToolCall {
-  resolve: (result: unknown) => void
-  reject: (err: Error) => void
-  timer: NodeJS.Timeout
+// 桥逻辑（并发/超时/过期丢弃）在 mcp-bridge.ts 独立可测，这里只注入投递目标。
+function deliverToolCall(payload: ToolCallPayload): boolean {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win) return false
+  win.webContents.send('mcp:tool-call', payload)
+  return true
 }
-const pendingToolCalls = new Map<number, PendingToolCall>()
-let nextToolCallId = 0
-
-const mcpBridge: McpBridge = {
-  invoke(tool, args) {
-    return new Promise((resolve, reject) => {
-      const win = BrowserWindow.getAllWindows()[0]
-      if (!win) {
-        reject(new Error('无窗口：请先打开 Kart 主窗口'))
-        return
-      }
-      const callId = ++nextToolCallId
-      const timer = setTimeout(() => {
-        pendingToolCalls.delete(callId)
-        reject(new Error(`mcp tool ${tool} 渲染进程无响应（15s 超时）`))
-      }, 15_000)
-      pendingToolCalls.set(callId, { resolve, reject, timer })
-      try {
-        win.webContents.send('mcp:tool-call', { callId, tool, args })
-      } catch (e) {
-        clearTimeout(timer)
-        pendingToolCalls.delete(callId)
-        reject(e instanceof Error ? e : new Error(String(e)))
-      }
-    })
-  }
-}
+const mcpBridge = createMcpBridge(deliverToolCall)
 
 let mcpServer: McpServer | null = null
 
@@ -469,14 +446,8 @@ function registerMcpIpc(): void {
   })
 
   // 渲染进程工具执行完毕应答（注册表结果 → 挂起的 MCP 调用；过期 callId 丢弃）
-  ipcMain.handle('mcp:tool-result', (_e, payload: { callId: number; ok: boolean; result: unknown }) => {
-    const pending = pendingToolCalls.get(payload.callId)
-    if (!pending) return true
-    clearTimeout(pending.timer)
-    pendingToolCalls.delete(payload.callId)
-    if (payload.ok) pending.resolve(payload.result)
-    else pending.reject(new Error(typeof payload.result === 'string' ? payload.result : String(payload.result)))
-    return true
+  ipcMain.handle('mcp:tool-result', (_e, payload: ToolResultPayload) => {
+    return mcpBridge.resolveToolCall(payload)
   })
 }
 

@@ -53,7 +53,7 @@ export const MCP_TOOLS: McpToolDef[] = [
     write: false,
     inputSchema: {
       sessionId: z.number(),
-      count: z.number().min(1).max(500).default(50),
+      count: z.number().default(50), // 上限 500 写死 description，实现时 clamp
       mode: z.enum(['ascii', 'hex']).default('hex'),
       filter: z
         .object({
@@ -67,15 +67,15 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'search_messages',
     description:
-      '在会话消息中搜索：query 为要查找的内容（mode=hex 时按 hex 子串匹配，否则按解码文本匹配）。' +
-      '返回命中的帧列表（上限 100 条）。',
+      '在会话消息中搜索：query 为要查找的内容（mode=hex 时按 hex 字节序列匹配，否则按解码文本匹配，与界面搜索同算法）。' +
+      'since 为最早时间戳（epoch 毫秒）过滤；返回命中帧列表（从新到旧，上限 100 条）。',
     write: false,
     inputSchema: {
       sessionId: z.number(),
       query: z.string(),
       mode: z.enum(['ascii', 'hex']).default('ascii'),
-      direction: z.enum(['rx', 'tx']).optional(),
-      limit: z.number().min(1).max(100).default(100)
+      since: z.number().optional(),
+      limit: z.number().default(100) // 上限 100 写死 description，实现时 clamp
     }
   },
   {
@@ -93,7 +93,7 @@ export const MCP_TOOLS: McpToolDef[] = [
           end_ms: z.number().default(0)
         })
         .optional(),
-      recent: z.number().min(1).max(5000).optional()
+      recent: z.number().optional() // 上限 5000 写死 description，实现时 clamp
     }
   },
   {
@@ -125,7 +125,7 @@ export const MCP_TOOLS: McpToolDef[] = [
       port: z.string(),
       options: z
         .object({
-          baudRate: z.number().int().min(1).max(10000000).optional(),
+          baudRate: z.number().int().optional(), // 范围 [1, 10_000_000] 实现时 clamp
           dataBits: z.union([z.literal(5), z.literal(6), z.literal(7), z.literal(8)]).optional(),
           stopBits: z.union([z.literal(1), z.literal(1.5), z.literal(2)]).optional(),
           parity: z.enum(['none', 'even', 'odd']).optional(),
@@ -169,7 +169,9 @@ export const MCP_TOOLS: McpToolDef[] = [
     name: 'run_quick_command',
     description:
       '在指定会话上执行一条快速命令（同 QuickCommandsPanel 点击）：占位符（{time}/{time:full}/{seq}/{rand}）' +
-      '自动展开、按命令配置的会话校验和联动。commandIdOrName 可用命令 id 或名称匹配。返回命令名与实际发送字节数。',
+      '自动展开、按命令配置的会话校验和联动。commandIdOrName 可用命令 id 或名称匹配。' +
+      '有限循环（loopCount>1）按命令的 loopIntervalMs 间隔执行完整个循环；loopCount=0（无限循环）在工具调用中按单次执行。' +
+      '返回命令名、实际发送字节数与执行次数。',
     write: true,
     inputSchema: {
       sessionId: z.number(),

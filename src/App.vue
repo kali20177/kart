@@ -262,7 +262,8 @@ const mcpToolRegistry = createMcpToolRegistry({
 })
 initMcpToolBridge(mcpToolRegistry)
 // settings.mcp 变化 → 主进程 start/stop（浏览器构建 no-op）
-const { status: mcpStatus, regenerateToken: mcpRegenerateToken } = useMcpServer()
+// error：启动失败（端口占用等）写入，SettingsModal AI tab 红条提示
+const { status: mcpStatus, error: mcpError, regenerateToken: mcpRegenerateToken } = useMcpServer()
 const title = useTitle()
 const { naiveTheme, naiveOverrides, isDark } = useTheme()
 // dockview 显式主题：不传则 dockview 默认挂 abyss 暗色主题类（暗色变量下渗），
@@ -318,6 +319,15 @@ onMounted(() => {
               <path d="M12.4 9.1L14.4 9.1L14.4 6.9L12.4 6.9ZM10.3 11.9L11.7 13.3L13.3 11.7L11.9 10.3ZM6.9 12.4L6.9 14.4L9.1 14.4L9.1 12.4ZM4.1 10.3L2.7 11.7L4.3 13.3L5.7 11.9ZM3.6 6.9L1.6 6.9L1.6 9.1L3.6 9.1ZM5.7 4.1L4.3 2.7L2.7 4.3L4.1 5.7ZM9.1 3.6L9.1 1.6L6.9 1.6L6.9 3.6ZM11.9 5.7L13.3 4.3L11.7 2.7L10.3 4.1Z" />
             </svg>
           </button>
+          <!-- MCP 运行标识：随时可见「AI 开着」（可审计性），点标题入设置 -->
+          <span
+            v-if="mcpStatus?.running"
+            class="mcp-badge"
+            :title="t('mcp.indicatorTitle', { port: mcpStatus.port ?? '' })"
+            @click="onOpenSettings"
+          >
+            <i class="mcp-badge-dot" />MCP
+          </span>
         </MenuBar>
 
         <div class="main">
@@ -357,6 +367,7 @@ onMounted(() => {
         v-model:show="showSettings"
         :session="openerSession ?? activeSession"
         :mcp-status="mcpStatus"
+        :mcp-error="mcpError"
         :on-regenerate-token="mcpRegenerateToken"
       />
       <FileTransferDialog
@@ -397,6 +408,27 @@ onMounted(() => {
 .icon-btn svg {
   width: 15px;
   height: 15px;
+}
+/* MCP 运行徽标：小圆点 + 文本，随时可见「AI 开着」；点击进设置 */
+.mcp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  cursor: pointer;
+  line-height: 1.6;
+}
+.mcp-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
 }
 .ascii-btn {
   height: 24px;

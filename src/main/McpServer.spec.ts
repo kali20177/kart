@@ -194,6 +194,19 @@ describe('McpServer（streamable-http 集成）', () => {
     expect(again).toBe(port)
   })
 
+  it('token 缺省时随机生成 base64url 32 字符，且每次启动不同（D3：不落盘、重启作废）', async () => {
+    const server = new McpServer({ invoke: async () => ({}) }, () => {})
+    running.push(server)
+    await server.start(0, null, 'read-write')
+    const token = server.getStatus().token ?? ''
+    expect(token).toMatch(/^[A-Za-z0-9_-]{32}$/)
+
+    server.stop()
+    await server.start(0, null, 'read-write')
+    const token2 = server.getStatus().token ?? ''
+    expect(token2).not.toBe(token)
+  })
+
   it('stop 后端口释放（连接被拒绝）', async () => {
     const { server, port, client } = await startServer('read-write')
     await client.initialize()

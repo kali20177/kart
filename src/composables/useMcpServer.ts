@@ -8,10 +8,12 @@ import { useSettingsStore } from '@/stores/settings'
  * token 为空 = 随机模式（主进程每次启动生成），不参与重启判定——
  * 「重新生成」按钮显式 stop+start 才换新随机 token。
  * 浏览器构建（无 window.electron.mcp）下全部 no-op。
+ * 启动失败（端口被占用等）写入 error，UI 据此提示；不抛 unhandled rejection。
  */
 export function useMcpServer() {
   const settingsStore = useSettingsStore()
   const status = ref<McpBridgeState>({ running: false, port: null, token: null, mode: 'off' })
+  const error = ref<string | null>(null)
 
   const api = () => window.electron?.mcp
 
@@ -19,17 +21,25 @@ export function useMcpServer() {
     const a = api()
     if (!a) return status.value
     const cfg = settingsStore.settings.mcp
-    if (cfg.mode === 'off') {
-      status.value = await a.stop()
+    error.value = null
+    try {
+      if (cfg.mode === 'off') {
+        status.value = await a.stop()
+        return status.value
+      }
+      const cur = await a.getState()
+      const tokenChanged = cfg.token !== '' && cfg.token !== cur.token
+      if (cur.running && (cur.port !== cfg.port || cur.mode !== cfg.mode || tokenChanged)) {
+        await a.stop()
+      }
+      status.value = await a.start({ port: cfg.port, token: cfg.token || null, mode: cfg.mode })
+      return status.value
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      error.value = msg
+      status.value = { running: false, port: null, token: null, mode: cfg.mode }
       return status.value
     }
-    const cur = await a.getState()
-    const tokenChanged = cfg.token !== '' && cfg.token !== cur.token
-    if (cur.running && (cur.port !== cfg.port || cur.mode !== cfg.mode || tokenChanged)) {
-      await a.stop()
-    }
-    status.value = await a.start({ port: cfg.port, token: cfg.token || null, mode: cfg.mode })
-    return status.value
   }
 
   /** 「重新生成 token」：清静态 token 回随机模式并强制重启换新随机值。 */
@@ -45,5 +55,5 @@ export function useMcpServer() {
   // 配置变化（含弹窗内编辑）→ 同步主进程；深度监听避免漏项
   watch(() => settingsStore.settings.mcp, sync, { deep: true })
 
-  return { status, sync, regenerateToken }
+  return { status, error, sync, regenerateToken }
 }

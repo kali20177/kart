@@ -216,6 +216,10 @@ export default {
     confirmDisconnectContent: 'AI requests to disconnect serial port {port}. Allow?',
     allow: 'Allow',
     deny: 'Deny',
+    manageConnect: 'Allow AI to Manage Connections',
+    manageConnectHint: 'In read-write mode, AI can connect/disconnect session serial ports directly; connection state is always visible in the connection bar and fully auditable',
+    startFailed: 'MCP failed to start',
+    indicatorTitle: 'MCP running on :{port} (click to open settings)',
   },
   export: {
     title: 'Export Log',

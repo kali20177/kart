@@ -67,6 +67,9 @@ ipcRenderer.on('mcp:tool-call', (_e, payload: { callId: number; tool: string; ar
   for (const h of mcpToolCallHandlers) h(payload)
 })
 
+/** MCP 状态快照（主进程 get-state/start/stop 返回；与渲染端 McpBridgeState 对齐）。 */
+type McpApiState = { running: boolean; port: number | null; token: string | null; mode: string }
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   versions: process.versions,
@@ -243,27 +246,12 @@ contextBridge.exposeInMainWorld('electron', {
   // ── 入站 MCP 服务器（docs/mcp-design.md；主进程 McpServer）──
   mcp: {
     /** 当前服务器状态快照（running/port/token/mode） */
-    getState: () => ipcRenderer.invoke('mcp:get-state') as Promise<{
-      running: boolean
-      port: number | null
-      token: string | null
-      mode: string
-    }>,
+    getState: () => ipcRenderer.invoke('mcp:get-state') as Promise<McpApiState>,
     /** 启动（幂等；token 空则主进程随机生成）。返回最新状态 */
     start: (config: { port: number; token: string | null; mode: string }) =>
-      ipcRenderer.invoke('mcp:start', config) as Promise<{
-        running: boolean
-        port: number | null
-        token: string | null
-        mode: string
-      }>,
+      ipcRenderer.invoke('mcp:start', config) as Promise<McpApiState>,
     /** 停止（幂等）。返回最新状态 */
-    stop: () => ipcRenderer.invoke('mcp:stop') as Promise<{
-      running: boolean
-      port: number | null
-      token: string | null
-      mode: string
-    }>,
+    stop: () => ipcRenderer.invoke('mcp:stop') as Promise<McpApiState>,
     /** 工具执行完毕应答（渲染端注册表 → 主进程挂起的 MCP 调用） */
     toolResult: (callId: number, ok: boolean, result: unknown) =>
       ipcRenderer.invoke('mcp:tool-result', { callId, ok, result }) as Promise<boolean>,

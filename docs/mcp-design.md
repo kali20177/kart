@@ -153,7 +153,7 @@ Lissio（Rust + Tauri）在 `src-tauri/crates/desktop/mcp-server/` 实现入站 
 | `disconnect` | `sessionId` | 关闭该会话连接（`serial.disconnect()`，等价 ConnectionBar 断开） | 未连接 → 错误「未连接」 |
 | `send_bytes` | `sessionId, data:number[]`(0-255) | `serial.sendRaw` 原样发送 | 返回发送字节数；未连接报错 |
 | `send_string` | `sessionId, text, lineEnding?:'none'\|'cr'\|'lf'\|'crlf'` | 按会话当前编码编码后发送；`lineEnding` 缺省不加 | 与输入框发送同链路（含校验和配置生效） |
-| `run_quick_command` | `sessionId, commandIdOrName` | 复用处命令全部逻辑：占位符 `{time}/{seq}` 等展开、每命令循环、会话校验和 | 返回命令标题 + 实际发送字节 |
+| `run_quick_command` | `sessionId, commandIdOrName` | 复用处命令全部逻辑：占位符 `{time}/{seq}` 等展开、每命令循环、会话校验和。有限循环（loopCount>1）按 loopIntervalMs 间隔整循环执行；loopCount=0（无限循环）在阻塞性工具调用中按单次执行（UI 手动停止语义不受影响） | 返回命令标题 + 实际发送字节数 |
 | `set_paused` | `sessionId, paused:boolean` | pause store 切换 | — |
 | `clear_messages` | `sessionId` | messages.clear() | 与按钮行为一致 |
 
@@ -258,7 +258,7 @@ main: 找到 callId → 清计时器 → ok ? success 结果 : 工具错误；�
   - 状态条：`运行中 http://127.0.0.1:<port>/mcp`（绿色）/ 停止（灰）。
   - token 区：只读字段 + 「复制」+「重新生成」（清自定义回随机）。
   - 「复制客户端配置」按钮：生成 `claude_desktop_config.json` 片段（`type: "streamable-http"` + `url` + `headers: { Authorization: "Bearer <token>" }`），Copy 到剪贴板——AI 接入零手写。
-- **状态条底栏**：MCP 运行中显示小标识（方便用户随时知道"AI 开着"——可审计性）；无多余打扰。
+- **应用级状态标识**：MenuBar 行显示 MCP 运行小徽标（绿点 + MCP，点击进设置；本 UI 无独立底栏，徽标落菜单栏行即随时可见——可审计性）
 
 ## 十、测试计划
 

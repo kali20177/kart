@@ -51,6 +51,8 @@ function makeSession(over: {
     history: over.history ?? [[], [], []],
     textLabels: over.textLabels ?? []
   }
+  const recorder = { isRecording: false }
+  const transfer = { hasActive: false, isSending: false }
   return {
     id: over.id ?? 1,
     serial,
@@ -59,7 +61,9 @@ function makeSession(over: {
     dashboard: { latestFields: {}, lastFrame: null },
     checksum: { send: 'none' },
     decoder: { id: '' },
-    settings: { encoding: 'utf-8', bufferLimit: 5000 }
+    recorder,
+    transfer,
+    settings: { encoding: 'utf-8', bufferLimit: 5000, frame: { strategy: 'gap-timeout' } }
   } as unknown as Session
 }
 
@@ -116,6 +120,31 @@ describe('MCP 工具注册表', () => {
     await expect(registry.handle('get_session_status', { sessionId: 99 })).rejects.toThrow('会话 99 不存在')
   })
 
+  it('list_sessions 含 decoderId；get_session_status 含录制/下发状态', async () => {
+    const sessions = createSessionRegistry()
+    const s = makeSession({ connected: true, selectedPort: '/dev/cu.test' })
+    s.decoder.id = 'field'
+    s.recorder.isRecording = true
+    s.transfer.hasActive = true
+    s.transfer.isSending = true
+    sessions.register(s)
+    const { registry } = setup({ sessions })
+
+    const ls = (await registry.handle('list_sessions', {})) as { sessions: Array<{ decoderId?: string }> }
+    expect(ls.sessions[0].decoderId).toBe('field')
+
+    const st = (await registry.handle('get_session_status', { sessionId: 1 })) as {
+      decoderId: string
+      recording: boolean
+      transferActive: boolean
+      transferSending: boolean
+    }
+    expect(st.decoderId).toBe('field')
+    expect(st.recording).toBe(true)
+    expect(st.transferActive).toBe(true)
+    expect(st.transferSending).toBe(true)
+  })
+
   describe('connect_serial / disconnect', () => {
     it('成功连接：选中端口 + 调用 connect', async () => {
       const sessions = createSessionRegistry()
@@ -143,6 +172,29 @@ describe('MCP 工具注册表', () => {
       sessions.register(makeSession({ ports: [{ path: '/dev/cu.other' }] }))
       const { registry } = setup({ sessions })
       await expect(registry.handle('connect_serial', { sessionId: 1, port: '/dev/cu.missing' })).rejects.toThrow('端口不存在')
+    })
+
+    it('端口已被其他会话占用时报错并返回占用方', async () => {
+      const sessions = createSessionRegistry()
+      const s1 = makeSession({ id: 1, connected: true, selectedPort: '/dev/cu.test' })
+      sessions.register(s1)
+      sessions.register(makeSession({ id: 2, connected: false }))
+      const { registry } = setup({ sessions })
+      await expect(registry.handle('connect_serial', { sessionId: 2, port: '/dev/cu.test' })).rejects.toThrow('会话 1')
+    })
+
+    it('波特率 clamp 到 [1, 10_000_000]（description 写死上限，实现时 clamp）', async () => {
+      const sessions = createSessionRegistry()
+      const big = makeSession({ id: 1, ports: [{ path: '/dev/cu.big' }] })
+      const neg = makeSession({ id: 2, ports: [{ path: '/dev/cu.neg' }] })
+      sessions.register(big)
+      sessions.register(neg)
+      const { registry } = setup({ sessions })
+
+      await registry.handle('connect_serial', { sessionId: 1, port: '/dev/cu.big', options: { baudRate: 999999999 } })
+      expect(big.serial.options.baudRate).toBe(10000000)
+      await registry.handle('connect_serial', { sessionId: 2, port: '/dev/cu.neg', options: { baudRate: -5 } })
+      expect(neg.serial.options.baudRate).toBe(1)
     })
 
     it('confirmConnect 拒绝时操作被取消', async () => {
@@ -173,13 +225,30 @@ describe('MCP 工具注册表', () => {
   })
 
   describe('发送', () => {
-    it('send_string 按会话编码与默认校验走 serial.send', async () => {
+    it('send_string 按会话编码与默认校验走 serial.send，返回编码后字节数', async () => {
       const sessions = createSessionRegistry()
       const s = makeSession({ connected: true })
       sessions.register(s)
       const { registry } = setup({ sessions })
-      await registry.handle('send_string', { sessionId: 1, text: 'AT\r', lineEnding: 'cr' })
+      const r = (await registry.handle('send_string', { sessionId: 1, text: 'AT\r', lineEnding: 'cr' })) as {
+        sent_bytes: number
+      }
       expect(s.serial.send).toHaveBeenCalledWith('AT\r', 'ascii', 'cr', 'utf-8', 'none')
+      // 原始 CR 是视觉分隔（encodeText 丢弃）：'AT' 2 字节 + cr 行尾 1 = 3
+      expect(r.sent_bytes).toBe(3)
+    })
+
+    it('send_string 字节数含校验和与转义序列（\\r 真实 CR）', async () => {
+      const sessions = createSessionRegistry()
+      const s = makeSession({ connected: true })
+      s.checksum.send = 'crc16-modbus' as never
+      sessions.register(s)
+      const { registry } = setup({ sessions })
+      const r = (await registry.handle('send_string', { sessionId: 1, text: 'AT\\r', lineEnding: 'cr' })) as {
+        sent_bytes: number
+      }
+      // 'AT' 2 + 转义 CR 1 + cr 行尾 1 + crc16 2 = 6
+      expect(r.sent_bytes).toBe(6)
     })
 
     it('send_bytes 原样送字节', async () => {
@@ -223,6 +292,64 @@ describe('MCP 工具注册表', () => {
       expect(ending).toBe('crlf')
       expect(cs).toBe('crc16-modbus')
       expect(r.command).toBe('校时')
+    })
+
+    it('run_quick_command 有限循环按 loopIntervalMs 执行 loopCount 次', async () => {
+      const sessions = createSessionRegistry()
+      const s = makeSession({ connected: true })
+      sessions.register(s)
+      const commands: McpToolContext['commands'] = {
+        list: () => [
+          {
+            id: 'c1',
+            name: '轮询',
+            payload: 'POLL',
+            mode: 'ascii',
+            appendNewline: 'none',
+            checksum: 'inherit',
+            loopIntervalMs: 10,
+            loopCount: 3
+          } as never
+        ],
+        nextSeq: vi.fn(() => 1)
+      }
+      const { registry } = setup({ sessions, commands })
+      const r = (await registry.handle('run_quick_command', { sessionId: 1, commandIdOrName: 'c1' })) as {
+        loops: number
+        sent: number
+      }
+      expect(r.loops).toBe(3)
+      expect(r.sent).toBe(12) // 'POLL' 4 字节 × 3 次
+      expect((s.serial.send as unknown as { mock: { calls: unknown[][] } }).mock.calls).toHaveLength(3)
+    })
+
+    it('run_quick_command loopCount=0（无限循环）按单次执行', async () => {
+      const sessions = createSessionRegistry()
+      const s = makeSession({ connected: true })
+      sessions.register(s)
+      const commands: McpToolContext['commands'] = {
+        list: () => [
+          {
+            id: 'c1',
+            name: '无限轮询',
+            payload: 'POLL',
+            mode: 'ascii',
+            appendNewline: 'none',
+            checksum: 'inherit',
+            loopIntervalMs: 1000,
+            loopCount: 0
+          } as never
+        ],
+        nextSeq: vi.fn(() => 1)
+      }
+      const { registry } = setup({ sessions, commands })
+      const r = (await registry.handle('run_quick_command', { sessionId: 1, commandIdOrName: 'c1' })) as {
+        loops: number
+        sent: number
+      }
+      expect(r.loops).toBe(1)
+      expect(r.sent).toBe(4)
+      expect((s.serial.send as unknown as { mock: { calls: unknown[][] } }).mock.calls).toHaveLength(1)
     })
   })
 
@@ -272,7 +399,7 @@ describe('MCP 工具注册表', () => {
       expect(r.frames[0].hex.length).toBe(512 * 3 - 1)
     })
 
-    it('search_messages 按文本/方向搜索', async () => {
+    it('search_messages 按文本匹配（复用界面 findTextRanges），hex 按字节序列', async () => {
       const sessions = createSessionRegistry()
       sessions.register(makeSession({ frames: [frame(1, 'rx', 'hello'), frame(2, 'tx', 'hello'), frame(3, 'rx', 'bye')] }))
       const { registry } = setup({ sessions })
@@ -280,6 +407,35 @@ describe('MCP 工具注册表', () => {
         hits: Array<{ id: number }>
       }
       expect(r.hits.map((f) => f.id)).toEqual([2, 1])
+
+      const rh = (await registry.handle('search_messages', { sessionId: 1, query: '6c6c', mode: 'hex' })) as {
+        hits: Array<{ id: number }>
+      }
+      expect(rh.hits.map((f) => f.id)).toEqual([2, 1])
+    })
+
+    it('search_messages since 过滤最早时间戳，limit 截断', async () => {
+      const sessions = createSessionRegistry()
+      sessions.register(
+        makeSession({ frames: [frame(1, 'rx', 'hello'), frame(2, 'tx', 'hello'), frame(3, 'rx', 'bye'), frame(4, 'rx', 'hello')] })
+      )
+      const { registry } = setup({ sessions })
+      // frame() 时间戳 = 1000 + id：since 1003 只保留 id ≥ 4（1004）
+      const r = (await registry.handle('search_messages', { sessionId: 1, query: 'hello', since: 1003 })) as {
+        hits: Array<{ id: number }>
+      }
+      expect(r.hits.map((f) => f.id)).toEqual([4])
+    })
+
+    it('search_messages 超上限 limit clamp 到 100', async () => {
+      const frames = Array.from({ length: 150 }, (_, i) => frame(i + 1, 'rx', 'match'))
+      const sessions = createSessionRegistry()
+      sessions.register(makeSession({ frames }))
+      const { registry } = setup({ sessions })
+      const r = (await registry.handle('search_messages', { sessionId: 1, query: 'match', limit: 9999 })) as {
+        hits: Array<{ id: number }>
+      }
+      expect(r.hits).toHaveLength(100)
     })
 
     it('get_waveform recent 取尾部 N 点', async () => {
@@ -293,8 +449,29 @@ describe('MCP 工具注册表', () => {
       }
       expect(r.xs).toEqual([4, 5])
       expect(r.series[0]).toEqual([40, 50])
-      // 通道按 history 实际形状补齐：label 只有 ch1，其余按序号命名
-      expect(r.channels).toEqual(['ch1', 'CH2', 'CH3', 'CH4'])
+      // 通道数 = history 行数 - 1（store 形状 [X, ch1, ch2, …]），label 缺失按序号补齐
+      expect(r.channels).toEqual(['ch1', 'CH2'])
+      expect(r.series).toHaveLength(2)
+    })
+
+    it('get_waveform 点数封顶 5000（window 超限保留最新段）', async () => {
+      const N = 6000
+      const xs = Array.from({ length: N }, (_, i) => i)
+      const ch1 = Array.from({ length: N }, (_, i) => i * 2)
+      const ch2 = xs.map((x) => x + 1)
+      const sessions = createSessionRegistry()
+      sessions.register(makeSession({ history: [xs, ch1, ch2], textLabels: ['ch1', 'ch2'] }))
+      const { registry } = setup({ sessions })
+      const r = (await registry.handle('get_waveform', { sessionId: 1, window: { start_ms: -999999, end_ms: 0 } })) as {
+        xs: number[]
+        series: number[][]
+        channels: string[]
+      }
+      expect(r.channels).toEqual(['ch1', 'ch2'])
+      expect(r.xs).toHaveLength(5000)
+      expect(r.xs[4999]).toBe(5999) // 保留最新段
+      expect(r.series).toHaveLength(2)
+      expect(r.series[0]).toHaveLength(5000)
     })
 
     it('get_waveform 无数据返回空结构', async () => {
