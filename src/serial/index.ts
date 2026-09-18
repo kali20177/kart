@@ -24,9 +24,9 @@ export type UnsupportedReason = 'insecure-context' | 'no-web-serial'
 
 interface ResolveEnv {
   isElectron: boolean
-  /** DEV 模式下带 ?mock 查询参数 */
+  /** 带 ?mock 查询参数（KART_MOCK=1 由主进程追加；浏览器 DEV 直接带 ?mock） */
   isDevMock: boolean
-  /** Electron + DEV 下带 ?pty 查询参数（KART_PTY=1 由主进程追加） */
+  /** Electron + ?pty 查询参数（KART_PTY=1 由主进程追加） */
   isDevPty: boolean
   isSecureContext: boolean
   hasWebSerial: boolean
@@ -40,22 +40,22 @@ interface ResolveResult {
 
 /**
  * 驱动类型判定(纯函数,便于单测)。优先级:
- *  1. Electron + DEV ?pty 查询参数 -> pty(本地终端验证,node-pty 跑真实 shell)
- *  2. Electron 环境 -> serialport(主进程串口库,返回真实 COM 口名)
- *  3. DEV 模式 ?mock 查询参数 -> mock(开发者调试用,不暴露给普通用户)
+ *  1. ?pty 查询参数 -> pty(本地终端验证,node-pty 跑真实 shell)
+ *  2. ?mock 查询参数 -> mock(无硬件 CI/Debug 用模拟串口)
+ *  3. Electron 环境 -> serialport(主进程串口库,返回真实 COM 口名)
  *  4. 非安全上下文 -> unsupported(insecure-context)
  *       Web Serial 仅在安全上下文暴露,非安全下 navigator.serial 本就 undefined;
  *       先判安全上下文,可给 Chrome+http 用户精准的「改用 HTTPS」提示,而非「换浏览器」。
  *  5. 浏览器环境(Web Serial API 存在)-> webserial
  *  6. 兜底 -> unsupported(no-web-serial)
  *
- * 注意:不再兜底 mock。mock 仅 DEV+?mock 可用;不兼容时由 UI 层全屏遮罩引导用户
- * 切换/升级浏览器,避免普通用户误把模拟数据当成真实串口流量。
+ * pty/mock 是显式验证参数（优先级高于环境默认，同 KART_PTY 的 prod 可解析模式）：
+ * Electron 不带参数时绝不会落到 mock——普通用户不会把模拟数据当真实串口流量。
  */
 export function resolveDriverType(env: ResolveEnv): ResolveResult {
   if (env.isDevPty) return { type: 'pty', reason: null }
-  if (env.isElectron) return { type: 'serialport', reason: null }
   if (env.isDevMock) return { type: 'mock', reason: null }
+  if (env.isElectron) return { type: 'serialport', reason: null }
   if (!env.isSecureContext) return { type: 'unsupported', reason: 'insecure-context' }
   if (env.hasWebSerial) return { type: 'webserial', reason: null }
   return { type: 'unsupported', reason: 'no-web-serial' }
@@ -67,12 +67,12 @@ function collectEnv(): ResolveEnv {
 
   let isDevMock = false
   let isDevPty = false
-  if (import.meta.env.DEV) {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      isDevMock = params.has('mock')
-    } catch { /* SSR / 无 window 环境 */ }
-  }
+  // mock 依赖 src/mock 驱动，与 DEV 解耦：prod 构建（KART_MOCK=1 → ?mock）也要能解析
+  // ——无硬件 CI 跑 verify:mcp 用（同下方 pty 的 prod 可解析模式）。
+  try {
+    const params = new URLSearchParams(window.location.search)
+    isDevMock = params.has('mock')
+  } catch { /* SSR / 无 window 环境 */ }
   // pty 依赖主进程 node-pty，仅 Electron 环境有意义。不要求 DEV：本地终端是
   // 验证工具，prod 构建（KART_PTY=1 → ?pty）也需要能解析，故独立于 import.meta.env.DEV。
   try {

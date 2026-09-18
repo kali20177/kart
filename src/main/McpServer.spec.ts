@@ -171,6 +171,22 @@ describe('McpServer（streamable-http 集成）', () => {
     expect(r.isError ?? r.text).toBeTruthy()
   })
 
+  it('桥无响应（渲染进程挂起）→ 按注入超时返回 isError 而非永久卡住', async () => {
+    // 60ms 注入超时：bridge 永不 resolve，验证超时兜底
+    const server = new McpServer(
+      { invoke: () => new Promise(() => {}) },
+      () => {},
+      60
+    )
+    running.push(server)
+    const port = await server.start(0, 'test-token', 'read-write')
+    const client = new McpTestClient(port, 'test-token')
+    await client.initialize()
+    const r = await client.callTool('list_sessions', {})
+    expect(r.isError).toBe(true)
+    expect(r.text).toContain('timeout after 60ms')
+  })
+
   it('start 幂等：运行中重复 start 返回原端口', async () => {
     const { server, port } = await startServer('read-write')
     running.push(server)

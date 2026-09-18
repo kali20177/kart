@@ -25,7 +25,8 @@ const SHOT_DIR = '/tmp/mcp-verify'
 mkdirSync(SHOT_DIR, { recursive: true })
 
 const envSerialPort = process.env.SERIAL_PORT
-const SEND_TEXT = process.env.SEND_TEXT ?? 'help'
+// KART_MOCK=1 时跑 mock 串口闭环（无硬件 CI 场景）：mock at-reply 场景对 'AT' 回包
+const SEND_TEXT = process.env.SEND_TEXT ?? (process.env.KART_MOCK === '1' ? 'AT' : 'help')
 const SEND_LINE = process.env.SEND_LINE ?? 'cr'
 const PROTOCOL_VERSION = '2025-06-18'
 

@@ -258,6 +258,20 @@ describe('MCP 工具注册表', () => {
       expect(r.frames.map((f) => f.id)).toEqual([1])
     })
 
+    it('超 4096B 的帧折叠为 512B 预览（truncated 标记，与 UI 同语义）', async () => {
+      const big = new Uint8Array(5000).fill(0x41) // 'A' × 5000
+      const sessions = createSessionRegistry()
+      sessions.register(makeSession({ frames: [{ id: 1, direction: 'rx', bytes: big, timestamp: 1 }] }))
+      const { registry } = setup({ sessions })
+      const r = (await registry.handle('get_recent_messages', { sessionId: 1, mode: 'hex' })) as {
+        frames: Array<{ len: number; truncated?: boolean; hex: string }>
+      }
+      expect(r.frames[0].len).toBe(5000)
+      expect(r.frames[0].truncated).toBe(true)
+      // 512B → hex 三字符/字节（"41 "）：512 * 3 - 1 = 1535
+      expect(r.frames[0].hex.length).toBe(512 * 3 - 1)
+    })
+
     it('search_messages 按文本/方向搜索', async () => {
       const sessions = createSessionRegistry()
       sessions.register(makeSession({ frames: [frame(1, 'rx', 'hello'), frame(2, 'tx', 'hello'), frame(3, 'rx', 'bye')] }))

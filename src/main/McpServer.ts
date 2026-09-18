@@ -48,7 +48,9 @@ export class McpServer {
 
   constructor(
     private readonly bridge: McpBridge,
-    private readonly log: (msg: string) => void = (m) => console.log(`[mcp] ${m}`)
+    private readonly log: (msg: string) => void = (m) => console.log(`[mcp] ${m}`),
+    /** 工具调用超时（测试注入短值验证超时路径；生产默认 15s） */
+    private readonly toolTimeoutMs: number = TOOL_CALL_TIMEOUT_MS
   ) {}
 
   /**
@@ -180,7 +182,7 @@ export class McpServer {
       const result = await Promise.race([
         this.bridge.invoke(def.name, args ?? {}),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`tool timeout after ${TOOL_CALL_TIMEOUT_MS}ms`)), TOOL_CALL_TIMEOUT_MS)
+          setTimeout(() => reject(new Error(`tool timeout after ${this.toolTimeoutMs}ms`)), this.toolTimeoutMs)
         )
       ])
       this.log(`tool ok: ${def.name}`)

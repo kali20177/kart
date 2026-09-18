@@ -8,12 +8,17 @@ describe('resolveDriverType', () => {
       .toEqual({ type: 'pty', reason: null })
   })
 
-  it('Electron 环境 -> serialport（优先级次高，压过 ?mock）', () => {
+  it('Electron + ?mock -> mock（显式验证参数优先于环境默认；CI 无硬件跑 e2e）', () => {
     expect(resolveDriverType({ isElectron: true, isDevMock: true, isDevPty: false, isSecureContext: true, hasWebSerial: true }))
+      .toEqual({ type: 'mock', reason: null })
+  })
+
+  it('Electron 无验证参数 -> serialport（普通用户绝不会落 mock）', () => {
+    expect(resolveDriverType({ isElectron: true, isDevMock: false, isDevPty: false, isSecureContext: true, hasWebSerial: true }))
       .toEqual({ type: 'serialport', reason: null })
   })
 
-  it('DEV ?mock -> mock（仅次于 Electron）', () => {
+  it('浏览器 + ?mock -> mock（排查/调试用）', () => {
     expect(resolveDriverType({ isElectron: false, isDevMock: true, isDevPty: false, isSecureContext: true, hasWebSerial: true }))
       .toEqual({ type: 'mock', reason: null })
   })

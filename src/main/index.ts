@@ -533,15 +533,23 @@ function createWindow(): void {
   })
 
   if (devServerUrl) {
-    // KART_PTY=1 时在 URL 追加 ?pty，渲染端据此把驱动切到本地终端（验证 vim 全屏）
-    const url = process.env.KART_PTY === '1' ? `${devServerUrl}?pty` : devServerUrl
+    // KART_PTY=1 时在 URL 追加 ?pty，渲染端据此把驱动切到本地终端（验证 vim 全屏）；
+    // KART_MOCK=1 时追加 ?mock，把驱动切到 mock 串口（无硬件 CI 跑 verify:mcp 用）
+    const qs = [
+      process.env.KART_PTY === '1' ? 'pty=1' : '',
+      process.env.KART_MOCK === '1' ? 'mock=1' : '',
+    ].filter(Boolean).join('&')
+    const url = qs ? `${devServerUrl}?${qs}` : devServerUrl
     mainLogger.info('main', `load dev server: ${url}`)
     win.loadURL(url)
   } else {
     const html = path.join(__dirname, '../../dist/index.html')
-    // KART_PTY=1 时带 ?pty 加载（本地终端验证）；prod 下 loadFile 经 query 传参
-    if (process.env.KART_PTY === '1') {
-      win.loadFile(html, { query: { pty: '1' } })
+    // KART_PTY=1 时带 ?pty 加载（本地终端验证）；KART_MOCK=1 时带 ?mock（verify:mcp 无硬件模式）
+    const query: Record<string, string> = {}
+    if (process.env.KART_PTY === '1') query.pty = '1'
+    if (process.env.KART_MOCK === '1') query.mock = '1'
+    if (Object.keys(query).length > 0) {
+      win.loadFile(html, { query })
     } else {
       win.loadFile(html)
     }
