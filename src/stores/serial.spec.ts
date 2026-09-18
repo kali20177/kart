@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { effectScope } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
-import { useSerialStore, createSerialStore, type SerialDeps } from './serial'
+import { useSerialStore } from '@/stores/singletons'
+import { createSerialStore, type SerialDeps } from '@/stores/serial'
 import type { EndpointInfo, PortOptions, SerialSignals, IoTransport, DriverType } from '@/types'
-import { STORAGE_PREFIX } from '@/composables/useStorage'
+import { STORAGE_PREFIX } from '@/utils/storage'
 import { registerTransport } from '@/serial/registry'
 
 const KEY = STORAGE_PREFIX + 'customBaudRates'

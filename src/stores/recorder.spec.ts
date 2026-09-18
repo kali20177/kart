@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { ref, computed } from 'vue'
-import type { IFileWriter } from '@/composables/useFileWriter'
+import type { IFileWriter } from '@/utils/file-writer'
 
 const mockWriter: IFileWriter = {
   write: vi.fn().mockResolvedValue(undefined),
@@ -15,7 +15,7 @@ const mockIsConfigured = computed(() => mockDirName.value !== null)
 let mockCreateFile = vi.fn().mockResolvedValue(mockWriter)
 const mockPick = vi.fn().mockResolvedValue(undefined)
 
-vi.mock('@/composables/useRecordDirectory', () => ({
+vi.mock('@/utils/record-directory', () => ({
   useRecordDirectory: () => ({
     dirName: mockDirName,
     isConfigured: mockIsConfigured,
@@ -26,9 +26,9 @@ vi.mock('@/composables/useRecordDirectory', () => ({
 }))
 
 async function setupStores() {
-  const { useSerialStore } = await import('./serial')
-  const { useRecorderStore } = await import('./recorder')
-  const { useSettingsStore } = await import('./settings')
+  const { useSerialStore } = await import('@/stores/singletons')
+  const { useRecorderStore } = await import('@/stores/recorder')
+  const { useSettingsStore } = await import('@/stores/settings')
 
   const serial = useSerialStore()
   const settings = useSettingsStore()

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { TextLineParser } from './waveform-parser'
-import type { WireClockConfig } from './waveform-clock'
+import { TextLineParser } from '@/utils/waveform-parser'
+import type { WireClockConfig } from '@/utils/waveform-clock'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { fieldDecoder } from './field'
-import type { FieldDecoderOptions } from '../types'
+import { fieldDecoder } from '@/decoders/builtin/field'
+import type { FieldDecoderOptions } from '@/decoders/types'
 
 /** 默认测试配置：AA 55 帧头的常见布局 */
 function opts(over: Partial<FieldDecoderOptions> = {}): FieldDecoderOptions {

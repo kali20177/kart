@@ -1,8 +1,8 @@
-import type { ThemeDefinition, ThemeTokens, TokenKey } from './types'
-import { glassIndustrialDark } from './builtin/glass-industrial-dark'
-import { glassIndustrialLight } from './builtin/glass-industrial-light'
-import { oledHud } from './builtin/oled-hud'
-import { retroConsole } from './builtin/retro-console'
+import type { ThemeDefinition, ThemeTokens, TokenKey } from '@/themes/types'
+import { glassIndustrialDark } from '@/themes/builtin/glass-industrial-dark'
+import { glassIndustrialLight } from '@/themes/builtin/glass-industrial-light'
+import { oledHud } from '@/themes/builtin/oled-hud'
+import { retroConsole } from '@/themes/builtin/retro-console'
 
 const registry = new Map<string, ThemeDefinition>()
 

@@ -17,7 +17,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import type { Message, ExportPreferences } from '@/types'
 import { useSession } from '@/composables/useSession'
-import { storage } from '@/composables/useStorage'
+import { storage } from '@/utils/storage'
 import { persistNow } from '@/utils/persist'
 import { formatMessageLine, computeDeltas } from '@/utils/message-format'
 import { exportMessagesAsCsv } from '@/utils/export-csv'

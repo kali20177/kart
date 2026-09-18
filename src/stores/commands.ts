@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { QuickCommand } from '@/types'
-import { storage } from '@/composables/useStorage'
+import { storage } from '@/utils/storage'
 import { persistNow } from '@/utils/persist'
 
 /** 内置示例命令，便于阶段 1 演示 */

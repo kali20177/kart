@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyAsciiInsert, setComposer } from './composer'
-import type { AsciiEntry } from './ascii-table'
+import { applyAsciiInsert, setComposer } from '@/utils/composer'
+import type { AsciiEntry } from '@/utils/ascii-table'
 import type { Session } from '@/session'
 
 /** 仅用到 viewMode/composerText 两个字段，其余字段无需真实构造 */

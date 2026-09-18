@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import { mainLogger } from './logger'
+import { mainLogger } from '@/main/logger'
 
 /**
  * 主进程 JSON 持久化 store —— 渲染进程持久化的权威副本（Electron 下）。

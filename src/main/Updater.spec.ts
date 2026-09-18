@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { UPDATER_EVENT_CHANNEL } from './Updater'
+import { UPDATER_EVENT_CHANNEL } from '@/main/Updater'
 
 // ── electron-updater / electron mock ──
 // 状态与实例数组都在 vi.hoisted 中定义：hoisted 早于 vi.mock 执行，
@@ -52,7 +52,7 @@ vi.mock('./logger', () => ({
 }))
 
 // 延迟 import：vi.mock 已注册，Updater 模块内 import 命中 mock
-import { Updater } from './Updater'
+import { Updater } from '@/main/Updater'
 
 const NEW_INFO = {
   version: '1.1.0',

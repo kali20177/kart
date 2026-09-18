@@ -1,4 +1,4 @@
-import type { McpBridge } from './McpServer'
+import type { McpBridge } from '@/main/McpServer'
 
 /** 主进程 → 渲染进程的工具调用请求载荷。 */
 export interface ToolCallPayload {

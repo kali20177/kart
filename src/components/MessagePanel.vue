@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import MessageList from './MessageList.vue'
-import InputComposer from './InputComposer.vue'
+import MessageList from '@/components/MessageList.vue'
+import InputComposer from '@/components/InputComposer.vue'
 import { useSession, useOpenFileTransfer } from '@/composables/useSession'
 
 /**

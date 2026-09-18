@@ -1,4 +1,4 @@
-import type { ThemeDefinition } from '../types'
+import type { ThemeDefinition } from '@/themes/types'
 
 /**
  * Glass Industrial 亮色 — 浅色工业风。

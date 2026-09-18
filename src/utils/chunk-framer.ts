@@ -3,7 +3,7 @@
 // 与 rate-limit / ack 组合成引擎的纯逻辑层，store 只做调度。
 
 import type { ChunkFraming, LineEnding } from '@/types'
-import { crc16modbus } from './checksum'
+import { crc16modbus } from '@/utils/checksum'
 
 /** 切片 —— chunkSize=0 表示整包一次下发；末包可短。 */
 export function sliceChunk(bytes: Uint8Array, chunkIndex: number, chunkSize: number): Uint8Array {

@@ -1,7 +1,7 @@
 // 内置 Modbus RTU 解码器：帧形 [addr][fc][data][crc16-LE]。
 // CRC16（Modbus）校验通过且长度 ≥8 才匹配——坏帧保持原始视图，不渲染错误字段。
 
-import type { DecodeField, DecoderDefinition } from '../types'
+import type { DecodeField, DecoderDefinition } from '@/decoders/types'
 import { verifyChecksum } from '@/utils/checksum'
 import { bytesToHex } from '@/utils/hex'
 

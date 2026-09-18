@@ -1,7 +1,4 @@
-import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { useMessagesStore } from './messages'
-import { useWaveformStore } from './waveform'
 
 /** pause store 的外部依赖——clearAll 需要清空消息列表、波形图与仪表盘数据快照。
  *  三个回调在调用方（defineStore wrapper 或 createSession）注入，本文件不直接引用 peer store。 */
@@ -46,13 +43,3 @@ export function createPauseStore(deps: PauseDeps) {
 
   return { paused, pauseStartTime, toggle, clearAll }
 }
-
-/** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。
- *  dashboard 无全局单例（仅会话内），clearDashboard 在此为 no-op——生产经 session 注入真实回调。 */
-export const usePauseStore = defineStore('pause', () =>
-  createPauseStore({
-    clearMessages: () => useMessagesStore().clear(),
-    clearWaveform: () => useWaveformStore().clear(),
-    clearDashboard: () => {},
-  })
-)

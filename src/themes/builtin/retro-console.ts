@@ -1,4 +1,4 @@
-import type { ThemeDefinition } from '../types'
+import type { ThemeDefinition } from '@/themes/types'
 
 /**
  * Retro Console 像素风 — 复古游戏机配色。单态暗色。

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Session } from '@/session'
 import type { DataMode, LineEnding, Encoding, ChecksumAlgorithm } from '@/types'
-import { createMcpToolRegistry, type McpToolContext } from './registry'
-import { createSessionRegistry } from './session-registry'
-import type { McpSessionRegistry } from './session-registry'
+import { createMcpToolRegistry, type McpToolContext } from '@/mcp/registry'
+import { createSessionRegistry } from '@/mcp/session-registry'
+import type { McpSessionRegistry } from '@/mcp/session-registry'
 
 /** 构造 registry 可用的最小会话（仅实现 handler 触达的字段，其余 cast）。 */
 function makeSession(over: {

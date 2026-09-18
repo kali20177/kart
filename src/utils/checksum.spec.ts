@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeChecksum, verifyChecksum, checksumByteLength, crc16modbus, crc32 } from './checksum'
+import { computeChecksum, verifyChecksum, checksumByteLength, crc16modbus, crc32 } from '@/utils/checksum'
 
 // ── checksumByteLength ──
 

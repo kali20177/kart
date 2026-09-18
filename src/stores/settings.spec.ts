@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
-import { useSettingsStore } from './settings'
+import { useSettingsStore } from '@/stores/settings'
 
 beforeEach(() => {
   localStorage.clear()

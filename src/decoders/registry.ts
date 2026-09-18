@@ -1,7 +1,7 @@
 // 解码器注册表：静态 Map + register/get/list（镜像 themes/registry.ts 模式）。
 // 内置集在 index.ts 模块顶层 register，导入即注册。
 
-import type { DecoderDefinition } from './types'
+import type { DecoderDefinition } from '@/decoders/types'
 
 const registry = new Map<string, DecoderDefinition>()
 

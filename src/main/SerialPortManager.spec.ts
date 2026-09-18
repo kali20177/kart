@@ -56,7 +56,7 @@ vi.mock('./logger', () => ({
 
 vi.mock('serialport', () => ({ SerialPort: MockSerialPort }))
 
-import { SerialPortManager, toCalloutPath, isMacOSPseudoTerminal } from './SerialPortManager'
+import { SerialPortManager, toCalloutPath, isMacOSPseudoTerminal } from '@/main/SerialPortManager'
 
 const OPTS = {
   baudRate: 115200,

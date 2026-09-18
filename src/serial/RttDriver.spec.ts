@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { RttDriver } from './RttDriver'
-import type { ElectronTcp } from './TcpDriver'
+import { RttDriver } from '@/serial/RttDriver'
+import type { ElectronTcp } from '@/serial/TcpDriver'
 
 /** 假 electron.tcp 桥（最小可 open 实例）——完整行为已在 TcpDriver.spec 覆盖，此处只验证 RTT 标识与构造传递 */
 function makeFakeTcp() {

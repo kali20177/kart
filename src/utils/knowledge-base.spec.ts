@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { i18n } from '@/i18n'
-import { KB_ENTRIES } from './knowledge-base'
+import { KB_ENTRIES } from '@/utils/knowledge-base'
 
 const LOCALES = ['zh-CN', 'en-US'] as const
 

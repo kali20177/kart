@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
-import { useConnbarCollapse } from './useConnbarCollapse'
+import { useConnbarCollapse } from '@/composables/useConnbarCollapse'
 import { createSession } from '@/session'
 import { setDriverType } from '@/serial'
-import { STORAGE_PREFIX } from './useStorage'
+import { STORAGE_PREFIX } from '@/utils/storage'
 
 beforeEach(() => {
   setActivePinia(createPinia())

@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia, storeToRefs } from 'pinia'
 import { nextTick } from 'vue'
-import { createWaveformStore, useWaveformStore } from './waveform'
-import { useSettingsStore } from './settings'
-import { usePauseStore } from './pause'
+import { createWaveformStore } from '@/stores/waveform'
+import { useWaveformStore, usePauseStore } from '@/stores/singletons'
+import { useSettingsStore } from '@/stores/settings'
 import { waveformTextChunk, waveformTextLabeledChunk } from '@/mock/scenarios'
 
 const enc = (s: string) => new TextEncoder().encode(s)

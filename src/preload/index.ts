@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { UpdaterState } from '../utils/updater'
+import type { UpdaterState } from '@/utils/updater'
 
 // 主进程回调写盘错误时，转发给渲染进程录制器（按窗口）。可选监听。
 let writeErrorHandler: ((msg: string) => void) | null = null

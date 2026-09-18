@@ -2,7 +2,7 @@
  * 日志级别与行格式 —— 渲染端（src/utils/logger.ts）与主进程（src/main/logger.ts）
  * 共用的纯逻辑，无任何框架/DOM/Node 依赖，可单测。
  */
-import type { LogLevel } from '../types'
+import type { LogLevel } from '@/types'
 
 export const LEVEL_ORDER: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
 

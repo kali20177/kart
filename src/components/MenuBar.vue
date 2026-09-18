@@ -5,13 +5,13 @@ import type { DropdownOption } from 'naive-ui'
 import { useActiveSession } from '@/composables/useSession'
 import { useSettingsStore } from '@/stores/settings'
 import { useCommandsStore } from '@/stores/commands'
-import { storage } from '@/composables/useStorage'
+import { storage } from '@/utils/storage'
 import { onSnapshotExport } from '@/utils/persist'
 import { useI18n } from 'vue-i18n'
 import { logger } from '@/utils/logger'
 import { useUpdater } from '@/composables/useUpdater'
-import KnowledgeBaseModal from './KnowledgeBaseModal.vue'
-import UpdateDialog from './UpdateDialog.vue'
+import KnowledgeBaseModal from '@/components/KnowledgeBaseModal.vue'
+import UpdateDialog from '@/components/UpdateDialog.vue'
 
 const { t } = useI18n()
 // settings/commands 为全局共享 store（会话间统一），serial/recorder 指向当前活动会话。

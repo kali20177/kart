@@ -1,6 +1,6 @@
 import { effectScope, ref, watch } from 'vue'
 import { useStorage } from '@vueuse/core'
-import { STORAGE_PREFIX } from './useStorage'
+import { STORAGE_PREFIX } from '@/utils/storage'
 import { useSettingsStore } from '@/stores/settings'
 
 const STORAGE_KEY = STORAGE_PREFIX + 'sendHistory'

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NACK_BYTE, isNackByte, le16, matchEchoCrc } from './ack'
+import { NACK_BYTE, isNackByte, le16, matchEchoCrc } from '@/utils/ack'
 
 describe('isNackByte / le16', () => {
   it('NACK 即 ASCII NAK (0x15)', () => {

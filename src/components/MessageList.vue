@@ -5,13 +5,13 @@ import { useClipboard, useDebounceFn } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { NButton, NInput, NButtonGroup, NTag, NDropdown, NModal, useDialog, useMessage } from 'naive-ui'
 import type { DropdownOption, DropdownDividerOption } from 'naive-ui'
-import MessageBubble from './MessageBubble.vue'
+import MessageBubble from '@/components/MessageBubble.vue'
 import { useSession } from '@/composables/useSession'
 import { useMessageSearch } from '@/composables/useMessageSearch'
 import { parseTimeInput } from '@/utils/search'
 import type { Direction, Message } from '@/types'
 import { formatMessageLine, formatTimestamp, computeDeltas } from '@/utils/message-format'
-import ExportDialog from './ExportDialog.vue'
+import ExportDialog from '@/components/ExportDialog.vue'
 
 const session = useSession()
 const { messages: messagesStore, settings: settingsStore, pause: pauseStore, serial } = session

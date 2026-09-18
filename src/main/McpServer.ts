@@ -2,8 +2,8 @@ import http from 'node:http'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { McpServer as SdkMcpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { MCP_TOOLS, type McpToolDef } from '../mcp/contract'
-import type { McpMode } from '../types'
+import { MCP_TOOLS, type McpToolDef } from '@/mcp/contract'
+import type { McpMode } from '@/types'
 
 export type { McpMode }
 

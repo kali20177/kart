@@ -17,7 +17,7 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
-import { useRecordDirectory } from '@/composables/useRecordDirectory'
+import { useRecordDirectory } from '@/utils/record-directory'
 import { listThemes, getTheme } from '@/themes'
 import type { TokenKey } from '@/themes'
 import { listSystemFonts } from '@/utils/fonts'

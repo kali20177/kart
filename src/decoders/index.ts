@@ -1,8 +1,8 @@
 // 解码器模块入口：导入即注册全部内置解码器（镜像 themes/index.ts 模式）。
-import { register } from './registry'
-import { fieldDecoder } from './builtin/field'
-import { modbusRtuDecoder } from './builtin/modbus-rtu'
-import type { DecoderConfig } from './types'
+import { register } from '@/decoders/registry'
+import { fieldDecoder } from '@/decoders/builtin/field'
+import { modbusRtuDecoder } from '@/decoders/builtin/modbus-rtu'
+import type { DecoderConfig } from '@/decoders/types'
 
 register(fieldDecoder)
 register(modbusRtuDecoder)
@@ -25,7 +25,7 @@ export const DEFAULT_DECODER_CONFIG: DecoderConfig = {
   }
 }
 
-export { register, getDecoder, listDecoders } from './registry'
+export { register, getDecoder, listDecoders } from '@/decoders/registry'
 export type {
   DecoderDefinition,
   DecodeResult,
@@ -35,4 +35,4 @@ export type {
   FieldFormat,
   FieldDef,
   FieldDecoderOptions
-} from './types'
+} from '@/decoders/types'

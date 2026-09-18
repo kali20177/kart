@@ -1,5 +1,5 @@
-import { parseTextSamples } from './text-parser'
-import { bitsPerByte, byteTimeMs, wireBatchXs, type WireClockConfig } from './waveform-clock'
+import { parseTextSamples } from '@/utils/text-parser'
+import { bitsPerByte, byteTimeMs, wireBatchXs, type WireClockConfig } from '@/utils/waveform-clock'
 
 /**
  * 波形解析器接口：把连续字节流解析为多通道采样。

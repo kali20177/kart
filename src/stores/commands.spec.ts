@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useCommandsStore } from './commands'
+import { useCommandsStore } from '@/stores/commands'
 
 beforeEach(() => { setActivePinia(createPinia()) })
 

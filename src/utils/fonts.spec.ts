@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { listSystemFonts } from './fonts'
+import { listSystemFonts } from '@/utils/fonts'
 
 interface Face { family: string }
 function installQuery(fn: () => Promise<Face[]>) {

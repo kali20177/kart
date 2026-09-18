@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldReconnect, countdownSecs } from './reconnect'
+import { shouldReconnect, countdownSecs } from '@/utils/reconnect'
 
 describe('shouldReconnect', () => {
   it('开关关闭 → 不排程（disabled）', () => {

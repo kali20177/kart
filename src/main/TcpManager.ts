@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
 import net from 'node:net'
-import { mainLogger } from './logger'
+import { mainLogger } from '@/main/logger'
 
 /**
  * 解析 "host:port" 端点字符串。仅支持 IPv4/hostname（IPv6 含冒号，暂不支持）。

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { applyTheme } from './registry'
-import type { ThemeDefinition } from './types'
+import { applyTheme } from '@/themes/registry'
+import type { ThemeDefinition } from '@/themes/types'
 
 const theme: ThemeDefinition = {
   id: 'test-theme',

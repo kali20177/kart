@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { resolveTerminalPalette } from './terminal'
-import { listThemes } from './registry'
-import { TERMINAL_PALETTE_KEYS } from './types'
-import type { ThemeDefinition } from './types'
+import { resolveTerminalPalette } from '@/themes/terminal'
+import { listThemes } from '@/themes/registry'
+import { TERMINAL_PALETTE_KEYS } from '@/themes/types'
+import type { ThemeDefinition } from '@/themes/types'
 
 const baseTheme: ThemeDefinition = {
   id: 'test-theme',

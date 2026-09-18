@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateJsonSize } from './size'
+import { estimateJsonSize } from '@/utils/size'
 
 describe('estimateJsonSize', () => {
   it('returns stringified length for plain values', () => {

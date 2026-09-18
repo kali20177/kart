@@ -6,13 +6,13 @@ import { useSettingsStore } from '@/stores/settings'
 
 // useSendHistory 持有模块级单例（history/cursor/watch），跨用例会残留，
 // 故每个用例前 resetModules + 动态 import 重新求值模块。
-type HistoryModule = typeof import('./useSendHistory')
+type HistoryModule = typeof import('@/composables/useSendHistory')
 let sendHistory: HistoryModule
 
 beforeEach(async () => {
   vi.resetModules()
   setActivePinia(createPinia())
-  sendHistory = await import('./useSendHistory')
+  sendHistory = await import('@/composables/useSendHistory')
 })
 
 describe('useSendHistory', () => {
@@ -54,7 +54,7 @@ describe('useSendHistory', () => {
     // 导致 bundle 在 mount 前崩溃、应用停在加载页。此处清空 active pinia 验证。
     setActivePinia(undefined as never)
     vi.resetModules()
-    await expect(import('./useSendHistory')).resolves.toBeDefined()
+    await expect(import('@/composables/useSendHistory')).resolves.toBeDefined()
   })
 
   it('上限 watch 不随首个调用组件卸载而失效', async () => {

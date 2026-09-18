@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import './index' // 导入即注册全部内置解码器（与生产入口一致）
-import { register, getDecoder, listDecoders } from './registry'
-import { fieldDecoder } from './builtin/field'
-import type { DecoderDefinition } from './types'
+import { register, getDecoder, listDecoders } from '@/decoders/registry'
+import { fieldDecoder } from '@/decoders/builtin/field'
+import type { DecoderDefinition } from '@/decoders/types'
 
 describe('decoder registry', () => {
   it('内置解码器已注册（导入 index 即注册）', () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import SessionPane from './SessionPane.vue'
+import SessionPane from '@/components/SessionPane.vue'
 import type { Session } from '@/session'
 
 /**

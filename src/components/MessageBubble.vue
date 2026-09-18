@@ -9,7 +9,7 @@ import { bytesToHex, hexDump } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
 import { formatMessageLine, formatTimestamp, formatDelta, formatElapsed } from '@/utils/message-format'
 import { useSession } from '@/composables/useSession'
-import FileTransferBubble from './FileTransferBubble.vue'
+import FileTransferBubble from '@/components/FileTransferBubble.vue'
 
 interface Range {
   start: number

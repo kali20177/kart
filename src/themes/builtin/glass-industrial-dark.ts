@@ -1,4 +1,4 @@
-import type { ThemeDefinition } from '../types'
+import type { ThemeDefinition } from '@/themes/types'
 
 /**
  * Glass Industrial 暗色 — GitHub-dark 玻璃工业风。

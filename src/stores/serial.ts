@@ -1,20 +1,17 @@
-import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, onScopeDispose } from 'vue'
 import type { MockScenarioId, EndpointInfo, PortOptions, SerialSignals, CustomBaudRate, ChecksumAlgorithm, IoTransport, TransportType } from '@/types'
 import type { DriverType } from '@/serial'
 import { MockSerialSource } from '@/mock/MockSerialSource'
-import { createDriverOfType, createSerialDriver, getDriverType, getUnsupportedReason, setDriverType } from '@/serial'
+import { createDriverOfType, getDriverType, getUnsupportedReason, setDriverType } from '@/serial'
 import { concatBytes, encodeText, lineEndingBytes } from '@/utils/encoding'
 import { parseHexInput } from '@/utils/hex'
 import { computeChecksum } from '@/utils/checksum'
 import { isPresetBaud, isValidBaud, loadCustomBaudRates } from '@/utils/baud'
 import { shouldReconnect } from '@/utils/reconnect'
 import type { DataMode, LineEnding } from '@/types'
-import { storage } from '@/composables/useStorage'
+import { storage } from '@/utils/storage'
 import { persistNow } from '@/utils/persist'
 import { logger } from '@/utils/logger'
-import { useMessagesStore } from './messages'
-import { useSettingsStore } from './settings'
 
 /** serial store 的外部依赖——RX/TX 帧写入委托给 messages，自动重连开关来自全局设置。
  *  ingestRx/addTx 由调用方注入；settings 是全局 settings store 的同一 reactive proxy。
@@ -657,15 +654,3 @@ export function createSerialStore(deps: SerialDeps) {
     reset
   }
 }
-
-/** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */
-export const useSerialStore = defineStore('serial', () => {
-  const m = useMessagesStore()
-  const s = useSettingsStore()
-  return createSerialStore({
-    ingestRx: (bytes) => m.ingestRx(bytes),
-    addTx: (bytes, error) => m.addTx(bytes, error),
-    settings: s.settings,
-    createDriver: () => createSerialDriver(),
-  })
-})

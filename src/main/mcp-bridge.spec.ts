@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
-import { createMcpBridge, type ToolCallPayload } from './mcp-bridge'
+import { createMcpBridge, type ToolCallPayload } from '@/main/mcp-bridge'
 
 describe('createMcpBridge（call_tool 桥，docs/mcp-design.md §八）', () => {
   it('正常应答：deliver 后 resolveToolCall 带回结果', async () => {

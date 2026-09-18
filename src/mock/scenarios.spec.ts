@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MockShell, shellBanner, modbusSample } from './scenarios'
+import { MockShell, shellBanner, modbusSample } from '@/mock/scenarios'
 import { modbusRtuDecoder } from '@/decoders/builtin/modbus-rtu'
 
 const dec = new TextDecoder()

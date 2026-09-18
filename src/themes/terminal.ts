@@ -1,4 +1,4 @@
-import type { TerminalPalette, ThemeDefinition } from './types'
+import type { TerminalPalette, ThemeDefinition } from '@/themes/types'
 
 /**
  * 主题 → 终端（xterm）配色的解析。

@@ -1,8 +1,8 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { app } from 'electron'
-import type { LogLevel } from '../types'
-import { LEVEL_ORDER, mapConsoleLevel, formatLogLine, splitContextLine } from '../utils/log-level'
+import type { LogLevel } from '@/types'
+import { LEVEL_ORDER, mapConsoleLevel, formatLogLine, splitContextLine } from '@/utils/log-level'
 
 /** 日志保留天数 */
 const RETENTION_DAYS = 30

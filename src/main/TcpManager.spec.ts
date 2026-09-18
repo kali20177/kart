@@ -41,7 +41,7 @@ vi.mock('node:net', () => ({
   }
 }))
 
-import { TcpManager, parseEndpoint } from './TcpManager'
+import { TcpManager, parseEndpoint } from '@/main/TcpManager'
 
 type WinArg = ConstructorParameters<typeof TcpManager>[0]
 

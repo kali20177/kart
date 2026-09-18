@@ -1,6 +1,6 @@
 import type { DataMode, Encoding, Message } from '@/types'
-import { bytesToHex } from './hex'
-import { decodeBytes } from './encoding'
+import { bytesToHex } from '@/utils/hex'
+import { decodeBytes } from '@/utils/encoding'
 
 /** 时间戳格式 */
 export type TimeStyle = 'short' | 'full' | 'none'

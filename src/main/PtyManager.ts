@@ -1,6 +1,6 @@
 import { BrowserWindow, app } from 'electron'
 import { spawn, type IPty } from 'node-pty'
-import { mainLogger } from './logger'
+import { mainLogger } from '@/main/logger'
 
 interface PtyEntry {
   pty: IPty

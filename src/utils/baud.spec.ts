@@ -6,7 +6,7 @@ import {
   PRESET_BAUDS,
   BAUD_MIN,
   BAUD_MAX
-} from './baud'
+} from '@/utils/baud'
 
 describe('isValidBaud', () => {
   it('接受范围内的正整数', () => {

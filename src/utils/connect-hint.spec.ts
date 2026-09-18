@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { transportHintKey, formatConnectFailure } from './connect-hint'
+import { transportHintKey, formatConnectFailure } from '@/utils/connect-hint'
 
 describe('transportHintKey', () => {
   it('RTT/TCP 分别返回对应提示 key', () => {

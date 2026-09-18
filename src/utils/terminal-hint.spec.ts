@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveCharHintKind } from './terminal-hint'
+import { resolveCharHintKind } from '@/utils/terminal-hint'
 
 describe('resolveCharHintKind', () => {
   it('非 TCP（串口）→ hidden：直通提示只属于 TCP 传输，串口不渲染提示条（回归）', () => {

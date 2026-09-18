@@ -5,7 +5,7 @@ import { createSession, type Session } from '@/session'
 import { setDriverType } from '@/serial'
 import { MockSerialSource } from '@/mock/MockSerialSource'
 import { binaryFrame } from '@/mock/scenarios'
-import { storage } from '@/composables/useStorage'
+import { storage } from '@/utils/storage'
 
 // 每个测试创建的会话，afterEach 统一 dispose 清理（定时器/订阅/驱动）
 let sessions: Session[] = []

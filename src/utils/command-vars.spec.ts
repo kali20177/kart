@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { expandCommandVars, formatHms, formatFull } from './command-vars'
+import { expandCommandVars, formatHms, formatFull } from '@/utils/command-vars'
 
 // 构造本地时间：new Date(y,m,d,h,min,s) 永远得到该本地墙钟时间，
 // formatHms/formatFull 读本地分量，断言不受运行机时区影响。

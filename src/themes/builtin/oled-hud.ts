@@ -1,4 +1,4 @@
-import type { ThemeDefinition } from '../types'
+import type { ThemeDefinition } from '@/themes/types'
 
 /**
  * OLED HUD — Cyberpunk 终端风格。单态暗色。

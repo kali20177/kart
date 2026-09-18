@@ -1,6 +1,6 @@
 import { effectScope, ref, watch, type EffectScope, type Ref } from 'vue'
 import type { Session } from '@/session'
-import { storage } from '@/composables/useStorage'
+import { storage } from '@/utils/storage'
 
 /**
  * 连接参数栏收起状态 —— ConnectionBar（面板内组件）与 SessionTab（dockview tab 渲染

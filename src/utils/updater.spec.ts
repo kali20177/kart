@@ -9,7 +9,7 @@ import {
   formatBytes,
   formatSpeed,
   formatEta
-} from './updater'
+} from '@/utils/updater'
 
 describe('isUpdaterActive（gate 能力位）', () => {
   const base = { isPackaged: true, devEnabled: false, platform: 'darwin' as const, appImage: false }

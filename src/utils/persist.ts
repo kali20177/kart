@@ -1,6 +1,6 @@
-import { storage, STORAGE_PREFIX } from '@/composables/useStorage'
-import { estimateJsonSize } from './size'
-import { logger } from './logger'
+import { storage, STORAGE_PREFIX } from '@/utils/storage'
+import { estimateJsonSize } from '@/utils/size'
+import { logger } from '@/utils/logger'
 
 /**
  * 直写落盘 —— 用户数据（设置/命令/波特率/导出偏好/录制目录）变更即持久化，

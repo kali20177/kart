@@ -1,9 +1,9 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { autoUpdater, CancellationToken } from 'electron-updater'
 import type { Logger, ProgressInfo, UpdateInfo } from 'electron-updater'
-import { createUpdaterState, isUpdaterActive, updaterReducer } from '../utils/updater'
-import type { UpdaterEvent, UpdaterState } from '../utils/updater'
-import { mainLogger } from './logger'
+import { createUpdaterState, isUpdaterActive, updaterReducer } from '@/utils/updater'
+import type { UpdaterEvent, UpdaterState } from '@/utils/updater'
+import { mainLogger } from '@/main/logger'
 
 // 渲染端订阅 updater 状态推送的事件名（preload 与此保持一致）
 export const UPDATER_EVENT_CHANNEL = 'updater:event'

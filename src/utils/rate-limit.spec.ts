@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { paceDelay } from './rate-limit'
+import { paceDelay } from '@/utils/rate-limit'
 
 describe('paceDelay', () => {
   it('bps=0 时退化为固定包间延时', () => {

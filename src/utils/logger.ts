@@ -1,6 +1,6 @@
 import type { LogLevel } from '@/types'
-import { LEVEL_ORDER, splitContextLine } from './log-level'
-import { downloadTextFile } from './download'
+import { LEVEL_ORDER, splitContextLine } from '@/utils/log-level'
+import { downloadTextFile } from '@/utils/download'
 
 /** 一条持久化的日志记录。context 单独存字段，message 不再内嵌 [context] 前缀 */
 export interface LogEntry {

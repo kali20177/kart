@@ -1,6 +1,6 @@
 import { ref, shallowRef, onScopeDispose } from 'vue'
 import type { DecodeField } from '@/decoders/types'
-import type { DecodeBroadcast } from './messages'
+import type { DecodeBroadcast } from '@/stores/messages'
 
 /**
  * 仪表盘 store（会话内）：订阅帧解码广播 → 维护字段最新值表 + 最近一帧完整字段。

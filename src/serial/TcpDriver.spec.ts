@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { TcpDriver, type ElectronTcp } from './TcpDriver'
+import { TcpDriver, type ElectronTcp } from '@/serial/TcpDriver'
 
 /** 假 electron.tcp 桥：内存 handler 集合，测试侧可注入远端字节/断连事件。
  *  open 返回主进程分配的连接 id（connId），后续事件/读写按 connId 路由。 */

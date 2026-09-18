@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
 import type { AppSettings, WaveformSettings } from '@/types'
-import { storage } from '@/composables/useStorage'
+import { storage } from '@/utils/storage'
 import { persistNow } from '@/utils/persist'
 import { migrateLegacyThemeFields } from '@/themes'
 

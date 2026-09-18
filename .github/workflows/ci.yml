@@ -16,7 +16,8 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "20"
+  # Node 22 LTS：dependency-cruiser 18 要求 ^22||^24||>=26（Node 20 已 EOL，2026-04 停止维护）
+  NODE_VERSION: "22"
 
 jobs:
   check:
@@ -34,6 +35,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # 模块耦合检查：no-circular / 层倒挂等 5 条规则（.dependency-cruiser.cjs），违规即退出码 4
+      - run: npm run check:coupling
       - run: npm test
 
   build:

@@ -1,15 +1,10 @@
-import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, watch, onScopeDispose } from 'vue'
-import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
 import type { ChecksumConfig, Direction, FrameConfig, Message } from '@/types'
 import type { DecodeField, DecoderConfig } from '@/decoders/types'
-import { DEFAULT_DECODER_CONFIG, getDecoder } from '@/decoders'
-import { FrameSplitter } from '@/composables/useFrameSplitter'
-import { useSettingsStore } from './settings'
-import { usePauseStore } from './pause'
+import { getDecoder } from '@/decoders'
+import { FrameSplitter } from '@/utils/frame-splitter'
 import { verifyChecksum, checksumByteLength } from '@/utils/checksum'
-import { defaultChecksumConfig } from '@/session/checksum'
 
 /** 帧解码成功后的广播负载：字段（含数值）喂给仪表盘等数值消费方 */
 export interface DecodeBroadcast {
@@ -281,19 +276,3 @@ export function createMessagesStore(deps: MessagesDeps) {
 
   return { messages, paused, pauseStartTime, rxFrames, txFrames, rxErrorFrames, droppedFrames, ingestRx, addTx, addFileTransfer, insertDividerBefore, setMessageNote, clear, removeByIds, togglePause, onDecode }
 }
-
-/** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */
-export const useMessagesStore = defineStore('messages', () => {
-  const s = useSettingsStore()
-  const p = usePauseStore()
-  const { paused, pauseStartTime } = storeToRefs(p)
-  return createMessagesStore({
-    settings: s.settings,
-    // 单例无会话上下文：校验/帧解码保持默认（生产经 session 注入按端口配置）
-    checksum: defaultChecksumConfig(),
-    decoder: structuredClone(DEFAULT_DECODER_CONFIG),
-    paused,
-    pauseStartTime,
-    togglePause: () => p.toggle(),
-  })
-})

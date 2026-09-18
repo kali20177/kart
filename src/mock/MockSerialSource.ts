@@ -11,7 +11,7 @@ import {
   waveformTextLabeledChunk,
   shellBanner,
   MockShell
-} from './scenarios'
+} from '@/mock/scenarios'
 
 /** 模拟串口源：用定时器代替真实硬件，提供多种调试场景 */
 export class MockSerialSource implements IoTransport {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import './index' // 导入即注册内置传输（与生产入口一致）
-import { registerTransport, getTransportDef, listTransports } from './registry'
+import { registerTransport, getTransportDef, listTransports } from '@/serial/registry'
 import type { DriverType, IoTransport } from '@/types'
 
 describe('transport registry', () => {

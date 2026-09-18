@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { McpServer, type McpBridge } from './McpServer'
-import { MCP_TOOLS } from '../mcp/contract'
+import { McpServer, type McpBridge } from '@/main/McpServer'
+import { MCP_TOOLS } from '@/mcp/contract'
 
 const PROTOCOL_VERSION = '2025-06-18'
 

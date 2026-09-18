@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MCP_TOOLS, MCP_TOOL_BY_NAME } from './contract'
+import { MCP_TOOLS, MCP_TOOL_BY_NAME } from '@/mcp/contract'
 
 describe('MCP 工具契约', () => {
   it('工具名全局唯一（MCP list_tools 要求）', () => {

@@ -1,10 +1,10 @@
 import { ref, computed } from 'vue'
-import type { IFileWriter } from './useFileWriter'
-import { storage } from './useStorage'
+import type { IFileWriter } from '@/utils/file-writer'
+import { storage } from '@/utils/storage'
 import { persistNow } from '@/utils/persist'
 
 /**
- * 管理录制保存目录的 composable（单例）。
+ * 管理录制保存目录的录制目录服务（模块级单例）。
  * 目录名存入 localStorage 用于跨刷新显示。
  * FileSystemDirectoryHandle 存 IndexedDB 用于跨刷新恢复（浏览器支持时），
  * 不支持时用户只需在设置中点击「选择目录」→ 浏览器自动定位到上次目录。

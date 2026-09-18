@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { sliceChunk, frameChunk, injectCorrupt } from './chunk-framer'
-import { crc16modbus } from './checksum'
+import { sliceChunk, frameChunk, injectCorrupt } from '@/utils/chunk-framer'
+import { crc16modbus } from '@/utils/checksum'
 
 const hex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join(' ')
 

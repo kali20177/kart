@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { modbusRtuDecoder } from './modbus-rtu'
+import { modbusRtuDecoder } from '@/decoders/builtin/modbus-rtu'
 import { modbusFrame } from '@/mock/scenarios'
 import { crc16modbus } from '@/utils/checksum'
 

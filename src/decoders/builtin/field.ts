@@ -1,7 +1,7 @@
 // 内置「字段布局解析器」：按有序字段定义把帧切成带名字段。
 // 字段 offset 省略 = 接续上一字段末尾；帧长不足任一字段或 header 不匹配 → 不匹配。
 
-import type { DecodeField, DecoderDefinition, FieldDef, FieldDecoderOptions, FieldFormat } from '../types'
+import type { DecodeField, DecoderDefinition, FieldDef, FieldDecoderOptions, FieldFormat } from '@/decoders/types'
 import { bytesToHex, parseHexInput } from '@/utils/hex'
 import { decodeBytes } from '@/utils/encoding'
 

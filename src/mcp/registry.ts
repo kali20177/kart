@@ -5,8 +5,8 @@ import { decodeBytes, encodeText, concatBytes, lineEndingBytes } from '@/utils/e
 import { computeChecksum } from '@/utils/checksum'
 import { findTextRanges } from '@/utils/search'
 import { expandCommandVars } from '@/utils/command-vars'
-import type { McpSessionRegistry } from './session-registry'
-import { MCP_TOOL_BY_NAME } from './contract'
+import type { McpSessionRegistry } from '@/mcp/session-registry'
+import { MCP_TOOL_BY_NAME } from '@/mcp/contract'
 
 /**
  * MCP 工具执行上下文——渲染端依赖注入（docs/mcp-design.md §八）。

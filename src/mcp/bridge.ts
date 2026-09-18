@@ -1,4 +1,4 @@
-import type { McpToolRegistry } from './registry'
+import type { McpToolRegistry } from '@/mcp/registry'
 
 /**
  * 把主进程 MCP 桥的 call_tool 请求接到渲染端工具注册表执行，应答回主进程。

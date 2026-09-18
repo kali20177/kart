@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useMessagesStore } from './messages'
-import { useWaveformStore } from './waveform'
-import { usePauseStore } from './pause'
-import { useSettingsStore } from './settings'
+import { useMessagesStore, useWaveformStore, usePauseStore } from '@/stores/singletons'
+import { useSettingsStore } from '@/stores/settings'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 

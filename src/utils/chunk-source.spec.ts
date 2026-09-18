@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { memorySource, fileSource } from './chunk-source'
+import { memorySource, fileSource } from '@/utils/chunk-source'
 
 function pattern(n: number): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(new ArrayBuffer(n))

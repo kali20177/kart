@@ -1,14 +1,14 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import { SerialPortManager } from './SerialPortManager'
-import { TcpManager } from './TcpManager'
-import { PtyManager } from './PtyManager'
-import { JsonStore } from './JsonStore'
-import { Updater } from './Updater'
-import { McpServer, type McpMode } from './McpServer'
-import { createMcpBridge, type ToolCallPayload, type ToolResultPayload } from './mcp-bridge'
-import { mainLogger } from './logger'
+import { SerialPortManager } from '@/main/SerialPortManager'
+import { TcpManager } from '@/main/TcpManager'
+import { PtyManager } from '@/main/PtyManager'
+import { JsonStore } from '@/main/JsonStore'
+import { Updater } from '@/main/Updater'
+import { McpServer, type McpMode } from '@/main/McpServer'
+import { createMcpBridge, type ToolCallPayload, type ToolResultPayload } from '@/main/mcp-bridge'
+import { mainLogger } from '@/main/logger'
 
 // ── 全局错误拦截（必须在最前面注册） ──
 // errorSync 用同步写盘 + stderr 双通道：此时日志可能尚未 init（logDir 为空会回落 stderr），

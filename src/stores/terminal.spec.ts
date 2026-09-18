@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ref, nextTick, reactive } from 'vue'
-import { createTerminalStore, type TerminalDeps } from './terminal'
+import { createTerminalStore, type TerminalDeps } from '@/stores/terminal'
 import type { AppSettings } from '@/types'
 
 const enc = new TextEncoder()

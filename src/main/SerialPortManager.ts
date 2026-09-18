@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { SerialPort } from 'serialport'
-import { mainLogger } from './logger'
+import { mainLogger } from '@/main/logger'
 
 /**
  * macOS 系统伪终端 —— IOKit 将其报告为串口设备，但并非用户可连接的真实串口。

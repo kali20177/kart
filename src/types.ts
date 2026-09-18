@@ -1,5 +1,6 @@
 // 全局共享类型 —— 阶段 2 接入 Web Serial 时这些类型基本保持不变
 import type { DecodeInfo } from '@/decoders/types'
+import type { ChecksumAlgorithm } from '@/utils/checksum'
 
 /** 数据方向 */
 export type Direction = 'rx' | 'tx'
@@ -114,8 +115,8 @@ export interface IoTransport {
   readonly isOpen: boolean
 }
 
-/** 校验和算法标识 */
-export type ChecksumAlgorithm = 'none' | 'sum8' | 'xor8' | 'crc16-modbus' | 'crc32'
+/** 校验和算法标识（定义在 utils/checksum.ts——校验和域类型下沉到实现模块；此处仅转发以兼容既有导入） */
+export type { ChecksumAlgorithm }
 
 /** 自定义快速命令 */
 export interface QuickCommand {

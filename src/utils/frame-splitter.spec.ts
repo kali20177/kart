@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { FrameSplitter } from '@/composables/useFrameSplitter'
+import { FrameSplitter } from '@/utils/frame-splitter'
 import type { FrameConfig } from '@/types'
 
 const base: FrameConfig = { strategy: 'gap-timeout', gapMs: 20, delimiterHex: '0D0A', fixedLength: 4 }

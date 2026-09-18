@@ -1,4 +1,4 @@
-import { getTheme } from './registry'
+import { getTheme } from '@/themes/registry'
 
 /**
  * localStorage settings 里主题字段的迁移 —— main.ts 首帧与 settings store 共用的唯一实现。

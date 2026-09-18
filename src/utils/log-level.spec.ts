@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LEVEL_ORDER, mapConsoleLevel, formatLogLine, splitContextLine } from './log-level'
+import { LEVEL_ORDER, mapConsoleLevel, formatLogLine, splitContextLine } from '@/utils/log-level'
 
 describe('LEVEL_ORDER', () => {
   it('debug < info < warn < error', () => {

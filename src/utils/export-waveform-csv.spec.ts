@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exportWaveformAsCsv } from './export-waveform-csv'
+import { exportWaveformAsCsv } from '@/utils/export-waveform-csv'
 
 /** 构建测试数据：[X, ch1, ch2, ...] */
 function makeData(xs: number[], ...channels: number[][]): number[][] {

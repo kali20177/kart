@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { listThemes } from './registry'
+import { listThemes } from '@/themes/registry'
 
 /**
  * 启动加载页（index.html splash）调色板漂移锁定。

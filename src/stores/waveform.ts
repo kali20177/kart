@@ -1,10 +1,5 @@
-import { defineStore } from 'pinia'
 import { ref, shallowRef, watch, onScopeDispose } from 'vue'
-import { storeToRefs } from 'pinia'
 import type { Ref } from 'vue'
-import { useSettingsStore } from './settings'
-import { useSerialStore } from './serial'
-import { usePauseStore } from './pause'
 import { TextLineParser, type WaveformParser } from '@/utils/waveform-parser'
 import type { WireClockConfig } from '@/utils/waveform-clock'
 import type { WaveformParseConfig } from '@/types'
@@ -303,18 +298,3 @@ export function createWaveformStore(deps: WaveformDeps) {
 
   return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, droppedSamples, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
 }
-
-/** 全局单例（测试与兼容用）。生产代码经 useSession() 取会话内实例，勿直接调用。 */
-export const useWaveformStore = defineStore('waveform', () => {
-  const serial = useSerialStore()
-  const s = useSettingsStore()
-  const p = usePauseStore()
-  const { paused, pauseStartTime } = storeToRefs(p)
-  return createWaveformStore({
-    onData: (cb) => serial.onData(cb),
-    settings: s.settings,
-    paused,
-    pauseStartTime,
-    togglePause: () => p.toggle(),
-  })
-})

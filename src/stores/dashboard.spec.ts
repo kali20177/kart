@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { effectScope } from 'vue'
-import { createDashboardStore, fieldStatus, fieldKey } from './dashboard'
-import type { DashboardWidget } from './dashboard'
-import type { DecodeBroadcast } from './messages'
+import { createDashboardStore, fieldStatus, fieldKey } from '@/stores/dashboard'
+import type { DashboardWidget } from '@/stores/dashboard'
+import type { DecodeBroadcast } from '@/stores/messages'
 
 /** 构造一个解码广播（寄存器字段：标量 fc + 多值 registers） */
 function broadcast(decoderId = 'modbus-rtu', over: Partial<DecodeBroadcast> = {}): DecodeBroadcast {

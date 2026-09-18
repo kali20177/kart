@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bitsPerByte, byteTimeMs, resolveClockDomain, wireBatchXs } from './waveform-clock'
+import { bitsPerByte, byteTimeMs, resolveClockDomain, wireBatchXs } from '@/utils/waveform-clock'
 
 describe('waveform-clock 纯函数', () => {
   it('bitsPerByte：1 起始位 + 数据位 + 校验位 + 停止位', () => {

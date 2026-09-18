@@ -1,7 +1,7 @@
 import { createI18n } from 'vue-i18n'
-import zh from './locales/zh-CN'
-import en from './locales/en-US'
-import { storage } from './composables/useStorage'
+import zh from '@/locales/zh-CN'
+import en from '@/locales/en-US'
+import { storage } from '@/utils/storage'
 
 type Locale = 'zh-CN' | 'en-US'
 
