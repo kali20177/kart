@@ -50,6 +50,14 @@ const buildInfo = {
   }
 }
 
+// 路径别名：三处构建（渲染 / 主进程 / preload）都要显式给。
+// 主进程与 preload 由 vite-plugin-electron 起的子构建**不继承**根 resolve，
+// 全仓统一 `@/` 导入后（src/main/* 也用 `@/main/...`）缺这一行会直接让
+// `electron:build` 在 Rollup 解析阶段失败。
+const alias = {
+  '@': fileURLToPath(new URL('./src', import.meta.url))
+}
+
 export default defineConfig({
   // file:// 加载需相对路径；浏览器构建保持绝对根路径。
   base: isElectron ? './' : '/',
@@ -73,6 +81,7 @@ export default defineConfig({
             main: {
               entry: 'src/main/index.ts',
               vite: {
+                resolve: { alias },
                 build: {
                   outDir: 'dist-electron/main',
                   // 强制 CJS：Electron 主进程以 ESM 导入 CJS 的 electron 模块在
@@ -99,6 +108,7 @@ export default defineConfig({
             preload: {
               input: 'src/preload/index.ts',
               vite: {
+                resolve: { alias },
                 build: {
                   outDir: 'dist-electron/preload',
                   rollupOptions: {
@@ -112,9 +122,7 @@ export default defineConfig({
       : [])
   ],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+    alias
   },
   server: {
     port: 5273
