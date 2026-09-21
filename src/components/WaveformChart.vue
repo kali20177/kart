@@ -183,6 +183,19 @@ function onSetCursor(u: uPlot) {
   tooltipVisible.value = true
 }
 
+/**
+ * X 轴刻度文案（毫秒时间戳 → 可读时刻）。按可视跨度选精度：
+ * 跨天只给日期、跨分钟给时分、更细给到秒——避免毫秒级数字糊满轴。
+ */
+function xTickLabel(ts: number, spanMs: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  if (!Number.isFinite(ts)) return ''
+  if (spanMs >= 24 * 3600 * 1000) return `${d.getMonth() + 1}/${d.getDate()}`
+  if (spanMs >= 60 * 1000) return `${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
 function buildOpts(ch: number, w: number, h: number): uPlot.Options {
   const c = themeColors()
   const series: uPlot.Series[] = [
@@ -200,12 +213,16 @@ function buildOpts(ch: number, w: number, h: number): uPlot.Options {
     width: w,
     height: h,
     series,
-    scales: { x: { time: true }, y: { auto: true } },
+    // X 是 epoch 毫秒（见 utils/waveform/waveform-clock.ts 的时钟权威），而 uPlot 的
+    // `time: true` 尺度按「秒」解释数值——直接开会让刻度落到公元 5 万年。
+    // 故关掉自带时间尺度，刻度文案交给 xTickLabel 按毫秒格式化（与 tooltip/导出一致）。
+    scales: { x: { time: false }, y: { auto: true } },
     axes: [
       {
         stroke: c.textDim,
         grid: { stroke: c.border, width: 1 },
-        ticks: { stroke: c.border, width: 1 }
+        ticks: { stroke: c.border, width: 1 },
+        values: (u, ticks) => ticks.map((t) => xTickLabel(t, u.scales.x.max! - u.scales.x.min!))
       },
       {
         stroke: c.textDim,
