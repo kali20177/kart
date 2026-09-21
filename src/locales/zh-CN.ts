@@ -438,6 +438,10 @@ export default {
     formatTextHint: '每行解析为数值（逗号/空格/分号分隔）',
     maxPoints: '可视窗口点数',
     maxHistoryPoints: '历史缓冲上限',
+    linePrefix: '绘图行标记',
+    linePrefixPlaceholder: '如 > （留空 = 识别所有行）',
+    linePrefixHint:
+      '留空时日志里的数字也会被画成曲线。填入标记后只有带标记的行是绘图数据（标记须顶格，前面可以有二进制帧残渣），其余行一律当文本——日志可以随便打印；标记行写错会在面板上提示，详见「帮助 ▸ 常见问题」。',
     // 连接
     autoReconnect: '掉线自动重连',
     // 终端
@@ -507,6 +511,9 @@ export default {
     clear: '清空',
     pauseNotice: '暂停期间未显示数据: {start} – {end} ({dur}s)',
     droppedSamples: '历史缓冲已满，已丢弃 {n} 采样',
+    parseIssues: '{n} 行绘图数据被拒',
+    parseIssuesTip:
+      '这些行以绘图标记开头，但内容不是合法的数值/标签:数值，已整行丢弃（不会画成曲线）。检查固件里这行是不是拼错了；若本来就是日志，说明它误用了标记字符，可到「设置 ▸ 波形解析」改标记。最近一条：',
     breakLabel: '⏸ 断点',
     export: '导出',
     exportCsvVisible: 'CSV（可见窗口）',

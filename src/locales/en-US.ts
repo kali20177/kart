@@ -434,6 +434,10 @@ export default {
     formatTextHint: 'Parse each line as numbers (comma/space/semicolon separated)',
     maxPoints: 'Visible Points',
     maxHistoryPoints: 'History Buffer Limit',
+    linePrefix: 'Plot Line Marker',
+    linePrefixPlaceholder: 'e.g. > (empty = accept every line)',
+    linePrefixHint:
+      'Left empty, numbers inside log text get plotted as curves too. Set a marker and only marked lines are plot data (the marker stands at column 0; binary frame residue may precede it), every other line stays text — print any log you like. A malformed marked line is reported on the panel — see Help ▸ Knowledge Base.',
     autoReconnect: 'Auto Reconnect on Disconnect',
     terminal: 'Terminal',
     fontFamily: 'Font',
@@ -500,6 +504,9 @@ export default {
     clear: 'Clear',
     pauseNotice: 'Data not shown during pause: {start} – {end} ({dur}s)',
     droppedSamples: 'History full — {n} samples dropped',
+    parseIssues: '{n} plot lines rejected',
+    parseIssuesTip:
+      'These lines start with the plot marker but are not valid numbers/label:value pairs, so the whole line was discarded (never plotted). Check the firmware line for a typo; if it is meant to be a log line, it is colliding with the marker character — change the marker in Settings ▸ Waveform. Latest one:',
     breakLabel: '⏸ Break',
     export: 'Export',
     exportCsvVisible: 'CSV (Visible)',

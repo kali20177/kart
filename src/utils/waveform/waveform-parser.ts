@@ -1,4 +1,4 @@
-import { parseTextSamples } from '@/utils/waveform/text-parser'
+import { parseTextSamples, type ParseOptions } from '@/utils/waveform/text-parser'
 import { bitsPerByte, byteTimeMs, wireBatchXs, type WireClockConfig } from '@/utils/waveform/waveform-clock'
 
 /**
@@ -22,13 +22,25 @@ export interface WaveformParserResult {
   perChannel: number[][]
 }
 
+/** 解析健康度快照——「静默解读错」的反面：标记模式的报错面，供波形面板提示用户 */
+export interface ParseIssues {
+  /** 标记行内出现非法 token 而被整行作废的累计条数 */
+  rejected: number
+  /** 未终止长行超过上限被丢弃的累计次数（设备长时间不发换行） */
+  truncated: number
+  /** 最近一条被拒的标记行内容（'' = 无） */
+  lastRejected: string
+}
+
 export interface WaveformParser {
   /** 解析一批字节 → 新增采样。now 为本批到达的真实时间戳，供到达域/锚点使用。 */
   ingest(bytes: Uint8Array, now: number): WaveformParserResult
   /** 当前通道标签名（无标签数据为空数组；store 同步到响应式 textLabels） */
   readonly labels: readonly string[]
-  /** 重置内部状态（carryover / labelIndex / lastSampleX / 时钟锚点）；清空或切换协议时调用 */
+  /** 重置内部状态（carryover / labelIndex / lastSampleX / 时钟锚点 / 解析报错计数）；清空或切换协议时调用 */
   reset(): void
+  /** 解析健康度快照（可选实现：不支持上报的解析器可不提供） */
+  readonly issues?: ParseIssues
 }
 
 /** 复用同一编码器（encode 无状态），避免每批新建实例 */
@@ -62,14 +74,29 @@ export class TextLineParser implements WaveformParser {
   private _labels: string[] = []
   private lastSampleX = -Infinity
   private clock?: () => WireClockConfig
+  private linePrefix?: () => string
+  private _issues: ParseIssues = { rejected: 0, truncated: 0, lastRejected: '' }
 
-  constructor(clock?: () => WireClockConfig) {
+  constructor(clock?: () => WireClockConfig, linePrefix?: () => string) {
     this.clock = clock
+    this.linePrefix = linePrefix
   }
 
   ingest(bytes: Uint8Array, now: number): WaveformParserResult {
-    const { perChannel, remainder } = parseTextSamples(bytes, this.carryover, this.labelIndex)
+    // 标记前缀每次 ingest 实时读取（与 clock 同法）：运行中改设置无需重建解析器
+    const opts: ParseOptions = { linePrefix: this.linePrefix?.() ?? '' }
+    const { perChannel, remainder, rejected, remainderTruncated } = parseTextSamples(
+      bytes,
+      this.carryover,
+      this.labelIndex,
+      opts
+    )
     this.carryover = remainder
+    if (rejected.length > 0) {
+      this._issues.rejected += rejected.length
+      this._issues.lastRejected = rejected[rejected.length - 1]
+    }
+    if (remainderTruncated) this._issues.truncated += 1
 
     // 同步 labelIndex → labels：新标签出现时按索引补位
     if (this.labelIndex.size !== this._labels.length) {
@@ -118,11 +145,16 @@ export class TextLineParser implements WaveformParser {
     return this._labels
   }
 
+  get issues(): ParseIssues {
+    return this._issues
+  }
+
   reset(): void {
     this.carryover = ''
     this.remainderBytes = 0
     this.labelIndex = new Map()
     this._labels = []
     this.lastSampleX = -Infinity
+    this._issues = { rejected: 0, truncated: 0, lastRejected: '' }
   }
 }

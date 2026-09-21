@@ -424,3 +424,44 @@ describe('waveform store · 历史缓冲裁剪 droppedSamples', () => {
     expect(wf.droppedSamples).toBe(0)
   })
 })
+
+describe('waveform store 绘图行标记（parseIssues）', () => {
+  it('默认宽松模式：日志里的数字会被当成采样（历史行为不变）', () => {
+    const settings = useSettingsStore()
+    expect(settings.settings.waveform.parse.linePrefix).toBeUndefined()
+    const wf = useWaveformStore()
+    wf.ingest(enc('[W25Q64] 8 MB, 128 blocks\n'))
+    expect(wf.data[1]).toEqual([8])
+    expect(wf.parseIssues.rejected).toBe(0)
+  })
+
+  it('填了标记：日志行不再产生采样，标记行正常取值', () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.linePrefix = '>'
+    const wf = useWaveformStore()
+    wf.ingest(enc('[W25Q64] 8 MB, 128 blocks\n>Temp:28.05,Pressure:1016.67\n'))
+    expect(wf.data[1]).toEqual([28.05])
+    expect(wf.data[2]).toEqual([1016.67])
+    expect(wf.parseIssues.rejected).toBe(0)
+  })
+
+  it('标记行写错：上报 parseIssues（含最近一条）供面板提示', () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.linePrefix = '>'
+    const wf = useWaveformStore()
+    wf.ingest(enc('>Temp:28.05,mark\n'))
+    expect(wf.parseIssues.rejected).toBe(1)
+    expect(wf.parseIssues.lastRejected).toBe('>Temp:28.05,mark')
+    expect(wf.data[0].length).toBe(0)
+  })
+
+  it('clear 重置报错计数', () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.linePrefix = '>'
+    const wf = useWaveformStore()
+    wf.ingest(enc('>bad\n'))
+    expect(wf.parseIssues.rejected).toBe(1)
+    wf.clear()
+    expect(wf.parseIssues).toEqual({ rejected: 0, truncated: 0, lastRejected: '' })
+  })
+})

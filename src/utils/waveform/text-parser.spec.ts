@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseTextSamples } from '@/utils/waveform/text-parser'
+import { parseTextSamples, MAX_REMAINDER } from '@/utils/waveform/text-parser'
 
 const encoder = new TextEncoder()
 const enc = (s: string) => encoder.encode(s)
@@ -175,5 +175,132 @@ describe('parseTextSamples 标签化多通道', () => {
     // 无 labelIndex → "Sin:0.5" 和 "Cos:0.86" 都当无标签 token，按位置落通道 0、1
     expect(perChannel[0]).toEqual([0.5])
     expect(perChannel[1]).toEqual([0.86])
+  })
+})
+
+describe('parseTextSamples 标记模式（linePrefix）', () => {
+  const marker = { linePrefix: '>' }
+
+  /** 真机 rb-demo 实测日志行：宽松模式下它的 4 个裸数字会被当成 4 个采样值（污染源） */
+  const LOG_W25Q64 =
+    '[INF][    444] flash_demo(Dev::W25Q64&) at /Users/x/bsp_demo.cpp:71 [W25Q64] detected JEDEC 0xef4017, 8 MB, 128 blocks, 2048 sectors, 32768 pages\n'
+  /** 真机实测：I2C 计数行（另一个污染源） */
+  const LOG_I2C =
+    '[INF][     41] i2c_scan(HAL::STM32F1xx::I2C_t&) at /Users/x/bsp_demo.cpp:28 [I2C] scan complete, 1 device(s)\n'
+
+  it('宽松模式下真机日志行会污染波形（记录标记模式要解决的问题）', () => {
+    const idx = new Map<string, number>()
+    const { perChannel } = parseTextSamples(enc(LOG_W25Q64), '', idx)
+    // 8 MB / 128 blocks / 2048 sectors / 32768 pages → 4 个裸数字被当成 4 个通道的值
+    expect(perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([8, 128, 2048, 32768])
+  })
+
+  it('只认前缀行：日志行一律不成点，标记行正常取值', () => {
+    const idx = new Map<string, number>()
+    const { perChannel, rejected } = parseTextSamples(
+      enc(LOG_W25Q64 + '>Temp:28.05,Pressure:1016.67\n' + LOG_I2C + '>Temp:28.10,Pressure:1016.70\n'),
+      '',
+      idx,
+      marker
+    )
+    expect(rejected).toEqual([])
+    expect(perChannel[0]).toEqual([28.05, 28.1])
+    expect(perChannel[1]).toEqual([1016.67, 1016.7])
+    expect([...idx.keys()]).toEqual(['Temp', 'Pressure'])
+  })
+
+  it('前缀后的内容才参与取值（前缀本身不是数据）', () => {
+    const { perChannel } = parseTextSamples(enc('>Temp:28.05\n'), '', new Map(), marker)
+    expect(perChannel[0]).toEqual([28.05])
+  })
+
+  it('标记必须顶格：空白缩进的标记行当文本处理', () => {
+    const { perChannel } = parseTextSamples(enc('  >Temp:28.05\n'), '', new Map(), marker)
+    expect(perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
+  })
+
+  it('标记前是二进制帧残渣（控制字节）→ 仍识别为标记行（真机 RTT 混流场景）', () => {
+    // 真机实测：DictLog 帧尾不带换行，文本行被粘在帧末字节之后（0x08）
+    const frameTail = '\x03\x00\x00\x00\x52\x02\x00\x00\x30\x05\x02\x08'
+    const { perChannel, rejected } = parseTextSamples(
+      enc(frameTail + '>Temp:26.6,Pressure:1015.3\n'),
+      '',
+      new Map(),
+      marker
+    )
+    expect(rejected).toEqual([])
+    expect(perChannel[0]).toEqual([26.6])
+    expect(perChannel[1]).toEqual([1015.3])
+  })
+
+  it('标记前是可打印文本 → 不算标记行（日志里的 > 不被当成数据）', () => {
+    const { perChannel, rejected } = parseTextSamples(enc('x>1,2\n'), '', new Map(), marker)
+    expect(rejected).toEqual([])
+    expect(perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
+  })
+
+  it('标记行内含非法 token -> 整行作废并上报（不静默成点）', () => {
+    const { perChannel, rejected } = parseTextSamples(
+      enc('>Temp:28.05,mark\n>Temp:28.10\n'),
+      '',
+      new Map(),
+      marker
+    )
+    expect(rejected).toEqual(['>Temp:28.05,mark'])
+    expect(perChannel[0]).toEqual([28.1])
+  })
+
+  it('前缀后为空 -> 作废上报', () => {
+    const { perChannel, rejected } = parseTextSamples(enc('>\n'), '', new Map(), marker)
+    expect(rejected).toEqual(['>'])
+    expect(perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
+  })
+
+  it('以标记字符开头的日志行 -> 被拒并可见（而非静默画错）', () => {
+    const { perChannel, rejected } = parseTextSamples(
+      enc('>sensor read failed, retrying in 500 ms\n'),
+      '',
+      new Map(),
+      marker
+    )
+    expect(rejected).toHaveLength(1)
+    expect(perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
+  })
+
+  it('标记行的半截跨批拼接（carryover）后正常成点', () => {
+    const idx = new Map<string, number>()
+    const first = parseTextSamples(enc('>Temp:2'), '', idx, marker)
+    expect(first.perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
+    const second = parseTextSamples(enc('8.05,Pressure:1016.67\n'), first.remainder, idx, marker)
+    expect(second.perChannel[0]).toEqual([28.05])
+    expect(second.perChannel[1]).toEqual([1016.67])
+  })
+
+  it('未传 opts 时行为与历史一致（宽松模式回归）', () => {
+    const { perChannel } = parseTextSamples(enc('Temp:28.05\n'), '', new Map())
+    expect(perChannel[0]).toEqual([28.05])
+  })
+})
+
+describe('parseTextSamples 未终止长行上限', () => {
+  it('carryover 超上限被丢弃并标记，不再无界增长', () => {
+    const { remainder, remainderTruncated } = parseTextSamples(enc('x'.repeat(MAX_REMAINDER + 1)))
+    expect(remainderTruncated).toBe(true)
+    expect(remainder).toBe('')
+  })
+
+  it('恰好等于上限不丢（边界）', () => {
+    const { remainder, remainderTruncated } = parseTextSamples(enc('x'.repeat(MAX_REMAINDER)))
+    expect(remainderTruncated).toBe(false)
+    expect(remainder).toHaveLength(MAX_REMAINDER)
+  })
+
+  it('丢弃后下一批正常数据仍能成点', () => {
+    const idx = new Map<string, number>()
+    const first = parseTextSamples(enc('y'.repeat(MAX_REMAINDER + 10)), '', idx)
+    expect(first.remainder).toBe('')
+    const second = parseTextSamples(enc('1,2\n'), first.remainder, idx)
+    expect(second.perChannel[0]).toEqual([1])
+    expect(second.perChannel[1]).toEqual([2])
   })
 })

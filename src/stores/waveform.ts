@@ -1,6 +1,6 @@
 import { ref, shallowRef, watch, onScopeDispose } from 'vue'
 import type { Ref } from 'vue'
-import { TextLineParser, type WaveformParser } from '@/utils/waveform/waveform-parser'
+import { TextLineParser, type ParseIssues, type WaveformParser } from '@/utils/waveform/waveform-parser'
 import type { WireClockConfig } from '@/utils/waveform/waveform-clock'
 import type { WaveformParseConfig } from '@/types'
 
@@ -87,8 +87,23 @@ export function createWaveformStore(deps: WaveformDeps) {
 
   // 解析器实例（自持 carryover / labelIndex / lastSampleX / 时钟锚点等状态）。
   // 切换协议 = 换实例 + clear()；当前固定为文本行解析器（时钟由 deps.clock 注入，
-  // 串口会话为合成位时钟，网络会话为到达时间）。
-  const parser: WaveformParser = new TextLineParser(deps.clock)
+  // 串口会话为合成位时钟，网络会话为到达时间；标记前缀同样按实时读取，见下）。
+  const parser: WaveformParser = new TextLineParser(
+    deps.clock,
+    // 绘图行标记前缀实时读取：留空 = 宽松模式（日志里的数字也会成点），非空 = 标记模式。
+    // 与 clock 同法——运行中改设置不必重建解析器（配置 watch 仍会清空缓冲，见下）。
+    () => deps.settings.waveform.parse?.linePrefix ?? ''
+  )
+
+  // 解析健康度快照（标记模式被拒行 / 超长行丢弃），供面板提示；仅值变化时替换以少触发渲染
+  const parseIssues = ref<ParseIssues>({ rejected: 0, truncated: 0, lastRejected: '' })
+  function syncParseIssues(): void {
+    const s = parser.issues
+    if (!s) return
+    const cur = parseIssues.value
+    if (s.rejected === cur.rejected && s.truncated === cur.truncated && s.lastRejected === cur.lastRejected) return
+    parseIssues.value = { rejected: s.rejected, truncated: s.truncated, lastRejected: s.lastRejected }
+  }
   // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
   const resumeBreakX = ref(-1)
 
@@ -114,6 +129,7 @@ export function createWaveformStore(deps: WaveformDeps) {
   function ingest(bytes: Uint8Array) {
     if (paused.value) return
     const { xs, perChannel } = parser.ingest(bytes, Date.now())
+    syncParseIssues()
 
     // 同步 parser.labels → textLabels：新标签出现时自动追加
     const labels = parser.labels
@@ -179,6 +195,7 @@ export function createWaveformStore(deps: WaveformDeps) {
   /** 清空缓冲（解析器状态、通道数、计数器一并重置；X 轴从下一批采样重新起算；缩放一并重置） */
   function clear() {
     parser.reset()
+    syncParseIssues()
     textLabels.value = []
     channelCount.value = 1
     resumeBreakX.value = -1
@@ -296,5 +313,5 @@ export function createWaveformStore(deps: WaveformDeps) {
     _unsubData = null
   })
 
-  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, droppedSamples, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
+  return { data, history, version, paused, pauseStartTime, resumeBreakX, viewOffset, viewSize, zoomed, textLabels, channelCount, droppedSamples, parseIssues, ingest, clear, togglePause, setViewOffset, resetView, zoom, resetZoom }
 }

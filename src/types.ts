@@ -151,15 +151,25 @@ export interface FrameConfig {
 
 /** 波形解析配置：把连续字节流解析为多通道采样。
  *
- * 当前仅实现文本行解析（Arduino Serial.println 风格），通道数由数据内容自动检测：
+ * 文本行解析（Arduino Serial.println 风格），通道数由数据内容自动检测：
  * - 无标签数值行（如 `1,2\n`）：按 token 数量自动扩容
  * - 标签化行（如 `Sin:0.5,Cos:0.86\n`）：按标签名自动分配通道
  *
+ * 两种模式由 `linePrefix` 切换：
+ * - **宽松模式**（留空，默认）：任意行都可能产生采样——只要行内有能独立成数的 token。
+ *   日志与波形同流时，日志散文里的数字会被当成采样值（如 `8 MB, 128 blocks` → 两个通道）。
+ * - **标记模式**（非空，如 `>`）：只有带该标记的行才是数据（Teleplot 约定，标记为该行
+ *   第一个可打印内容），其余行一律当文本；且标记行内 token 必须全部合法，否则整行作废
+ *   并计入可见报错。日志可以任意打印，宿主不再猜。
+ *
  * 未来扩展新协议时：在此新增协议标识及专属配置字段，
  * 并在 waveform store 中按协议分发到对应 WaveformParser 实现类。 */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface WaveformParseConfig {
-
+  /**
+   * 绘图行标记前缀。留空 = 宽松模式；非空 = 标记模式（只认带该标记的行）。
+   * 标记必须是该行的第一个可打印内容（行首，或紧跟二进制帧残渣之后），
+   * 且标记之后的内容不能含无法解析的 token。 */
+  linePrefix?: string
 }
 
 /** 波形视图设置 */

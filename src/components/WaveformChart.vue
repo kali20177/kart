@@ -506,6 +506,19 @@ watch(
   }
 )
 
+// 解析报错标签：标记模式下有标记行被拒（或超长未终止行被丢）时显示。
+// 与「丢弃采样」标签同款交互（可关闭 + 清零后重新计数），但用 error 色——这是用户要修的格式问题。
+const issuesTagDismissed = ref(false)
+const showIssuesTag = computed(
+  () => (waveform.parseIssues.rejected > 0 || waveform.parseIssues.truncated > 0) && !issuesTagDismissed.value
+)
+watch(
+  () => waveform.parseIssues.rejected + waveform.parseIssues.truncated,
+  (n, prev) => {
+    if (prev === 0 && n > 0) issuesTagDismissed.value = false
+  }
+)
+
 const pointCount = computed(() => {
   // data 是 shallowRef 且原地修改（push/slice 不替换 .value），length 变化不触发响应式。
   // 借 version 作更新信号：每次 ingest / 配置变更都自增，驱动此处重算。
@@ -572,6 +585,19 @@ function handleExport(key: string) {
       >
         {{ t('waveform.droppedSamples', { n: waveform.droppedSamples }) }}
       </NTag>
+      <NTooltip v-if="showIssuesTag">
+        <template #trigger>
+          <NTag size="small" closable type="error" :bordered="false" @close="issuesTagDismissed = true">
+            {{ t('waveform.parseIssues', { n: waveform.parseIssues.rejected + waveform.parseIssues.truncated }) }}
+          </NTag>
+        </template>
+        <div style="max-width: 420px; line-height: 1.6">
+          {{ t('waveform.parseIssuesTip') }}
+          <div v-if="waveform.parseIssues.lastRejected" style="margin-top: 4px; opacity: 0.8">
+            {{ waveform.parseIssues.lastRejected }}
+          </div>
+        </div>
+      </NTooltip>
       <NButton
         v-for="i in channels()"
         :key="i"

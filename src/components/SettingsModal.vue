@@ -45,6 +45,13 @@ const serial = computed(() => props.session?.serial ?? { customBaudRates: [] })
 
 const activeTab = ref('receive')
 
+// 绘图行标记前缀：设置里缺省为 undefined（宽松模式），输入框需要 string 值，
+// 故用 computed 归一化——留空串写回即宽松模式（空串与 undefined 在解析层等价）。
+const linePrefixInput = computed({
+  get: () => s.waveform.parse.linePrefix ?? '',
+  set: (v: string) => { s.waveform.parse.linePrefix = v },
+})
+
 const encodingOptions = computed(() => [
   { label: 'UTF-8', value: 'utf-8' },
   { label: 'ASCII', value: 'ascii' },
@@ -441,6 +448,19 @@ async function copyClientConfig() {
               a,b / a b / a;b<br>
               Sin:0.5, Cos:0.86 (label:value)
             </span>
+          </NFormItem>
+          <NFormItem :label="t('settings.linePrefix')">
+            <div style="width: 100%">
+              <NInput
+                v-model:value="linePrefixInput"
+                :placeholder="t('settings.linePrefixPlaceholder')"
+                :maxlength="4"
+                clearable
+              />
+              <div style="margin-top: 6px; color: var(--text-dim); font-size: 12px; line-height: 1.6">
+                {{ t('settings.linePrefixHint') }}
+              </div>
+            </div>
           </NFormItem>
           <NFormItem>
             <template #label>

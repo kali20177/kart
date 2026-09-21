@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { TextLineParser } from '@/utils/waveform/waveform-parser'
+import { MAX_REMAINDER } from '@/utils/waveform/text-parser'
 import type { WireClockConfig } from '@/utils/waveform/waveform-clock'
 
 const enc = (s: string) => new TextEncoder().encode(s)
@@ -94,5 +95,46 @@ describe('TextLineParser 时钟域（X 策略）', () => {
     const r = p.ingest(enc('2\n'), 1000)
     expect(r.perChannel[0]).toEqual([2]) // carryover 已清，'2' 独立成行
     expect(r.xs[0]).toBeCloseTo(1000 + 2 * BYTE_MS, 9) // 锚点未被旧流拖住
+  })
+})
+
+describe('TextLineParser 标记模式与解析报错面', () => {
+  it('标记前缀实时读取：同一实例改取值即生效，无需重建解析器', () => {
+    let prefix = ''
+    const p = new TextLineParser(undefined, () => prefix)
+    // 宽松模式：日志里的裸数字成点（8、128 各占一个通道）
+    expect(
+      p.ingest(enc('[W25Q64] 8 MB, 128 blocks\n'), 1000).perChannel.flat().filter((v) => !Number.isNaN(v))
+    ).toEqual([8, 128])
+    prefix = '>'
+    // 切到标记模式后同一日志行不再成点
+    const r = p.ingest(enc('[W25Q64] 8 MB, 128 blocks\n'), 1001)
+    expect(r.perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
+    expect(p.ingest(enc('>T:28.05\n'), 1002).perChannel[0]).toEqual([28.05])
+  })
+
+  it('issues 累计被拒行并记住最近一条；reset 归零', () => {
+    const p = new TextLineParser(undefined, () => '>')
+    expect(p.issues).toEqual({ rejected: 0, truncated: 0, lastRejected: '' })
+    p.ingest(enc('>T:28.05,mark\n>ok\n'), 1000)
+    expect(p.issues.rejected).toBe(2)
+    expect(p.issues.lastRejected).toBe('>ok')
+    p.reset()
+    expect(p.issues).toEqual({ rejected: 0, truncated: 0, lastRejected: '' })
+  })
+
+  it('issues 记录超长未终止行（truncated），不误记为 rejected', () => {
+    const p = new TextLineParser(undefined, () => '>')
+    p.ingest(enc('x'.repeat(MAX_REMAINDER + 1)), 1000)
+    expect(p.issues.truncated).toBe(1)
+    expect(p.issues.rejected).toBe(0)
+  })
+
+  it('标记模式下 X 仍单调推进，日志行不插入采样点', () => {
+    const p = new TextLineParser(() => wire(), () => '>')
+    const r = p.ingest(enc('log line 1 2 3\n>T:1\nlog 4 5\n>T:2\n'), 1000)
+    expect(r.perChannel[0]).toEqual([1, 2])
+    expect(r.xs).toHaveLength(2)
+    expect(r.xs[1]).toBeGreaterThan(r.xs[0])
   })
 })
