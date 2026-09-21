@@ -39,7 +39,7 @@ function onNext() {
     <div class="kb">
       <div class="kb-head">
         <div class="kb-title">{{ t(entry.titleKey) }}</div>
-        <div class="kb-summary">{{ t(entry.summaryKey) }}</div>
+        <div v-if="entry.summaryKey" class="kb-summary">{{ t(entry.summaryKey) }}</div>
       </div>
       <div class="kb-body">
         <template v-for="(block, i) in entry.blocks" :key="i">

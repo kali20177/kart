@@ -21,7 +21,8 @@ export interface KBBlock {
 export interface KBEntryMeta {
   id: string
   titleKey: string
-  summaryKey: string
+  /** 摘要（可选）：只有需要一句话概览的条目才写；缺省则不渲染摘要行 */
+  summaryKey?: string
   blocks: KBBlock[]
 }
 
@@ -53,6 +54,43 @@ export const KB_ENTRIES: KBEntryMeta[] = [
       { type: 'text', text: 'knowBase.entries.cannotOpenPort.b2' },
       { type: 'text', text: 'knowBase.entries.cannotOpenPort.b3' },
       { type: 'text', text: 'knowBase.entries.cannotOpenPort.b4' }
+    ]
+  },
+  {
+    id: 'waveform-format',
+    titleKey: 'knowBase.entries.waveformFormat.title',
+    blocks: [
+      { type: 'text', text: 'knowBase.entries.waveformFormat.b0' },
+      { type: 'code', lines: ['>1,2,3,4', '>Sin:0.5,Cos:0.86,Temp:27.5,Pressure:1016.0'] },
+      { type: 'text', text: 'knowBase.entries.waveformFormat.b1' },
+      { type: 'text', text: 'knowBase.entries.waveformFormat.b2' },
+      {
+        type: 'code',
+        lines: ['>Temp:27.5,Pressure:1016.0', '[INFO] heap 8192 bytes, 3 tasks']
+      },
+      { type: 'text', text: 'knowBase.entries.waveformFormat.b2b' },
+      { type: 'text', text: 'knowBase.entries.waveformFormat.b3' },
+      {
+        type: 'code',
+        lines: ['Serial.print(">"); Serial.print(t); Serial.print(","); Serial.println(p);']
+      },
+      { type: 'text', text: 'knowBase.entries.waveformFormat.b4' },
+      {
+        type: 'table',
+        table: {
+          headers: [
+            'knowBase.entries.waveformFormat.tblRule',
+            'knowBase.entries.waveformFormat.tblWhy'
+          ],
+          rows: [
+            ['knowBase.entries.waveformFormat.r1k', 'knowBase.entries.waveformFormat.r1v'],
+            ['knowBase.entries.waveformFormat.r2k', 'knowBase.entries.waveformFormat.r2v'],
+            ['knowBase.entries.waveformFormat.r3k', 'knowBase.entries.waveformFormat.r3v'],
+            ['knowBase.entries.waveformFormat.r4k', 'knowBase.entries.waveformFormat.r4v']
+          ]
+        }
+      },
+      { type: 'text', text: 'knowBase.entries.waveformFormat.b5' }
     ]
   },
   {
