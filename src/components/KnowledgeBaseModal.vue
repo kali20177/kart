@@ -106,6 +106,12 @@ function onNext() {
   height: 320px;
   overflow-y: auto;
 }
+/* 滚动容器里的 flex 列：子项一律禁止收缩。带 overflow 的子项（代码块 overflow-x: auto，
+ * 另一轴随之按 auto 处理）在 flex 布局下自动最小尺寸为 0，会被压成一行高、内容整段裁掉
+ * ——表现为多行代码只剩一条水平滚动条。超高由 .kb-body 滚动，而不是压缩子项。 */
+.kb-body > * {
+  flex-shrink: 0;
+}
 .kb-text {
   margin: 0;
 }
@@ -118,8 +124,9 @@ function onNext() {
   font-family: var(--mono-font);
   font-size: 12px;
   line-height: 1.6;
-  overflow-x: auto;
-  white-space: pre;
+  /* 保留缩进与换行，但长行折行显示：文档里被横向滚动条藏住的部分等于没写出来 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 /* 表格块：长内容按列自动换行，无需横向滚动 */
 .kb-table {
@@ -145,7 +152,13 @@ function onNext() {
   color: var(--text);
   word-break: break-word;
 }
-.kb-table td:nth-child(2) {
+/* 首列是行标签（信号类别 / 约定名），保持一行不折；说明文字都在后面的列里 */
+.kb-table td:first-child {
+  white-space: nowrap;
+}
+/* 中间列按「短标识符」呈现（等宽 + 不换行，见 rs232 信号线表的信号名）；
+   末列是说明列，必须允许换行——否则长句会被裁掉半截（2 列表格的第 2 列即末列）。 */
+.kb-table td:nth-child(2):not(:last-child) {
   font-family: var(--mono-font);
   white-space: nowrap;
 }
