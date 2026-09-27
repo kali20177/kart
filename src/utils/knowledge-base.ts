@@ -72,7 +72,7 @@ export const KB_ENTRIES: KBEntryMeta[] = [
       { type: 'text', text: 'knowBase.entries.waveformFormat.b3' },
       {
         type: 'code',
-        lines: ['Serial.print(">"); Serial.print(t); Serial.print(","); Serial.println(p);']
+        lines: ['printf(">Temp:%.2f,Pressure:%.2f\\n", temp, pressure);']
       },
       { type: 'text', text: 'knowBase.entries.waveformFormat.b4' },
       {
