@@ -267,6 +267,23 @@ describe('parseTextSamples 标记模式（linePrefix）', () => {
     expect(perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
   })
 
+  it('上报被当文本跳过的行数（unmarkedLines）：标记没顶上时波形全空的唯一线索', () => {
+    const { perChannel, rejected, unmarkedLines } = parseTextSamples(
+      enc(LOG_W25Q64 + ' >Temp:28.05\n' + LOG_I2C),
+      '',
+      new Map(),
+      marker
+    )
+    // 两行日志 + 一行「标记前多打了空格」（未顶格）→ 3 行被当文本，且一条数据都没成点
+    expect(unmarkedLines).toBe(3)
+    expect(rejected).toEqual([]) // 未匹配标记 ≠ 写错：不该混进被拒计数
+    expect(perChannel.flat().filter((v) => !Number.isNaN(v))).toEqual([])
+  })
+
+  it('宽松模式恒为 0（该计数只属于标记模式）', () => {
+    expect(parseTextSamples(enc('log 1 2 3\n'), '', new Map()).unmarkedLines).toBe(0)
+  })
+
   it('标记行的半截跨批拼接（carryover）后正常成点', () => {
     const idx = new Map<string, number>()
     const first = parseTextSamples(enc('>Temp:2'), '', idx, marker)

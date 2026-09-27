@@ -97,9 +97,14 @@ export const useSettingsStore = defineStore('settings', () => {
   // mcp 浅合并兜底（同 terminal）：旧存档无 mcp 字段/缺字段时补默认（默认 off）
   settings.mcp = { ...DEFAULTS.mcp, ...settings.mcp }
   // waveform 兜底（同 terminal）：waveform 整体覆盖 DEFAULTS.waveform，且 parse 是嵌套对象，
-  // 旧存档可能整个缺 parse。补空对象 = 宽松模式（历史行为），故升级后波形行为不变；
-  // 标记模式（parse.linePrefix）需用户显式配置才生效。
-  settings.waveform = { ...DEFAULTS.waveform, ...settings.waveform, parse: { ...settings.waveform.parse } }
+  // 旧存档可能整个缺 parse。两层都要合并 DEFAULTS——只 spread persisted 会把 DEFAULTS.parse
+  // 的字段一并抹掉（将来给 parse 加默认值时，旧存档会静默拿不到）。缺 parse = 宽松模式
+  // （历史行为），故升级后波形行为不变；标记模式（parse.linePrefix）需用户显式配置才生效。
+  settings.waveform = {
+    ...DEFAULTS.waveform,
+    ...settings.waveform,
+    parse: { ...DEFAULTS.waveform.parse, ...settings.waveform.parse }
+  }
 
   // 是否自动把配置落盘（菜单「文件 ▸ 自动保存配置」开关）。
   // 开关标志本身始终持久化；它只决定 settings 内容是否自动写入本地存储。

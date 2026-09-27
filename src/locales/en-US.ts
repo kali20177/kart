@@ -527,6 +527,12 @@ export default {
     parseIssues: '{n} plot lines rejected',
     parseIssuesTip:
       'These lines start with the plot marker but are not valid numbers/label:value pairs, so the whole line was discarded (never plotted). Check the firmware line for a typo; if it is meant to be a log line, it is colliding with the marker character — change the marker in Settings ▸ Waveform. Latest one:',
+    truncatedLines: '{n} unterminated line(s) dropped',
+    truncatedLinesTip:
+      'The device sent a long run of bytes without a newline, so that segment was dropped — otherwise the buffer would grow without bound and glue later data onto the same malformed line. Check that the firmware terminates every line with a newline (println).',
+    noMarkedLine: 'no plot line starting with {p}',
+    noMarkedLineTip:
+      'The plot marker "{p}" is set, but no incoming text line starts with it and nothing has been plotted. The usual cause is a marker that does not sit at column 0 (print(" "); print(">") leaves a leading space), or a marker character that does not match the firmware.',
     breakLabel: '⏸ Break',
     export: 'Export',
     exportCsvVisible: 'CSV (Visible)',

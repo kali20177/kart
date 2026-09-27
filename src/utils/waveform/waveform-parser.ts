@@ -28,6 +28,9 @@ export interface ParseIssues {
   rejected: number
   /** 未终止长行超过上限被丢弃的累计次数（设备长时间不发换行） */
   truncated: number
+  /** 标记模式下被当作文本跳过的非空行数（宽松模式恒为 0）。
+   *  面板据此提示「标记没对上」——标记没顶格或写错时，数据全部落到这里而波形全空。 */
+  unmarkedLines: number
   /** 最近一条被拒的标记行内容（'' = 无） */
   lastRejected: string
 }
@@ -75,7 +78,7 @@ export class TextLineParser implements WaveformParser {
   private lastSampleX = -Infinity
   private clock?: () => WireClockConfig
   private linePrefix?: () => string
-  private _issues: ParseIssues = { rejected: 0, truncated: 0, lastRejected: '' }
+  private _issues: ParseIssues = { rejected: 0, truncated: 0, unmarkedLines: 0, lastRejected: '' }
 
   constructor(clock?: () => WireClockConfig, linePrefix?: () => string) {
     this.clock = clock
@@ -85,7 +88,7 @@ export class TextLineParser implements WaveformParser {
   ingest(bytes: Uint8Array, now: number): WaveformParserResult {
     // 标记前缀每次 ingest 实时读取（与 clock 同法）：运行中改设置无需重建解析器
     const opts: ParseOptions = { linePrefix: this.linePrefix?.() ?? '' }
-    const { perChannel, remainder, rejected, remainderTruncated } = parseTextSamples(
+    const { perChannel, remainder, rejected, unmarkedLines, remainderTruncated } = parseTextSamples(
       bytes,
       this.carryover,
       this.labelIndex,
@@ -96,6 +99,7 @@ export class TextLineParser implements WaveformParser {
       this._issues.rejected += rejected.length
       this._issues.lastRejected = rejected[rejected.length - 1]
     }
+    this._issues.unmarkedLines += unmarkedLines
     if (remainderTruncated) this._issues.truncated += 1
 
     // 同步 labelIndex → labels：新标签出现时按索引补位
@@ -155,6 +159,6 @@ export class TextLineParser implements WaveformParser {
     this.labelIndex = new Map()
     this._labels = []
     this.lastSampleX = -Infinity
-    this._issues = { rejected: 0, truncated: 0, lastRejected: '' }
+    this._issues = { rejected: 0, truncated: 0, unmarkedLines: 0, lastRejected: '' }
   }
 }

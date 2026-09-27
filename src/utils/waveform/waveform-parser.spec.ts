@@ -115,12 +115,23 @@ describe('TextLineParser 标记模式与解析报错面', () => {
 
   it('issues 累计被拒行并记住最近一条；reset 归零', () => {
     const p = new TextLineParser(undefined, () => '>')
-    expect(p.issues).toEqual({ rejected: 0, truncated: 0, lastRejected: '' })
+    expect(p.issues).toEqual({ rejected: 0, truncated: 0, unmarkedLines: 0, lastRejected: '' })
     p.ingest(enc('>T:28.05,mark\n>ok\n'), 1000)
     expect(p.issues.rejected).toBe(2)
     expect(p.issues.lastRejected).toBe('>ok')
     p.reset()
-    expect(p.issues).toEqual({ rejected: 0, truncated: 0, lastRejected: '' })
+    expect(p.issues).toEqual({ rejected: 0, truncated: 0, unmarkedLines: 0, lastRejected: '' })
+  })
+
+  it('issues 累计未匹配标记的行数（标记没顶格时唯一可见的线索）', () => {
+    const p = new TextLineParser(undefined, () => '>')
+    // 一行顶格失败的「标记行」（前导空格）+ 两行日志 → 全部被当文本
+    p.ingest(enc('  >T:28.05\nlog a\nlog b\n'), 1000)
+    expect(p.issues.unmarkedLines).toBe(3)
+    expect(p.issues.rejected).toBe(0) // 未匹配标记不等于写错，不该记成被拒
+    // 标记行正常到达时不再计入
+    p.ingest(enc('>T:28.10\n'), 1001)
+    expect(p.issues.unmarkedLines).toBe(3)
   })
 
   it('issues 记录超长未终止行（truncated），不误记为 rejected', () => {

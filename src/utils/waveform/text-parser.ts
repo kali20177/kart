@@ -27,6 +27,8 @@
  *    这是「日志与波形同流」的解法——宽松模式下日志散文里的数字会被当成采样值
  *    （`[W25Q64] ... 8 MB, 128 blocks` → 两个假通道），标记模式让宿主不再猜：
  *    用户声明了哪行是数据，那么写错就该报错（rejected），而不是静默画错。
+ *    同时以 unmarkedLines 上报「被当文本跳过的行数」——标记没顶格/写错时波形全空，
+ *    没有这个计数用户就只能面对一条空白曲线。
  *
  * 无状态纯函数，不依赖 Vue，可独立单测。
  */
@@ -38,6 +40,8 @@ export interface ParseResult {
   remainder: string
   /** 标记模式下带标记、但行内有非法 token 而被整行作废的行（供上层计数提示）；宽松模式恒为空 */
   rejected: string[]
+  /** 标记模式下本行不含标记、被当作文本跳过的非空行数（供「标记没对上」提示）；宽松模式恒为 0 */
+  unmarkedLines: number
   /** carryover 超长被丢弃（设备长时间不发换行）；丢弃后从下一批重新起算 */
   remainderTruncated: boolean
 }
@@ -184,6 +188,7 @@ export function parseTextSamples(
   // 初始通道数 = 1；解析过程中按 token 位置 / 标签自动扩容
   const perChannel: number[][] = [[]]
   const rejected: string[] = []
+  let unmarkedLines = 0
 
   for (const line of parts) {
     const trimmed = line.trim()
@@ -193,7 +198,7 @@ export function parseTextSamples(
     let payload = trimmed
     if (prefix) {
       const at = markerIndex(line, prefix)
-      if (at < 0) continue
+      if (at < 0) { unmarkedLines += 1; continue }
       payload = line.slice(at + prefix.length).trim()
       const bodyTokens = payload.split(/[,\s;]+/).filter(Boolean)
       if (bodyTokens.length === 0 || !bodyTokens.every((t) => parseToken(t).value !== null)) {
@@ -251,5 +256,5 @@ export function parseTextSamples(
     remainderTruncated = true
   }
 
-  return { perChannel, remainder, rejected, remainderTruncated }
+  return { perChannel, remainder, rejected, unmarkedLines, remainderTruncated }
 }

@@ -95,14 +95,25 @@ export function createWaveformStore(deps: WaveformDeps) {
     () => deps.settings.waveform.parse?.linePrefix ?? ''
   )
 
-  // 解析健康度快照（标记模式被拒行 / 超长行丢弃），供面板提示；仅值变化时替换以少触发渲染
-  const parseIssues = ref<ParseIssues>({ rejected: 0, truncated: 0, lastRejected: '' })
+  // 解析健康度快照（标记模式被拒行 / 未匹配标记的行 / 超长行丢弃），供面板提示；
+  // 仅值变化时替换以少触发渲染
+  const parseIssues = ref<ParseIssues>({ rejected: 0, truncated: 0, unmarkedLines: 0, lastRejected: '' })
   function syncParseIssues(): void {
     const s = parser.issues
     if (!s) return
     const cur = parseIssues.value
-    if (s.rejected === cur.rejected && s.truncated === cur.truncated && s.lastRejected === cur.lastRejected) return
-    parseIssues.value = { rejected: s.rejected, truncated: s.truncated, lastRejected: s.lastRejected }
+    if (
+      s.rejected === cur.rejected &&
+      s.truncated === cur.truncated &&
+      s.unmarkedLines === cur.unmarkedLines &&
+      s.lastRejected === cur.lastRejected
+    ) return
+    parseIssues.value = {
+      rejected: s.rejected,
+      truncated: s.truncated,
+      unmarkedLines: s.unmarkedLines,
+      lastRejected: s.lastRejected
+    }
   }
   // 暂停恢复断点 X 值（毫秒）；-1 表示无活跃断点
   const resumeBreakX = ref(-1)

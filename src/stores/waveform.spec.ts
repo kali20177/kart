@@ -462,6 +462,17 @@ describe('waveform store 绘图行标记（parseIssues）', () => {
     wf.ingest(enc('>bad\n'))
     expect(wf.parseIssues.rejected).toBe(1)
     wf.clear()
-    expect(wf.parseIssues).toEqual({ rejected: 0, truncated: 0, lastRejected: '' })
+    expect(wf.parseIssues).toEqual({ rejected: 0, truncated: 0, unmarkedLines: 0, lastRejected: '' })
+  })
+
+  it('标记没顶格：数据全落到 unmarkedLines（波形空、且没有「被拒」行）', () => {
+    const settings = useSettingsStore()
+    settings.settings.waveform.parse.linePrefix = '>'
+    const wf = useWaveformStore()
+    wf.ingest(enc(' >Temp:28.05\nlog 1 2\n'))
+    expect(wf.parseIssues.unmarkedLines).toBe(2)
+    expect(wf.parseIssues.rejected).toBe(0)
+    expect(wf.parseIssues.truncated).toBe(0)
+    expect(wf.data[0].length).toBe(0)
   })
 })

@@ -506,16 +506,25 @@ watch(
   }
 )
 
-// 解析报错标签：标记模式下有标记行被拒（或超长未终止行被丢）时显示。
+// 标记行被拒标签：标记模式下带标记但内容非法（写错）的行被整行作废时显示。
 // 与「丢弃采样」标签同款交互（可关闭 + 清零后重新计数），但用 error 色——这是用户要修的格式问题。
-const issuesTagDismissed = ref(false)
-const showIssuesTag = computed(
-  () => (waveform.parseIssues.rejected > 0 || waveform.parseIssues.truncated > 0) && !issuesTagDismissed.value
-)
+const rejectedTagDismissed = ref(false)
+const showRejectedTag = computed(() => waveform.parseIssues.rejected > 0 && !rejectedTagDismissed.value)
 watch(
-  () => waveform.parseIssues.rejected + waveform.parseIssues.truncated,
+  () => waveform.parseIssues.rejected,
   (n, prev) => {
-    if (prev === 0 && n > 0) issuesTagDismissed.value = false
+    if (prev === 0 && n > 0) rejectedTagDismissed.value = false
+  }
+)
+
+// 超长未终止行被丢弃：与标记模式无关（宽松模式下同样会发生——设备不发换行是传输侧问题），
+// 故独立成一条 warning（数据丢失），不并入上面的「格式错误」，两处的成因与处置完全不同。
+const truncatedTagDismissed = ref(false)
+const showTruncatedTag = computed(() => waveform.parseIssues.truncated > 0 && !truncatedTagDismissed.value)
+watch(
+  () => waveform.parseIssues.truncated,
+  (n, prev) => {
+    if (prev === 0 && n > 0) truncatedTagDismissed.value = false
   }
 )
 
@@ -525,6 +534,19 @@ const pointCount = computed(() => {
   void waveform.version
   return waveform.data[0]?.length ?? 0
 })
+
+// 「标记没对上」提示：已设标记、收到了文本行、却一条数据都没成点，且没有行被拒
+// （有被拒行时由上面的红标覆盖，两者互斥）。此时波形是一条空白曲线，被跳过的行数
+// （unmarkedLines）是用户唯一的线索——最常见成因是标记没顶格。阈值 3 行是为了避开
+// 「日志行先到、标记行后到」的启动瞬间。宽松模式（无标记）下 unmarkedLines 恒为 0，不提示。
+const markerPrefix = computed(() => settings.waveform.parse?.linePrefix ?? '')
+const showNoMatchTag = computed(
+  () =>
+    markerPrefix.value !== '' &&
+    waveform.parseIssues.rejected === 0 &&
+    waveform.parseIssues.unmarkedLines >= 3 &&
+    pointCount.value === 0
+)
 
 // 回看偏移折算为秒（可视窗口右边缘距最新采样的真实时间差），用于工具栏提示
 const backSeconds = computed(() => {
@@ -585,10 +607,10 @@ function handleExport(key: string) {
       >
         {{ t('waveform.droppedSamples', { n: waveform.droppedSamples }) }}
       </NTag>
-      <NTooltip v-if="showIssuesTag">
+      <NTooltip v-if="showRejectedTag">
         <template #trigger>
-          <NTag size="small" closable type="error" :bordered="false" @close="issuesTagDismissed = true">
-            {{ t('waveform.parseIssues', { n: waveform.parseIssues.rejected + waveform.parseIssues.truncated }) }}
+          <NTag size="small" closable type="error" :bordered="false" @close="rejectedTagDismissed = true">
+            {{ t('waveform.parseIssues', { n: waveform.parseIssues.rejected }) }}
           </NTag>
         </template>
         <div style="max-width: 420px; line-height: 1.6">
@@ -597,6 +619,22 @@ function handleExport(key: string) {
             {{ waveform.parseIssues.lastRejected }}
           </div>
         </div>
+      </NTooltip>
+      <NTooltip v-if="showTruncatedTag">
+        <template #trigger>
+          <NTag size="small" closable type="warning" :bordered="false" @close="truncatedTagDismissed = true">
+            {{ t('waveform.truncatedLines', { n: waveform.parseIssues.truncated }) }}
+          </NTag>
+        </template>
+        <div style="max-width: 420px; line-height: 1.6">{{ t('waveform.truncatedLinesTip') }}</div>
+      </NTooltip>
+      <NTooltip v-if="showNoMatchTag">
+        <template #trigger>
+          <NTag size="small" type="info" :bordered="false">
+            {{ t('waveform.noMarkedLine', { p: markerPrefix }) }}
+          </NTag>
+        </template>
+        <div style="max-width: 420px; line-height: 1.6">{{ t('waveform.noMarkedLineTip', { p: markerPrefix }) }}</div>
       </NTooltip>
       <NButton
         v-for="i in channels()"
