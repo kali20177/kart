@@ -1,0 +1,54 @@
+/* mondrian 主题 —— 几何构成形状语言全局强制层。
+ *
+ * token 只达 var() 引用处，碰不到 Naive 组件内部与 hover/focus 等角落；
+ * 这里按 [data-theme-id='mondrian']（applyTheme 设置）做形状强制：
+ * 白画布上的黑色格线（2px 硬边框）、硬偏移实色阴影（无模糊/无光晕）、静态无过渡。
+ * 彩色只作为「色面」出现（按钮填充、RX/TX 气泡、标签），线一律是黑的。
+ * 仅该主题激活时生效，其他主题完全不受影响。
+ */
+
+/* —— 静态：蒙德里安是画出来的，无缓动 —— */
+[data-theme-id='mondrian'] *,
+[data-theme-id='mondrian'] *::before,
+[data-theme-id='mondrian'] *::after {
+  transition: none !important;
+}
+
+/* —— 黑色格线：所有 Naive 输入/选择/按钮/卡片/标签/弹窗 + 玻璃条 ——
+    只对 width/style 用 !important：确保默认与 focus/hover 态都保持 2px 硬边；
+    border-color 锁 var(--border)（黑）：彩色元素（主色按钮、语义标签）也以黑线收边，
+    即「色面永远被黑线包围」的构成语法。 */
+[data-theme-id='mondrian'] .n-input,
+[data-theme-id='mondrian'] .n-base-selection,
+[data-theme-id='mondrian'] .n-button,
+[data-theme-id='mondrian'] .n-card,
+[data-theme-id='mondrian'] .n-base-tag,
+[data-theme-id='mondrian'] .n-tabs-nav,
+[data-theme-id='mondrian'] .n-modal,
+[data-theme-id='mondrian'] .n-popover,
+[data-theme-id='mondrian'] .n-dialog,
+[data-theme-id='mondrian'] .glass-strong,
+[data-theme-id='mondrian'] .glass {
+  border-width: var(--border-width) !important;
+  border-style: solid !important;
+  border-color: var(--border);
+}
+
+/* —— 浮层硬偏移实色阴影：位移阴影替代柔光，落在白画布上压出纸面层次 ——
+    宿主对照（重命名 class 时须同步这里）：
+    - .quick-rail → App.vue 右侧快速命令栏容器（同时保留原布局类 .right）
+    - .bubble     → MessageBubble.vue 消息气泡根 */
+[data-theme-id='mondrian'] .n-card,
+[data-theme-id='mondrian'] .n-popover,
+[data-theme-id='mondrian'] .n-modal,
+[data-theme-id='mondrian'] .n-dialog,
+[data-theme-id='mondrian'] .n-dropdown-menu,
+[data-theme-id='mondrian'] .quick-rail {
+  box-shadow: 4px 4px 0 #0F0F0F !important;
+}
+
+/* —— 消息气泡 = 色面：2px 黑边 + 小一号硬阴影，RX 淡蓝/ TX 淡黄平面 —— */
+[data-theme-id='mondrian'] .bubble {
+  border-width: var(--border-width);
+  box-shadow: 3px 3px 0 #0F0F0F;
+}

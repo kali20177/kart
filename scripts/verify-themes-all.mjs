@@ -91,12 +91,16 @@ async function main() {
       await sleep(300)
     }
 
-    // retro-console 的 ASCII 表抽屉（像素字/硬边框重点检查面）
-    await page.evaluate(() => window.__theme.setTheme('retro-console'))
-    await sleep(700)
-    await page.locator('button.ascii-btn').first().click()
-    await sleep(500)
-    await page.screenshot({ path: `${SHOT_DIR}/ascii-retro-console.png` })
+    // ASCII 表抽屉（硬边框/等宽字重点检查面）：像素风与几何构成两套各截一张
+    for (const id of ['retro-console', 'mondrian']) {
+      await page.evaluate((tid) => window.__theme.setTheme(tid), id)
+      await sleep(700)
+      await page.locator('button.ascii-btn').first().click()
+      await sleep(500)
+      await page.screenshot({ path: `${SHOT_DIR}/ascii-${id}.png` })
+      await page.keyboard.press('Escape')
+      await sleep(300)
+    }
 
     if (errors.length) console.log('PAGE ERRORS:', errors.slice(0, 5))
     else console.log('no page errors')

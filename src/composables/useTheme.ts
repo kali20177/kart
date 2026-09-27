@@ -47,10 +47,10 @@ export function useTheme() {
     settingsStore.settings.themeId = id
   }
 
-  // Dev 调试钩子
+  // Dev 调试钩子（verify-themes-all.mjs 经 listThemes 自动发现全部主题逐套截图）
   if (import.meta.env.DEV) {
     const w = window as unknown as { __theme?: Record<string, unknown> }
-    w.__theme = { setTheme, themeId, isDark, tokens }
+    w.__theme = { setTheme, themeId, isDark, tokens, listThemes }
   }
 
   return {

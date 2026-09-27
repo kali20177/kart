@@ -140,11 +140,11 @@ async function toggleConnect() {
   flex-shrink: 0;
 }
 .session-tab-dot.on {
-  background: #4caf50;
+  background: var(--ok);
   opacity: 1;
 }
 .session-tab-dot.reconnecting {
-  background: #ff9800;
+  background: var(--warn);
   opacity: 1;
 }
 /* 收起态录制指示红点（名字前，与 REC 按钮圆点同款闪烁） */
@@ -192,10 +192,10 @@ async function toggleConnect() {
   background: var(--bg-elevated);
 }
 .session-tab-conn.on {
-  color: #4caf50;
+  color: var(--ok);
 }
 .session-tab-conn.reconnecting {
-  color: #ff9800;
+  color: var(--warn);
 }
 .session-tab-close {
   appearance: none;

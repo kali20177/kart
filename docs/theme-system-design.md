@@ -56,6 +56,7 @@ src/themes/
     glass-industrial-light.ts       # 玻璃工业风（亮色）
     oled-hud.ts                     # Cyberpunk 终端 HUD 风格（暗色）
     retro-console.ts                # 复古游戏机像素风（暗色，0 圆角 + 硬边框 + 阶梯阴影）
+    mondrian.ts                     # 蒙德里安几何构成风（亮色，白画布 + 黑格线 + 三原色色面）
   index.ts                          # 统一导出
 ```
 

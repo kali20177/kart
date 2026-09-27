@@ -369,19 +369,19 @@ async function onBreak() {
   box-shadow: 0 0 5px var(--ok);
 }
 .led.reconnecting {
-  background: #f0a020;
+  background: var(--warn);
   animation: led-blink 1s ease-in-out infinite;
 }
 @keyframes led-blink {
-  0%, 100% { opacity: 1; box-shadow: 0 0 5px #f0a020; }
-  50%      { opacity: 0.25; box-shadow: 0 0 0 #f0a020; }
+  0%, 100% { opacity: 1; box-shadow: 0 0 5px var(--warn); }
+  50%      { opacity: 0.25; box-shadow: 0 0 0 var(--warn); }
 }
 .port {
   color: var(--text);
   font-family: var(--mono-font);
 }
 .reconnect-indicator {
-  color: #f0a020;
+  color: var(--warn);
   font-family: var(--mono-font);
   white-space: nowrap;
   animation: rec-text-pulse 1.5s ease-in-out infinite;

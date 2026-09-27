@@ -172,7 +172,7 @@ KnowledgeBaseModal → knowledge-base/utils
 - **统计**：帧数（RX/TX）、帧速率（f/s）、字节速率（B/s）、会话时长、缓冲使用率（>80% 告警）、校验失败计数、丢弃帧/采样提示。
 - **应用日志**：面向用户报障。浏览器端写 IndexedDB；Electron 下主进程按日轮转文件日志（`userData/logs/YYYY-MM-DD.log`，保留 30 天）并汇聚渲染端全部 console。文件菜单「导出日志」一键下载：Electron 优先取主进程文件（权威来源），浏览器取 IDB，导出文件头自动附带版本/平台/驱动等环境信息。级别/行格式/level 映射集中在纯函数 `src/utils/log-level.ts`（两端共用、有单测）。
 - **状态栏**：连接态、传输参数概要、RX/TX/帧/ERR 统计、CTS 只读指示（状态圆点）、DTR/RTS/BRK 控制、活跃文件下发紧凑条。
-- **主题**：多主题注册表 + 4 套内置主题（glass-industrial-dark、glass-industrial-light、oled-hud、retro-console 像素风），明暗二元，无"跟随系统"。
+- **主题**：多主题注册表 + 5 套内置主题（glass-industrial-dark、glass-industrial-light、mondrian 蒙德里安构成、oled-hud、retro-console 像素风），明暗二元，无"跟随系统"。
 
 ## Electron 集成
 

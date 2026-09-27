@@ -14,6 +14,7 @@
   var PALETTES = {
     'glass-industrial-dark': { bg: '#0d1117', fg: '#e6edf3', dim: '#8b949e', accent: '#58a6ff', ok: '#50c878' },
     'glass-industrial-light': { bg: '#f4f6fa', fg: '#0f172a', dim: '#64748b', accent: '#2563eb', ok: '#16a34a' },
+    'mondrian': { bg: '#F7F5F0', fg: '#0F0F0F', dim: '#6B675F', accent: '#225095', ok: '#225095' },
     'oled-hud': { bg: '#050508', fg: '#E0E0E8', dim: '#7A8A9A', accent: '#00E676', ok: '#00E676' },
     'retro-console': { bg: '#0D1024', fg: '#E8F0FF', dim: '#8899C8', accent: '#00E5FF', ok: '#3DFF8F' },
   }

@@ -1,6 +1,7 @@
 import type { ThemeDefinition, ThemeTokens, TokenKey } from '@/themes/types'
 import { glassIndustrialDark } from '@/themes/builtin/glass-industrial-dark'
 import { glassIndustrialLight } from '@/themes/builtin/glass-industrial-light'
+import { mondrian } from '@/themes/builtin/mondrian'
 import { oledHud } from '@/themes/builtin/oled-hud'
 import { retroConsole } from '@/themes/builtin/retro-console'
 
@@ -8,6 +9,7 @@ const registry = new Map<string, ThemeDefinition>()
 
 register(glassIndustrialDark)
 register(glassIndustrialLight)
+register(mondrian)
 register(oledHud)
 register(retroConsole)
 

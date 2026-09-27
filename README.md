@@ -42,7 +42,7 @@
 
 ### 体验
 
-- **主题**：3 套内置主题（glass-industrial-dark / glass-industrial-light / oled-hud），亮 / 暗切换
+- **主题**：5 套内置主题（glass-industrial 亮/暗、mondrian 蒙德里安构成、oled-hud、retro-console 像素）
 - **i18n**：简体中文 / English
 - **帮助**：内置常见问题知识库、快捷键面板、应用日志导出（报障自带版本 / 平台 / 驱动环境信息）
 - **ASCII 对照表**：右侧抽屉，点击行插入到发送框
