@@ -290,6 +290,7 @@ export type MockScenarioId =
   | 'mixed-ascii'
   | 'waveform-text'
   | 'waveform-text-labeled'
+  | 'waveform-text-marked'
   | 'buffer-flood'
   | 'modbus'
   | 'shell'

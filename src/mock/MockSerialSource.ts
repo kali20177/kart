@@ -9,6 +9,7 @@ import {
   throughputChunk,
   waveformTextChunk,
   waveformTextLabeledChunk,
+  waveformMarkerChunk,
   shellBanner,
   MockShell
 } from '@/mock/scenarios'
@@ -143,6 +144,11 @@ export class MockSerialSource implements IoTransport {
       case 'waveform-text-labeled':
         // 每 50ms 一行标签化文本（Sin:xxx,Cos:xxx）-> 20 行/秒，自动检测通道名
         this.timer = setInterval(() => this.emit(waveformTextLabeledChunk(this.seq++)), 50)
+        break
+      case 'waveform-text-marked':
+        // 每 200ms 一组：普通日志行 + 带 > 标记的绘图行（真机 rb-demo 的混流形态）。
+        // 标记留空时日志裸数字会污染波形，填 > 后只剩绘图行成点——两种模式的对照夹具。
+        this.timer = setInterval(() => this.emit(waveformMarkerChunk(this.seq++)), 200)
         break
       case 'buffer-flood':
         // 每 50ms 吐 500 行数值 -> 分隔符策略下 500 帧/批，数秒灌满缓冲上限触发丢弃提示

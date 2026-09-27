@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { MockShell, shellBanner, modbusSample } from '@/mock/scenarios'
+import { MockShell, shellBanner, modbusSample, waveformMarkerChunk } from '@/mock/scenarios'
 import { modbusRtuDecoder } from '@/decoders/builtin/modbus-rtu'
+import { parseTextSamples } from '@/utils/waveform/text-parser'
 
 const dec = new TextDecoder()
 const enc = new TextEncoder()
@@ -110,5 +111,52 @@ describe('modbusSample · Modbus RTU 场景帧', () => {
     const regsOf = (seq: number) =>
       modbusRtuDecoder.decode(modbusSample(seq)).fields?.find((f) => f.name === 'registers')?.value
     expect(regsOf(2)).not.toBe(regsOf(3))
+  })
+})
+
+/**
+ * 这一组测试守的是「场景作为夹具的可用性」：绘图标记的四种验证路径都靠它复现，
+ * 生成函数一旦漂移（少了标记、日志不再带裸数字），夹具就失效了。
+ */
+describe('waveformMarkerChunk · 绘图标记混流场景', () => {
+  const valuesOf = (perChannel: number[][]) => perChannel.flat().filter((v) => !Number.isNaN(v))
+  const linesOf = (seq: number) => dec.decode(waveformMarkerChunk(seq)).split('\r\n').filter(Boolean)
+
+  it('一组两行：不带标记的日志行 + 行首带标记的绘图行', () => {
+    const ls = linesOf(0)
+    expect(ls).toHaveLength(2)
+    expect(ls[0].startsWith('[')).toBe(true)
+    expect(ls[1].startsWith('>')).toBe(true) // 标记顶格
+  })
+
+  it('宽松模式（标记留空）：日志里的裸数字被当成采样值——即本场景要展示的污染', () => {
+    const r = parseTextSamples(waveformMarkerChunk(3), '', new Map())
+    expect(valuesOf(r.perChannel).some((v) => v > 100000)).toBe(true) // 日志里的 Pa 读数
+  })
+
+  it('标记模式（填 >）：恰为 Temp / Pressure 两通道，读数在 BMP180 量程内', () => {
+    const idx = new Map<string, number>()
+    const r = parseTextSamples(waveformMarkerChunk(3), '', idx, { linePrefix: '>' })
+    expect([...idx.keys()]).toEqual(['Temp', 'Pressure'])
+    expect(r.rejected).toEqual([])
+    expect(r.unmarkedLines).toBe(1) // 日志行被当文本：不成点，也不算被拒
+    expect(r.perChannel[0][0]).toBeGreaterThan(10)
+    expect(r.perChannel[0][0]).toBeLessThan(45)
+    expect(r.perChannel[1][0]).toBeGreaterThan(900)
+    expect(r.perChannel[1][0]).toBeLessThan(1100)
+  })
+
+  it('标记设成日志行前缀（如 [CLO）：日志行以标记开头但内容非法 -> 整行作废（面板出红标）', () => {
+    const r = parseTextSamples(waveformMarkerChunk(3), '', new Map(), { linePrefix: '[CLO' })
+    expect(r.rejected).toHaveLength(1)
+    expect(r.unmarkedLines).toBe(1) // 绘图行这时反而成了「未匹配标记」的行
+    expect(valuesOf(r.perChannel)).toEqual([])
+  })
+
+  it('标记与设备对不上（如 |）：一条数据都不成点（面板出「未见以 | 开头」提示）', () => {
+    const r = parseTextSamples(waveformMarkerChunk(3), '', new Map(), { linePrefix: '|' })
+    expect(r.rejected).toEqual([])
+    expect(r.unmarkedLines).toBe(2) // 日志行 + 绘图行都不匹配
+    expect(valuesOf(r.perChannel)).toEqual([])
   })
 })

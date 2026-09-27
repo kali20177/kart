@@ -24,6 +24,11 @@ export const SCENARIOS: ScenarioDef[] = [
     description: 'Serial.println 标签化多通道（Sin:0.5, Cos:0.86），自动检测通道名'
   },
   {
+    id: 'waveform-text-marked',
+    label: 'Arduino 绘图标记混流',
+    description: '绘图行（行首 >）+ 普通日志同流，验证标记模式的隔离效果；配合「设置 ▸ 波形解析 ▸ 绘图行标记」填 >'
+  },
+  {
     id: 'buffer-flood',
     label: '缓冲灌满压测',
     description: '高频数值行灌入，快速触发消息/波形缓冲丢弃；建议配合「分隔符 \n」帧策略'
@@ -169,6 +174,32 @@ export function waveformTextLabeledChunk(seq: number): Uint8Array {
 
   return text(
     `Temp:${temp},Hum:${hum},Pres:${pres},Alt:${alt},Bat:${bat},RSSI:${rssiInt}\r\n`
+  )
+}
+
+/**
+ * 绘图标记混流帧：一行普通日志 + 一行带标记的绘图行，复刻真机 rb-demo 的采样循环
+ * （同一次采样里既打状态日志又打绘图行，走同一条串口/RTT 流）：
+ *
+ *   [CLOCK] BMP180 raw 101590 Pa, oss 3, 26 ms conv   <- 普通日志，散文里夹着裸数字
+ *   >Temp:26.60,Pressure:1015.30                      <- 绘图行，行首标记
+ *
+ * 一个场景同时给出两种模式的对照，是绘图行标记功能的验证夹具：
+ * - 宽松模式（标记留空）：日志里的 101590 / 3 / 26 被当成采样值画进曲线（假通道污染）；
+ * - 标记模式（设置里填 >）：只有绘图行成点，日志原样留在消息区不影响波形；
+ * - 标记写错（如填 Temp）：绘图行被整行作废 -> 面板出现「N 行绘图数据被拒」红标；
+ * - 标记对不上（如填 |）：一条数据都不成点 -> 面板出现「未见以 | 开头的绘图行」。
+ *
+ * @param seq 采样序号，决定时间轴起点
+ */
+export function waveformMarkerChunk(seq: number): Uint8Array {
+  const t = seq / 5 // 每 200ms 一组 -> 5 组/秒
+  const temp = (26.5 + 2 * Math.sin(2 * Math.PI * 0.01 * t)).toFixed(2)
+  const pressure = (1015 + 3 * Math.sin(2 * Math.PI * 0.03 * t)).toFixed(2)
+  const paRaw = Math.round(Number(pressure) * 100) // hPa -> Pa，日志里那个五位裸数字
+  return text(
+    `[CLOCK] BMP180 raw ${paRaw} Pa, oss 3, 26 ms conv\r\n` +
+      `>Temp:${temp},Pressure:${pressure}\r\n`
   )
 }
 
