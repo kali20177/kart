@@ -154,8 +154,10 @@ function onOpenFileTransferFromMenu() {
 }
 
 /** 菜单「关闭当前会话」：经面板 close 走统一卸载路径（onDidRemovePanel → removeSession，
- *  含末会话保护/活动会话修正），与 tab × 行为一致 */
+ *  含末会话保护/活动会话修正），与 tab × 行为一致。单会话直接拒绝（与自绘菜单的
+ *  disabled 门一致）——原生菜单的 enabled 门依赖状态推送，可能有窗口期，这里兜底 */
 function onCloseActiveSession() {
+  if (sessions.value.length <= 1) return
   const s = activeSession.value
   if (!s) return
   dockApi?.getPanel(SESSION_PANEL(s.id))?.api.close()

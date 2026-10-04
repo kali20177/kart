@@ -12,13 +12,15 @@ vi.mock('@/main/logger', () => ({
 }))
 
 // 延迟 import：vi.mock 已注册，menu.ts 内 import 命中 mock
-import { buildMacMenuTemplate, type MenuState } from '@/main/menu'
+import { buildMacMenuTemplate } from '@/main/menu'
+import type { MenuState } from '@/types'
 import type { MenuItemConstructorOptions } from 'electron'
 
 const BASE: MenuState = {
   locale: 'zh-CN',
   autoSave: true,
   quickRailVisible: true,
+  sessionCount: 2,
   recording: 'idle',
   recordingSupported: true,
 }
@@ -37,9 +39,9 @@ function itemOf(submenu: MenuItemConstructorOptions[], label: string): MenuItemC
 }
 
 describe('buildMacMenuTemplate（macOS 原生菜单模板）', () => {
-  it('六个顶层菜单：应用名/文件/编辑/查看/窗口/帮助（zh-CN）', () => {
+  it('七个顶层菜单：应用名/文件/编辑/查看/工具/窗口/帮助（zh-CN）', () => {
     const tpl = buildMacMenuTemplate(BASE, 'KART')
-    expect(tpl.map((m) => m.label)).toEqual(['KART', '文件', '编辑', '查看', '窗口', '帮助'])
+    expect(tpl.map((m) => m.label)).toEqual(['KART', '文件', '编辑', '查看', '工具', '窗口', '帮助'])
   })
 
   it('应用菜单：关于/检查更新/设置(⌘,)/隐藏/退出，中文 label 覆盖 role 默认英文', () => {
@@ -94,9 +96,9 @@ describe('buildMacMenuTemplate（macOS 原生菜单模板）', () => {
     expect(roles).not.toContain('forceReload')
   })
 
-  it('en 语言：顶层菜单与动作项切英文，未知 locale 回落 zh-CN', () => {
+  it('en 语言：顶层菜单与动作项切英文，未知 locale 回落 en', () => {
     const tpl = buildMacMenuTemplate({ ...BASE, locale: 'en-US' }, 'KART')
-    expect(tpl.map((m) => m.label)).toEqual(['KART', 'File', 'Edit', 'View', 'Window', 'Help'])
+    expect(tpl.map((m) => m.label)).toEqual(['KART', 'File', 'Edit', 'View', 'Tools', 'Window', 'Help'])
     expect(itemOf(submenuOf(tpl, 'KART'), 'About KART').click).toBeTypeOf('function')
     // 未知 locale（如意外值）按英文兜底，不崩
     const fallback = buildMacMenuTemplate({ ...BASE, locale: 'xx-YY' }, 'KART')
@@ -108,6 +110,19 @@ describe('buildMacMenuTemplate（macOS 原生菜单模板）', () => {
     expect(win.map((m) => m.label ?? null)).toEqual(['最小化', '缩放', null, '前置全部窗口'])
     const enWin = submenuOf(buildMacMenuTemplate({ ...BASE, locale: 'en-US' }, 'KART'), 'Window')
     expect(enWin.map((m) => m.label ?? null)).toEqual(['Minimize', 'Zoom', null, 'Bring All to Front'])
+  })
+
+  it('单会话时「关闭当前会话」禁用——关闭末会话会销毁重建，静默清掉活连接与历史；多会话可用', () => {
+    const single = submenuOf(buildMacMenuTemplate({ ...BASE, sessionCount: 1 }, 'KART'), '文件')
+    expect(itemOf(single, '关闭当前会话').enabled).toBe(false)
+    const multi = submenuOf(buildMacMenuTemplate({ ...BASE, sessionCount: 2 }, 'KART'), '文件')
+    expect(itemOf(multi, '关闭当前会话').enabled).toBe(true)
+  })
+
+  it('工具菜单：ASCII 表/文件传输（MenuAction 的 ascii/file-transfer 有原生发出方）', () => {
+    const tools = submenuOf(buildMacMenuTemplate(BASE, 'KART'), '工具')
+    expect(itemOf(tools, 'ASCII 表').click).toBeTypeOf('function')
+    expect(itemOf(tools, '文件传输…').click).toBeTypeOf('function')
   })
 
   it('帮助菜单：常见问题/快捷键/许可证经 IPC 动作回流渲染层', () => {

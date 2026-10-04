@@ -340,6 +340,19 @@ export type RecordFormat = 'text' | 'csv'
 /** 录制器状态机 */
 export type RecordStatus = 'idle' | 'recording' | 'stopping' | 'error'
 
+/** macOS 原生应用菜单驱动状态（渲染端 MenuBar 收集，经 menu:update-state 推送主进程
+ *  重建菜单；主进程 src/main/menu.ts 与 preload 桥共用本定义——契约唯一声明处） */
+export interface MenuState {
+  locale: string
+  autoSave: boolean
+  /** 快捷命令侧栏是否展开（查看菜单勾选态） */
+  quickRailVisible: boolean
+  /** 会话总数（原生「关闭当前会话」的 enabled 门：末会话不可关闭，与 tab × 保护一致） */
+  sessionCount: number
+  recording: RecordStatus
+  recordingSupported: boolean
+}
+
 /** 录制配置 */
 export interface RecordConfig {
   format: RecordFormat

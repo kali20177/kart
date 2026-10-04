@@ -27,19 +27,15 @@ export function createTerminalStore(deps: TerminalDeps) {
     allowProposedApi: true,
   })
 
-  // macOS ⌘C：有选区时复制到剪贴板并拦截（xterm 选区是画布绘制而非 DOM 选区，
-  // 原生菜单 copy role 拿不到，必须在按键层自己写剪贴板）；无选区放行 → onData
-  // 发送 ETX，保持「⌘C 即 Ctrl+C 中断」的终端语义。⌘V 不拦：原生菜单 paste role
-  // 触发的 paste 事件由 xterm 自行处理（菜单缺失时 ⌘C/⌘V 均失效——须有编辑菜单）。
-  // 仅 metaKey（macOS）生效，Ctrl+C 的控制字节语义三平台不变。
-  term.attachCustomKeyEventHandler((e) => {
-    if (e.type !== 'keydown' || !e.metaKey) return true
-    if (e.key.toLowerCase() === 'c' && term.hasSelection()) {
-      void navigator.clipboard?.writeText(term.getSelection())
-      return false
-    }
-    return true
-  })
+  // 终端剪贴板机制（核对 xterm 6 源码后的最终形态，无需自写按键处理）：
+  // - 复制：mac 原生菜单 copy role（浏览器里为浏览器复制动作）触发 DOM copy 事件，
+  //   xterm 在终端根元素上监听 copy——有选区时 copyHandler 写剪贴板。终端选区虽是
+  //   画布绘制，但 copy 事件路径天然覆盖，无需按键层代办。
+  // - 粘贴：paste role / 浏览器粘贴 → paste 事件 → xterm 内建处理。
+  // - xterm 6 对 meta+字母不产出终端字节（⌘C 无选区时什么都不发，不存在
+  //   「放行发 ETX」）；Ctrl+C 的中断语义走 ctrlKey 路径，三平台不受影响。
+  // - 注意：Electron-mac 下 ⌘A 被原生 selectAll role 消费（供输入框全选），
+  //   终端缓冲区的 ⌘A 全选不可达；全量复制走工具栏「复制全部」（scrollbackText）。
 
   // 应用层交互态（TerminalPane 工具栏读写；暂不落盘）
   const mode = ref<'line' | 'char'>(s.transmitMode)

@@ -1,6 +1,7 @@
 import type { ElectronSerial } from '@/serial/SerialPortDriver'
 import type { ElectronTcp } from '@/serial/TcpDriver'
 import type { UpdaterState } from '@/utils/updater'
+import type { MenuState } from '@/types'
 
 // preload 通过 contextBridge 暴露的 Electron 桥接 API（仅 Electron 下存在）。
 // 从 env.d.ts 拆出独立模块文件，以便引用 SerialPortDriver 导出的 ElectronSerial
@@ -66,13 +67,7 @@ declare global {
         /** 订阅原生菜单动作（key 与自绘菜单一致），返回退订函数 */
         onAction(handler: (action: string) => void): () => void
         /** 推送菜单驱动状态（macOS 原生菜单勾选态/录制/语言；其他平台主进程不消费） */
-        updateState(state: {
-          locale: string
-          autoSave: boolean
-          quickRailVisible: boolean
-          recording: string
-          recordingSupported: boolean
-        }): void
+        updateState(state: MenuState): void
       }
       mcp?: {
         /** 当前服务器状态快照（running/port/token/mode） */

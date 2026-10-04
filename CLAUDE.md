@@ -96,8 +96,8 @@ src/utils/                — 纯工具函数，无框架依赖，按领域分�
 src/utils/logger.ts       — 渲染进程 Logger 单例（IDB 持久化 + console 劫持 + window 全局错误兜底 + 日志导出）
 src/mock/                 — MockSerialSource + 场景生成器
 src/serial/               — 传输驱动工厂 + 注册表 + WebSerialDriver + SerialPortDriver + TcpDriver + RttDriver + PtyDriver
-src/main/                 — Electron 主进程（SerialPortManager、TcpManager、PtyManager、JsonStore、logger）
-src/preload/              — Electron 预加载（contextBridge 暴露 serial/tcp/recorder/platform API）
+src/main/                 — Electron 主进程（SerialPortManager、TcpManager、PtyManager、JsonStore、menu、logger）
+src/preload/              — Electron 预加载（contextBridge 暴露 serial/tcp/recorder/menu/platform API）
 src/composables/          — Vue composables（useFrameSplitter、useSendHistory、useStorage、useMessageSearch、
                              useTheme、useFileWriter、useRecordDirectory、useSession）
 src/stores/               — Pinia stores（serial、messages、pause、waveform、recorder、transfer、terminal、dashboard、commands、settings）
@@ -183,7 +183,8 @@ KnowledgeBaseModal → knowledge-base/utils
 - `src/main/TcpManager.ts` — TCP 客户端（Node `net`），IPv6 校验、`connId` 区分同端点并发连接。
 - `src/main/PtyManager.ts` — node-pty 封装，spawn 本地 shell 作为「串口设备」。
 - `src/main/JsonStore.ts` — 持久化后备（`userData/kart-settings.json`）：防抖 500ms + 原子写 + will-quit 同步刷盘。
-- `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/setSignals/setBreak/onData/onError）、`tcp`、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
+- `src/main/menu.ts` — macOS 原生应用菜单（`buildMacMenuTemplate` 纯函数 + `registerMenuIpc`）：自定义动作 click 经 `menu:action` IPC 回渲染层由 MenuBar 统一分发，渲染端经 `menu:update-state` 推送勾选态/录制/会话数/语言重建菜单（契约 `MenuState` 在 `src/types.ts` 单源）；其余平台 `setApplicationMenu(null)`（菜单栏由渲染层 MenuBar 自绘）。编辑菜单刻意无 undo/redo role（⌘Z 被菜单拦截会破坏 composer 的 HEX 排版撤销栈）、查看菜单无 reload role（见「性能与实现注意事项」）。
+- `src/preload/index.ts` — 预加载：通过 contextBridge 暴露 `serial`（listPorts/open/close/write/getSignals/setSignals/setBreak/onData/onError）、`tcp`、`recorder`（showDirectoryPicker/createFile/writeChunk/closeFile）、`menu`（onAction/updateState，macOS 原生菜单桥）、`updater`、`mcp`、`platform`。渲染进程不直接接触原生库 —— 保持 contextIsolation 安全模型。
 - `src/serial/SerialPortDriver.ts` — 渲染端驱动：实现 `IoTransport` 接口，通过 `window.electron.serial` 与主进程 IPC 通信。信号轮询 500ms。
 - `vite.config.ts` — `base` 在 Electron 目标下设为 `'./'`（file:// 加载需相对路径），浏览器下为 `'/'`。
 - `tsconfig.node.json` — 主/预加载的 Node 上下文类型检查（无 DOM lib），`electron:build` 中以 `tsc -p tsconfig.node.json --noEmit` 作为门禁。
@@ -270,5 +271,6 @@ printf '%s' '31.7.7' > node_modules/electron/dist/version
 - **gap-timeout 把帧率锁在 ~1/gapMs**（默认 20ms → 约 20 帧/秒）；`buffer-flood` 灌满压测需用「分隔符 \n」帧策略才能秒级灌满缓冲验证丢弃提示。
 - **巨型帧渲染截断**：超 4096B 的帧折叠为前 512B 预览（`MessageBubble` 两档截断），单次展开全量可接受；若有「导出/复制巨帧」之外的批量全量渲染需求，需重新评估截断策略。
 - **波形二进制解析模式已移除**（仅文本行解析）；X 轴采用时钟权威：串口域按波特率位时间合成「线缆时刻」（`utils/waveform/waveform-clock.ts`，批内均摊 + 批锚定保留空档），网络域（TCP/RTT）用到达时间。未来重引入二进制/结构化字节流协议时，复用同一时钟接缝（解析器构造注入 `clock`）。
+- **页面重载会残留串口句柄**：`page.reload` / `location.reload`（以及原生菜单 reload role）后，已打开的串口在主进程仍持有句柄，同端口再次 open 会报占用，须重启应用才能恢复。因此原生菜单刻意不提供 reload/forceReload role；开发期改渲染层代码走 vite HMR，改主进程代码走插件自动重启。
 
 设计文档见 [docs/](./docs/)（multi-session-ui、terminal-mode、dashboard、file-transfer、multi-port、theme-system）。

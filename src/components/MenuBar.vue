@@ -84,12 +84,13 @@ const isMac = computed(() => {
  *  没有原生菜单，下拉必须照常渲染——判定必须同时要求 window.electron 存在。 */
 const isMacApp = computed(() => isMac.value && !!window.electron)
 
-/** macOS：勾选态/录制状态/语言变化推给主进程重建原生菜单（其他平台桥存在但主进程不消费） */
+/** macOS：勾选态/录制状态/会话数/语言变化推给主进程重建原生菜单（其他平台桥存在但主进程不消费） */
 function pushMenuState() {
   window.electron?.menu?.updateState({
     locale: settingsStore.settings.locale,
     autoSave: settingsStore.autoSave,
     quickRailVisible: props.quickRailVisible ?? true,
+    sessionCount: sessions.value.length,
     recording: recorder.value.state.status,
     recordingSupported: recorder.value.supported,
   })
@@ -99,11 +100,21 @@ watch(
     () => settingsStore.settings.locale,
     () => settingsStore.autoSave,
     () => props.quickRailVisible,
+    () => sessions.value.length,
     () => recorder.value.state.status,
     () => recorder.value.supported,
   ],
   pushMenuState
 )
+
+/** 自绘下拉清单（Win/Linux；mac 应用内隐藏，菜单在系统菜单栏） */
+const dropdownMenus = computed(() => [
+  { key: 'file', label: t('menu.file'), options: fileMenu.value },
+  { key: 'session', label: t('menu.session'), options: sessionMenu.value },
+  { key: 'view', label: t('menu.view'), options: viewMenu.value },
+  { key: 'tools', label: t('menu.tools'), options: toolsMenu.value },
+  { key: 'help', label: t('menu.help'), options: helpMenu.value },
+])
 
 /** 平台修饰键：macOS 显示 ⌘，其他显示 Ctrl */
 const modKey = computed(() => isMac.value ? '⌘' : 'Ctrl')
@@ -340,49 +351,15 @@ function dispatch(key: string) {
          应用内标题条（hiddenInset 交通灯内嵌 + 可拖动），仅承载右侧全局按钮 -->
     <template v-if="!isMacApp">
       <NDropdown
+        v-for="m in dropdownMenus"
+        :key="m.key"
         trigger="click"
         placement="bottom-start"
-        :options="fileMenu"
+        :options="m.options"
         :theme-overrides="menuDropdownOverrides"
         @select="handleSelect"
       >
-        <NButton size="tiny" quaternary>{{ t('menu.file') }}</NButton>
-      </NDropdown>
-      <NDropdown
-        trigger="click"
-        placement="bottom-start"
-        :options="sessionMenu"
-        :theme-overrides="menuDropdownOverrides"
-        @select="handleSelect"
-      >
-        <NButton size="tiny" quaternary>{{ t('menu.session') }}</NButton>
-      </NDropdown>
-      <NDropdown
-        trigger="click"
-        placement="bottom-start"
-        :options="viewMenu"
-        :theme-overrides="menuDropdownOverrides"
-        @select="handleSelect"
-      >
-        <NButton size="tiny" quaternary>{{ t('menu.view') }}</NButton>
-      </NDropdown>
-      <NDropdown
-        trigger="click"
-        placement="bottom-start"
-        :options="toolsMenu"
-        :theme-overrides="menuDropdownOverrides"
-        @select="handleSelect"
-      >
-        <NButton size="tiny" quaternary>{{ t('menu.tools') }}</NButton>
-      </NDropdown>
-      <NDropdown
-        trigger="click"
-        placement="bottom-start"
-        :options="helpMenu"
-        :theme-overrides="menuDropdownOverrides"
-        @select="handleSelect"
-      >
-        <NButton size="tiny" quaternary>{{ t('menu.help') }}</NButton>
+        <NButton size="tiny" quaternary>{{ m.label }}</NButton>
       </NDropdown>
     </template>
     <!-- 右侧插槽：全局功能按钮（ASCII/设置）复用本行，不额外占行高 -->

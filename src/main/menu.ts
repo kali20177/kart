@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu, ipcMain, type MenuItemConstructorOptions } from 'electron'
 import { mainLogger } from '@/main/logger'
 import type { JsonStore } from '@/main/JsonStore'
+import type { MenuState } from '@/types'
 
 /**
  * macOS 原生应用菜单（系统菜单栏）。
@@ -19,16 +20,6 @@ import type { JsonStore } from '@/main/JsonStore'
  * 改写清空）就会失效。ASCII 模式的原生撤销在无菜单时本就不可用，维持现状。
  */
 
-/** 渲染端推送的菜单驱动状态 */
-export interface MenuState {
-  locale: string
-  autoSave: boolean
-  /** 快捷命令侧栏是否展开（查看菜单勾选态） */
-  quickRailVisible: boolean
-  recording: 'idle' | 'recording' | 'stopping' | 'error'
-  recordingSupported: boolean
-}
-
 /** 菜单动作（与 MenuBar.vue 自绘菜单的 key 完全同名，渲染层统一分发） */
 export type MenuAction =
   | 'new-session' | 'close-session'
@@ -36,8 +27,11 @@ export type MenuAction =
   | 'quick-rail' | 'settings' | 'ascii' | 'file-transfer'
   | 'know-base' | 'shortcuts' | 'check-update' | 'about' | 'license'
 
-/** 菜单文案（zh-CN / en）。与渲染层 locales 的 menu.* 同义，主进程独立成典，
- *  避免把整套渲染端 locale 文件打进主进程 bundle；改文案时两处需同步。 */
+/** 菜单文案（zh-CN / en）。菜单状态契约 MenuState 在 src/types.ts 单源定义。
+ *  与渲染层 locales 的 menu.* 同义，主进程独立成典（避免把整套渲染端 locale
+ *  打进主进程 bundle），改文案时两处需同步。**刻意的差异**：「导出日志…」「恢复
+ *  默认设置…」「文件传输…」带省略号——macOS HIG 规定打开对话框的菜单项要加
+ *  …（自绘菜单无此惯例，locales 不带）；其余文案两处必须逐字一致。 */
 const STRINGS: Record<string, {
   about: string; checkUpdate: string; settings: string
   hide: string; hideOthers: string; unhide: string; quit: string; services: string
@@ -45,6 +39,7 @@ const STRINGS: Record<string, {
   startRecording: string; stopRecording: string; autoSave: string; resetDefaults: string
   edit: string; cut: string; copy: string; paste: string; pasteMatch: string; delete: string; selectAll: string
   view: string; quickRail: string; fullscreen: string; devtools: string
+  tools: string; ascii: string; fileTransfer: string
   window: string; minimize: string; zoom: string; front: string
   help: string; knowBase: string; shortcuts: string; license: string
 }> = {
@@ -55,6 +50,7 @@ const STRINGS: Record<string, {
     startRecording: '开始录制', stopRecording: '停止录制', autoSave: '自动保存配置', resetDefaults: '恢复默认设置…',
     edit: '编辑', cut: '剪切', copy: '拷贝', paste: '粘贴', pasteMatch: '粘贴并匹配样式', delete: '删除', selectAll: '全选',
     view: '查看', quickRail: '快捷命令栏', fullscreen: '进入全屏', devtools: '开发者工具',
+    tools: '工具', ascii: 'ASCII 表', fileTransfer: '文件传输…',
     window: '窗口', minimize: '最小化', zoom: '缩放', front: '前置全部窗口',
     help: '帮助', knowBase: '常见问题', shortcuts: '快捷键', license: '许可证',
   },
@@ -65,6 +61,7 @@ const STRINGS: Record<string, {
     startRecording: 'Start Recording', stopRecording: 'Stop Recording', autoSave: 'Auto Save Config', resetDefaults: 'Restore Defaults…',
     edit: 'Edit', cut: 'Cut', copy: 'Copy', paste: 'Paste', pasteMatch: 'Paste and Match Style', delete: 'Delete', selectAll: 'Select All',
     view: 'View', quickRail: 'Quick Commands', fullscreen: 'Enter Full Screen', devtools: 'Developer Tools',
+    tools: 'Tools', ascii: 'ASCII Table', fileTransfer: 'File Transfer…',
     window: 'Window', minimize: 'Minimize', zoom: 'Zoom', front: 'Bring All to Front',
     help: 'Help', knowBase: 'Knowledge Base', shortcuts: 'Keyboard Shortcuts', license: 'License',
   },
@@ -116,7 +113,9 @@ export function buildMacMenuTemplate(state: MenuState, appName: string): MenuIte
       label: s.file,
       submenu: [
         { label: s.newSession, accelerator: 'CmdOrCtrl+N', click: act('new-session') },
-        { label: s.closeSession, click: act('close-session') },
+        // 末会话不可关闭（会话数由渲染端随状态推送）：关闭最后一个会话会走
+        // removeSession 的「销毁现会话并补空会话」路径，活连接与历史会被静默清掉
+        { label: s.closeSession, enabled: state.sessionCount > 1, click: act('close-session') },
         { type: 'separator' },
         { label: s.exportLog, click: act('export-log') },
         // 录制项标签/可用性与自绘菜单同语义：非 idle 显示「停止」，stopping/不支持禁用
@@ -150,6 +149,14 @@ export function buildMacMenuTemplate(state: MenuState, appName: string): MenuIte
         // 不提供 reload/forceReload role：页面重载会残留串口句柄（见 CLAUDE.md 注意事项）
         { role: 'togglefullscreen', label: s.fullscreen },
         { role: 'toggleDevTools', label: s.devtools },
+      ],
+    },
+    {
+      // 自绘菜单的「工具」在原生侧的对应项（ASCII/文件传输动作经 IPC 回渲染层）
+      label: s.tools,
+      submenu: [
+        { label: s.ascii, click: act('ascii') },
+        { label: s.fileTransfer, click: act('file-transfer') },
       ],
     },
     {
@@ -193,6 +200,7 @@ function initialMenuState(jsonStore?: JsonStore): MenuState {
     locale: typeof stored?.locale === 'string' ? stored.locale : 'zh-CN',
     autoSave: true,
     quickRailVisible: true,
+    sessionCount: 1,
     recording: 'idle',
     recordingSupported: true,
   }

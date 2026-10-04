@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { UpdaterState } from '@/utils/updater'
+import type { MenuState } from '@/types'
 
 // 主进程回调写盘错误时，转发给渲染进程录制器（按窗口）。可选监听。
 let writeErrorHandler: ((msg: string) => void) | null = null
@@ -260,14 +261,8 @@ contextBridge.exposeInMainWorld('electron', {
       menuActionHandlers.add(handler)
       return () => { menuActionHandlers.delete(handler) }
     },
-    /** 推送菜单驱动状态（locale/autoSave/录制/侧栏），主进程据此重建菜单 */
-    updateState: (state: {
-      locale: string
-      autoSave: boolean
-      quickRailVisible: boolean
-      recording: string
-      recordingSupported: boolean
-    }) => ipcRenderer.send('menu:update-state', state),
+    /** 推送菜单驱动状态（locale/勾选态/录制/会话数），主进程据此重建菜单 */
+    updateState: (state: MenuState) => ipcRenderer.send('menu:update-state', state),
   },
 
   // ── 入站 MCP 服务器（docs/mcp-design.md；主进程 McpServer）──
