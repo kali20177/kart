@@ -457,6 +457,12 @@ function createWindow(): void {
     width: 1100,
     height: 760,
     title: 'KART',
+    // macOS：隐藏原生标题栏，交通灯内嵌到渲染层顶部行——MenuBar 以 title-strip
+    // 形态充当应用内标题条（可拖动/双击缩放，右侧承载全局按钮）。原生菜单已在
+    // 系统菜单栏，窗口内不再有菜单行；Win/Linux 保持原生标题栏 + 自绘菜单行。
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 8 } }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

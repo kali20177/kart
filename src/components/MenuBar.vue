@@ -79,6 +79,11 @@ const isMac = computed(() => {
   return /mac|darwin/i.test(p) || /mac/i.test(navigator.userAgent)
 })
 
+/** Electron mac 应用：原生菜单接管后自绘下拉隐藏，本行以「应用内标题条」形态存在
+ *  （titleBarStyle hiddenInset，交通灯内嵌、行可拖动）。浏览器里跑在 mac 上时
+ *  没有原生菜单，下拉必须照常渲染——判定必须同时要求 window.electron 存在。 */
+const isMacApp = computed(() => isMac.value && !!window.electron)
+
 /** macOS：勾选态/录制状态/语言变化推给主进程重建原生菜单（其他平台桥存在但主进程不消费） */
 function pushMenuState() {
   window.electron?.menu?.updateState({
@@ -327,12 +332,13 @@ function dispatch(key: string) {
 </script>
 
 <template>
-  <div class="menubar">
+  <div class="menubar" :class="{ 'title-strip': isMacApp }">
     <!-- bottom-start：面板左缘对齐菜单按钮左缘；配合按钮 12px 文字内边距与菜单项
          12px 勾选槽，菜单项文本与「文件/帮助」按钮文字左缘精确重合（默认 bottom
          居中放置，面板比按钮宽时会整体左漂，与按钮错位）。
-         macOS：原生菜单在系统菜单栏（主进程构建），自绘下拉隐藏，本行仅承载右侧按钮 -->
-    <template v-if="!isMac">
+         Electron mac：原生菜单在系统菜单栏（主进程构建），自绘下拉隐藏，本行是
+         应用内标题条（hiddenInset 交通灯内嵌 + 可拖动），仅承载右侧全局按钮 -->
+    <template v-if="!isMacApp">
       <NDropdown
         trigger="click"
         placement="bottom-start"
@@ -457,6 +463,20 @@ function dispatch(key: string) {
   );
   pointer-events: none;
   opacity: 0.7;
+}
+/* Electron mac 标题条形态（titleBarStyle hiddenInset）：交通灯内嵌行内左侧
+   （主进程设 x=12, y=8，灯径 12 → 中心 y=14 恰与 28px 行高对中），左侧留白即
+   窗口拖动区（拖动/双击缩放为系统原生行为）。app-region: drag 会吞掉区域内
+   点击，交互元素必须显式 no-drag。 */
+.menubar.title-strip {
+  height: 28px;
+  padding: 0 8px 0 78px;
+  -webkit-app-region: drag;
+}
+.menubar.title-strip :deep(.n-button),
+.menubar.title-strip :deep(.global-btn),
+.menubar.title-strip :deep(.mcp-badge) {
+  -webkit-app-region: no-drag;
 }
 .menubar-spacer {
   flex: 1;
