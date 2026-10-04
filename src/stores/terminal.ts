@@ -27,15 +27,18 @@ export function createTerminalStore(deps: TerminalDeps) {
     allowProposedApi: true,
   })
 
-  // 终端剪贴板机制（核对 xterm 6 源码后的最终形态，无需自写按键处理）：
-  // - 复制：mac 原生菜单 copy role（浏览器里为浏览器复制动作）触发 DOM copy 事件，
-  //   xterm 在终端根元素上监听 copy——有选区时 copyHandler 写剪贴板。终端选区虽是
-  //   画布绘制，但 copy 事件路径天然覆盖，无需按键层代办。
-  // - 粘贴：paste role / 浏览器粘贴 → paste 事件 → xterm 内建处理。
+  // 终端剪贴板机制（核对 xterm 6 源码与原生菜单 role 行为，无需自写按键处理）：
+  // - 复制：mac 原生菜单 copy role 触发 DOM copy 事件，xterm 在终端根元素上监听
+  //   copy——有选区时 copyHandler 写自己的 selectionText 并 preventDefault；无选区
+  //   则不拦截，交给 DOM 默认复制。终端选区虽是画布绘制，copy 事件路径天然覆盖。
+  // - ⌘A：原生 selectAll role 的全选可达终端缓冲（全选+拷贝得到整屏回滚文本，
+  //   scrollbackLimit 上限下可达数百 KB）；工具栏「复制全部」保留为一键入口，
+  //   不依赖终端聚焦与选区状态。
+  // - 粘贴：paste role → paste 事件 → xterm 内建处理（\r?\n→\r；远端未开 bracketed
+  //   paste 故不加包装）→ onData → 串口一次性突发 write。粘贴即突发是终端语义，
+  //   对端自行承受，本端不做限速——突发缓冲是链路/对端的事，在此限流只会掩盖它。
   // - xterm 6 对 meta+字母不产出终端字节（⌘C 无选区时什么都不发，不存在
   //   「放行发 ETX」）；Ctrl+C 的中断语义走 ctrlKey 路径，三平台不受影响。
-  // - 注意：Electron-mac 下 ⌘A 被原生 selectAll role 消费（供输入框全选），
-  //   终端缓冲区的 ⌘A 全选不可达；全量复制走工具栏「复制全部」（scrollbackText）。
 
   // 应用层交互态（TerminalPane 工具栏读写；暂不落盘）
   const mode = ref<'line' | 'char'>(s.transmitMode)
