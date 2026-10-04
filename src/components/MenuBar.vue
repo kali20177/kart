@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NDropdown, NButton, NModal, useMessage, useDialog } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
-import { useActiveSession } from '@/composables/useSession'
+import { useActiveSession, useSessions } from '@/composables/useSession'
 import { useSettingsStore } from '@/stores/settings'
 import { useCommandsStore } from '@/stores/commands'
 import { storage } from '@/utils/storage'
@@ -13,12 +13,38 @@ import { useUpdater } from '@/composables/useUpdater'
 import KnowledgeBaseModal from '@/components/KnowledgeBaseModal.vue'
 import UpdateDialog from '@/components/UpdateDialog.vue'
 
+/**
+ * 顶部菜单栏。两种形态：
+ * - Windows/Linux：本组件自绘「文件/会话/查看/工具/帮助」下拉（跟随应用主题），
+ *   原生菜单在主进程被显式置 null。
+ * - macOS：原生应用菜单在主进程构建（系统菜单栏，含编辑菜单——⌘C/⌘V 等文本
+ *   快捷键由其派发），本组件隐藏自绘下拉、仅保留右侧工具按钮行，并把勾选态/
+ *   录制状态/语言经 menu.updateState 推给主进程重建菜单。
+ * 原生菜单动作经 menu.onAction 回流到与自绘菜单同一个 dispatch——两条入口一份逻辑。
+ */
+
+const props = defineProps<{
+  /** 快捷命令侧栏是否展开（查看菜单/原生菜单的勾选态，App.vue 持有该状态） */
+  quickRailVisible?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** 应用级动作：状态与对话框在 App.vue 手中，经事件上行 */
+  newSession: []
+  closeSession: []
+  openSettings: []
+  openAscii: []
+  openFileTransfer: []
+  toggleQuickRail: []
+}>()
+
 const { t } = useI18n()
 // settings/commands 为全局共享 store（会话间统一），serial/recorder 指向当前活动会话。
 // useActiveSession 返回活动会话 ref，用 computed 派生 serial/recorder：切 tab 时自动跟随。
 const settingsStore = useSettingsStore()
 const commandsStore = useCommandsStore()
 const activeSession = useActiveSession()
+const sessions = useSessions()
 const serialStore = computed(() => activeSession.value.serial)
 const recorder = computed(() => activeSession.value.recorder)
 const message = useMessage()
@@ -36,15 +62,43 @@ onMounted(() => {
   offSnapshot = onSnapshotExport(() => {
     message.success(t('persist.snapshotExported'))
   })
+  // 原生菜单动作与自绘菜单共用 dispatch（macOS 原生菜单经 preload 桥回流）
+  offMenuAction = window.electron?.menu?.onAction(dispatch) ?? null
+  pushMenuState()
 })
-onUnmounted(() => offSnapshot?.())
+onUnmounted(() => {
+  offSnapshot?.()
+  offMenuAction?.()
+})
 let offSnapshot: (() => void) | null = null
+let offMenuAction: (() => void) | null = null
 
 /** 检测是否为 macOS（userAgent + platform 双保险，部分浏览器 platform 已被屏蔽） */
 const isMac = computed(() => {
   const p = window.electron?.platform ?? navigator.platform
   return /mac|darwin/i.test(p) || /mac/i.test(navigator.userAgent)
 })
+
+/** macOS：勾选态/录制状态/语言变化推给主进程重建原生菜单（其他平台桥存在但主进程不消费） */
+function pushMenuState() {
+  window.electron?.menu?.updateState({
+    locale: settingsStore.settings.locale,
+    autoSave: settingsStore.autoSave,
+    quickRailVisible: props.quickRailVisible ?? true,
+    recording: recorder.value.state.status,
+    recordingSupported: recorder.value.supported,
+  })
+}
+watch(
+  [
+    () => settingsStore.settings.locale,
+    () => settingsStore.autoSave,
+    () => props.quickRailVisible,
+    () => recorder.value.state.status,
+    () => recorder.value.supported,
+  ],
+  pushMenuState
+)
 
 /** 平台修饰键：macOS 显示 ⌘，其他显示 Ctrl */
 const modKey = computed(() => isMac.value ? '⌘' : 'Ctrl')
@@ -129,6 +183,27 @@ const fileMenu = computed<DropdownOption[]>(() => [
   { label: menuLabel(false, t('menu.resetDefaults')), key: 'reset-defaults' }
 ])
 
+/** 会话菜单：末会话不可关闭（与 tab 条 × 的保护一致） */
+const sessionMenu = computed<DropdownOption[]>(() => [
+  { label: menuLabel(false, t('menu.newSession')), key: 'new-session' },
+  { label: menuLabel(false, t('menu.closeSession')), key: 'close-session', disabled: sessions.value.length <= 1 }
+])
+
+/** 查看菜单：快捷命令栏开关（勾选态来自 App.vue）+ 开发者工具 */
+const viewMenu = computed<DropdownOption[]>(() => [
+  { label: menuLabel(props.quickRailVisible ?? true, t('menu.quickRail')), key: 'quick-rail' },
+  { type: 'divider', key: 'd1' },
+  { label: menuLabel(false, t('menu.devtools')), key: 'devtools' }
+])
+
+/** 工具菜单：全局对话框入口（ASCII 表/文件传输作用于活动会话，设置） */
+const toolsMenu = computed<DropdownOption[]>(() => [
+  { label: menuLabel(false, t('menu.ascii')), key: 'ascii' },
+  { label: menuLabel(false, t('menu.fileTransfer')), key: 'file-transfer' },
+  { type: 'divider', key: 'd1' },
+  { label: menuLabel(false, t('menu.settings')), key: 'settings' }
+])
+
 const helpMenu = computed<DropdownOption[]>(() => [
   { label: menuLabel(false, t('menu.knowBase')), key: 'know-base' },
   { type: 'divider', key: 'd1' },
@@ -143,13 +218,39 @@ const helpMenu = computed<DropdownOption[]>(() => [
   { type: 'divider', key: 'd3' },
   { label: menuLabel(false, t('menu.about')), key: 'about' },
   { type: 'divider', key: 'd4' },
-  { label: menuLabel(false, t('menu.license')), key: 'license' },
-  { type: 'divider', key: 'd5' },
-  { label: menuLabel(false, t('menu.devtools')), key: 'devtools' }
+  { label: menuLabel(false, t('menu.license')), key: 'license' }
 ])
 
 function handleSelect(key: string) {
+  dispatch(key)
+}
+
+/**
+ * 菜单动作统一分发：自绘菜单与 macOS 原生菜单（IPC 回流）共用。
+ * 应用级动作（对话框/布局状态在 App.vue 手中）经事件上行，其余就地处理。
+ */
+function dispatch(key: string) {
   switch (key) {
+    // —— 应用级动作 → App.vue ——
+    case 'new-session':
+      emit('newSession')
+      break
+    case 'close-session':
+      emit('closeSession')
+      break
+    case 'settings':
+      emit('openSettings')
+      break
+    case 'ascii':
+      emit('openAscii')
+      break
+    case 'file-transfer':
+      emit('openFileTransfer')
+      break
+    case 'quick-rail':
+      emit('toggleQuickRail')
+      break
+    // —— 本组件动作 ——
     case 'auto-save':
       settingsStore.autoSave = !settingsStore.autoSave
       break
@@ -229,25 +330,55 @@ function handleSelect(key: string) {
   <div class="menubar">
     <!-- bottom-start：面板左缘对齐菜单按钮左缘；配合按钮 12px 文字内边距与菜单项
          12px 勾选槽，菜单项文本与「文件/帮助」按钮文字左缘精确重合（默认 bottom
-         居中放置，面板比按钮宽时会整体左漂，与按钮错位） -->
-    <NDropdown
-      trigger="click"
-      placement="bottom-start"
-      :options="fileMenu"
-      :theme-overrides="menuDropdownOverrides"
-      @select="handleSelect"
-    >
-      <NButton size="tiny" quaternary>{{ t('menu.file') }}</NButton>
-    </NDropdown>
-    <NDropdown
-      trigger="click"
-      placement="bottom-start"
-      :options="helpMenu"
-      :theme-overrides="menuDropdownOverrides"
-      @select="handleSelect"
-    >
-      <NButton size="tiny" quaternary>{{ t('menu.help') }}</NButton>
-    </NDropdown>
+         居中放置，面板比按钮宽时会整体左漂，与按钮错位）。
+         macOS：原生菜单在系统菜单栏（主进程构建），自绘下拉隐藏，本行仅承载右侧按钮 -->
+    <template v-if="!isMac">
+      <NDropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="fileMenu"
+        :theme-overrides="menuDropdownOverrides"
+        @select="handleSelect"
+      >
+        <NButton size="tiny" quaternary>{{ t('menu.file') }}</NButton>
+      </NDropdown>
+      <NDropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="sessionMenu"
+        :theme-overrides="menuDropdownOverrides"
+        @select="handleSelect"
+      >
+        <NButton size="tiny" quaternary>{{ t('menu.session') }}</NButton>
+      </NDropdown>
+      <NDropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="viewMenu"
+        :theme-overrides="menuDropdownOverrides"
+        @select="handleSelect"
+      >
+        <NButton size="tiny" quaternary>{{ t('menu.view') }}</NButton>
+      </NDropdown>
+      <NDropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="toolsMenu"
+        :theme-overrides="menuDropdownOverrides"
+        @select="handleSelect"
+      >
+        <NButton size="tiny" quaternary>{{ t('menu.tools') }}</NButton>
+      </NDropdown>
+      <NDropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="helpMenu"
+        :theme-overrides="menuDropdownOverrides"
+        @select="handleSelect"
+      >
+        <NButton size="tiny" quaternary>{{ t('menu.help') }}</NButton>
+      </NDropdown>
+    </template>
     <!-- 右侧插槽：全局功能按钮（ASCII/设置）复用本行，不额外占行高 -->
     <div class="menubar-spacer" />
     <slot />

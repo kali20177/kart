@@ -32,6 +32,11 @@ export class JsonStore {
     }, 500)
   }
 
+  /** 主进程读取：按 key 取已持久化的 JSON 值（如菜单读初始语言；无则 undefined） */
+  get(key: string): unknown {
+    return this._data[key]
+  }
+
   private _load(): void {
     try {
       if (fs.existsSync(this._file)) {

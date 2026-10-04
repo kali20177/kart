@@ -9,6 +9,7 @@ import { Updater } from '@/main/Updater'
 import { McpServer, type McpMode } from '@/main/McpServer'
 import { createMcpBridge, type ToolCallPayload, type ToolResultPayload } from '@/main/mcp-bridge'
 import { mainLogger } from '@/main/logger'
+import { registerMenuIpc } from '@/main/menu'
 
 // ── 全局错误拦截（必须在最前面注册） ──
 // errorSync 用同步写盘 + stderr 双通道：此时日志可能尚未 init（logDir 为空会回落 stderr），
@@ -542,7 +543,13 @@ app.whenReady().then(() => {
   registerUpdaterIpc(updater)
   configureWebSerial()
 
-  Menu.setApplicationMenu(null)
+  // 菜单策略：macOS 用原生应用菜单（系统菜单栏；编辑菜单承担 ⌘C/⌘V 等文本快捷键的
+  // 派发——设 null 会让这些快捷键全部失效）；Windows/Linux 菜单栏由渲染层自绘
+  // （MenuBar.vue 跟随应用主题），原生菜单保持关闭。自定义动作经 IPC 回渲染层执行。
+  registerMenuIpc(jsonStore)
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null)
+  }
 
   ipcMain.on('toggle-devtools', () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]

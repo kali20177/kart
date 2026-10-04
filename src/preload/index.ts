@@ -67,6 +67,16 @@ ipcRenderer.on('mcp:tool-call', (_e, payload: { callId: number; tool: string; ar
   for (const h of mcpToolCallHandlers) h(payload)
 })
 
+// ── 应用菜单（macOS 原生菜单）──
+// 主进程菜单项 click 经 webContents.send('menu:action', action) 下发动作 key，
+// 渲染层 MenuBar 统一分发（与自绘菜单同路径）；渲染端经 menu:update-state
+// 推送勾选态/录制状态/语言，驱动主进程重建菜单。
+type MenuActionHandler = (action: string) => void
+const menuActionHandlers = new Set<MenuActionHandler>()
+ipcRenderer.on('menu:action', (_e, action: string) => {
+  for (const h of menuActionHandlers) h(action)
+})
+
 /** MCP 状态快照（主进程 get-state/start/stop 返回；与渲染端 McpBridgeState 对齐）。 */
 type McpApiState = { running: boolean; port: number | null; token: string | null; mode: string }
 
@@ -241,6 +251,23 @@ contextBridge.exposeInMainWorld('electron', {
       updaterStateHandlers.add(handler)
       return () => { updaterStateHandlers.delete(handler) }
     }
+  },
+
+  // ── 应用菜单（macOS 原生菜单；其他平台 window.electron.menu 存在但主进程不消费）──
+  menu: {
+    /** 订阅原生菜单动作（key 与自绘菜单一致），返回退订函数 */
+    onAction: (handler: MenuActionHandler) => {
+      menuActionHandlers.add(handler)
+      return () => { menuActionHandlers.delete(handler) }
+    },
+    /** 推送菜单驱动状态（locale/autoSave/录制/侧栏），主进程据此重建菜单 */
+    updateState: (state: {
+      locale: string
+      autoSave: boolean
+      quickRailVisible: boolean
+      recording: string
+      recordingSupported: boolean
+    }) => ipcRenderer.send('menu:update-state', state),
   },
 
   // ── 入站 MCP 服务器（docs/mcp-design.md；主进程 McpServer）──

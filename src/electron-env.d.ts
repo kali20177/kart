@@ -62,6 +62,18 @@ declare global {
         /** 订阅状态推送，返回退订函数 */
         onState(handler: (state: UpdaterState) => void): () => void
       }
+      menu?: {
+        /** 订阅原生菜单动作（key 与自绘菜单一致），返回退订函数 */
+        onAction(handler: (action: string) => void): () => void
+        /** 推送菜单驱动状态（macOS 原生菜单勾选态/录制/语言；其他平台主进程不消费） */
+        updateState(state: {
+          locale: string
+          autoSave: boolean
+          quickRailVisible: boolean
+          recording: string
+          recordingSupported: boolean
+        }): void
+      }
       mcp?: {
         /** 当前服务器状态快照（running/port/token/mode） */
         getState(): Promise<McpBridgeState>

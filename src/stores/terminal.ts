@@ -27,6 +27,20 @@ export function createTerminalStore(deps: TerminalDeps) {
     allowProposedApi: true,
   })
 
+  // macOS ⌘C：有选区时复制到剪贴板并拦截（xterm 选区是画布绘制而非 DOM 选区，
+  // 原生菜单 copy role 拿不到，必须在按键层自己写剪贴板）；无选区放行 → onData
+  // 发送 ETX，保持「⌘C 即 Ctrl+C 中断」的终端语义。⌘V 不拦：原生菜单 paste role
+  // 触发的 paste 事件由 xterm 自行处理（菜单缺失时 ⌘C/⌘V 均失效——须有编辑菜单）。
+  // 仅 metaKey（macOS）生效，Ctrl+C 的控制字节语义三平台不变。
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== 'keydown' || !e.metaKey) return true
+    if (e.key.toLowerCase() === 'c' && term.hasSelection()) {
+      void navigator.clipboard?.writeText(term.getSelection())
+      return false
+    }
+    return true
+  })
+
   // 应用层交互态（TerminalPane 工具栏读写；暂不落盘）
   const mode = ref<'line' | 'char'>(s.transmitMode)
   const echo = ref(s.echo)

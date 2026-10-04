@@ -148,6 +148,19 @@ function onOpenFileTransfer(session: Session, file?: File) {
 // SessionPane 在 dockview 面板内无法 emit 到本组件，文件传输对话框经此注入回调触发
 provideOpenFileTransferHandler(onOpenFileTransfer)
 
+/** 菜单「文件传输」：作用于当前活动会话 */
+function onOpenFileTransferFromMenu() {
+  if (activeSession.value) onOpenFileTransfer(activeSession.value)
+}
+
+/** 菜单「关闭当前会话」：经面板 close 走统一卸载路径（onDidRemovePanel → removeSession，
+ *  含末会话保护/活动会话修正），与 tab × 行为一致 */
+function onCloseActiveSession() {
+  const s = activeSession.value
+  if (!s) return
+  dockApi?.getPanel(SESSION_PANEL(s.id))?.api.close()
+}
+
 // ASCII 编码器插入 / 快速命令「调到发送框」：直接操作活动会话的 composerText
 // （发送框草稿本就是会话状态，dockview 动态渲染下不再走组件 ref 链）
 function onInsertAscii(entry: AsciiEntry) {
@@ -309,7 +322,15 @@ onMounted(() => {
           v-if="sessions.some((s) => s.serial.driverType === 'unsupported')"
           :reason="sessions.find((s) => s.serial.driverType === 'unsupported')!.serial.unsupportedReason"
         />
-        <MenuBar>
+        <MenuBar
+          :quick-rail-visible="!commandsCollapsed"
+          @new-session="onNewSession()"
+          @close-session="onCloseActiveSession"
+          @open-settings="onOpenSettings"
+          @open-ascii="showAscii = true"
+          @open-file-transfer="onOpenFileTransferFromMenu"
+          @toggle-quick-rail="commandsCollapsed = !commandsCollapsed"
+        >
           <!-- 全局功能按钮并进菜单栏行（不额外占行高，dock 区域不下沉） -->
           <button class="global-btn ascii-btn" @click="showAscii = true" :title="t('conn.asciiTable')">ASCII</button>
           <button class="global-btn icon-btn" @click="onOpenSettings" :title="t('conn.settings')">
