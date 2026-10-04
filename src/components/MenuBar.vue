@@ -182,6 +182,8 @@ const menuDropdownOverrides = {
   optionPrefixWidthHuge: '0px',
 }
 
+/** 文件菜单：设置入口按 VSCode 惯例放文件菜单底部（Win/Linux 无应用菜单可承载 ⌘,）；
+ *  每项各自成组（分隔线节奏与整份菜单一致，不留相邻贴排的两项） */
 const fileMenu = computed<DropdownOption[]>(() => [
   { label: menuLabel(settingsStore.autoSave, t('menu.autoSave')), key: 'auto-save' },
   { type: 'divider', key: 'd1' },
@@ -196,12 +198,15 @@ const fileMenu = computed<DropdownOption[]>(() => [
     disabled: !recorder.value.supported || recorder.value.state.status === 'stopping'
   },
   { type: 'divider', key: 'd3' },
+  { label: menuLabel(false, t('menu.settings')), key: 'settings' },
+  { type: 'divider', key: 'd4' },
   { label: menuLabel(false, t('menu.resetDefaults')), key: 'reset-defaults' }
 ])
 
-/** 会话菜单：末会话不可关闭（与 tab 条 × 的保护一致） */
+/** 会话菜单：末会话不可关闭（与 tab 条 × 的保护一致）；两项间加分隔线，节奏与整份菜单一致 */
 const sessionMenu = computed<DropdownOption[]>(() => [
   { label: menuLabel(false, t('menu.newSession')), key: 'new-session' },
+  { type: 'divider', key: 'd1' },
   { label: menuLabel(false, t('menu.closeSession')), key: 'close-session', disabled: sessions.value.length <= 1 }
 ])
 
@@ -212,12 +217,11 @@ const viewMenu = computed<DropdownOption[]>(() => [
   { label: menuLabel(false, t('menu.devtools')), key: 'devtools' }
 ])
 
-/** 工具菜单：全局对话框入口（ASCII 表/文件传输作用于活动会话，设置） */
+/** 工具菜单：ASCII 表/文件传输（作用于活动会话；设置入口在文件菜单，不进工具） */
 const toolsMenu = computed<DropdownOption[]>(() => [
   { label: menuLabel(false, t('menu.ascii')), key: 'ascii' },
-  { label: menuLabel(false, t('menu.fileTransfer')), key: 'file-transfer' },
   { type: 'divider', key: 'd1' },
-  { label: menuLabel(false, t('menu.settings')), key: 'settings' }
+  { label: menuLabel(false, t('menu.fileTransfer')), key: 'file-transfer' }
 ])
 
 const helpMenu = computed<DropdownOption[]>(() => [
