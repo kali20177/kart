@@ -5,6 +5,7 @@ import { useClipboard } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { FitAddon } from '@xterm/addon-fit'
 import TerminalInput from '@/components/TerminalInput.vue'
+import ViewEmptyState from '@/components/ViewEmptyState.vue'
 import { useSession } from '@/composables/useSession'
 import { useTheme } from '@/composables/useTheme'
 import { resolveTerminalPalette } from '@/themes'
@@ -44,6 +45,9 @@ watch(
   },
   { immediate: true }
 )
+
+/** 空态遮罩底色 = xterm 视口背景（各主题的终端调色板），避免遮罩与画布出现色差 */
+const termBg = computed(() => resolveTerminalPalette(appTheme.value).background)
 
 const endingOptions = [
   { label: '无', value: 'none' },
@@ -298,11 +302,31 @@ watch(
     <div v-else-if="charHint" class="char-hint" :class="{ warn: charHintWarn }">
       {{ charHint }}
     </div>
+    <!-- 未连接空态：不透明遮罩锚定面板根（与消息/波形同一参照系，切换视图 glyph
+         不跳动），盖住视口死光标（xterm 常驻不卸载——重挂载是已知雷区）；工具栏/
+         输入条/提示条以更高 z-index 画在遮罩之上照常可用。已连接后遮罩消失，
+         终端即刻可交互（与消息/波形不同，终端连接即「有内容」） -->
+    <ViewEmptyState
+      v-if="!serial.connected"
+      class="term-empty"
+      kind="idle"
+      :title="t('viewEmpty.idleTitle')"
+      :hint="t('terminal.emptyIdleHint')"
+      :step="t('viewEmpty.idleStep')"
+      :style="{ background: termBg }"
+    >
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="14" y="20" width="36" height="24" rx="3" />
+        <path d="M22 27 L28 32 L22 37" />
+        <path d="M32 38 L42 38" />
+      </svg>
+    </ViewEmptyState>
   </div>
 </template>
 
 <style scoped>
 .term-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -313,6 +337,8 @@ watch(
   font-family: var(--mono-font);
 }
 .toolbar {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -338,6 +364,13 @@ watch(
 }
 .xterm-host :deep(.xterm-viewport) {
   background: transparent !important;
+}
+/* 未连接空态遮罩：不透明（底色取 xterm 调色板背景）锚定面板根，盖住视口死光标；
+   工具栏/输入条/提示条以 z-3 画在其上 */
+.term-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
 }
 .dropped-bar {
   position: absolute;
@@ -400,12 +433,19 @@ watch(
   -webkit-backdrop-filter: blur(var(--glass-blur-sm));
 }
 .char-hint {
+  position: relative;
+  z-index: 3;
   padding: 8px 12px;
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text-dim);
   font-size: 12px;
   text-align: center;
+}
+/* 行模式输入条画在空态遮罩之上（未连接时依然可见——用户能预知交互位置） */
+.term-pane :deep(.term-input) {
+  position: relative;
+  z-index: 3;
 }
 /* 回显关闭：输入对用户不可见，用警示色提示去向（区别于普通提示） */
 .char-hint.warn {

@@ -325,6 +325,16 @@ export default {
     breakTip: 'Send break signal (pull TX low for 250ms). Used to enter ISP / download mode',
     ctsTip: 'CTS — Clear To Send (read-only indicator: the other end allows sending; cannot be controlled)',
   },
+  viewEmpty: {
+    // Shared empty-state copy for the three views (layout/colors single-sourced in ViewEmptyState.vue)
+    idleTitle: 'Not connected',
+    idleHint: 'Select a port and options, then click "Connect" to start',
+    idleStep: 'If no ports are listed, check cables and drivers',
+    waitingTitle: 'Waiting for data',
+    waitingHint: 'Connected — incoming data will appear here',
+    pausedTitle: 'Paused',
+    pausedHint: 'Click "Resume" to continue receiving',
+  },
   msgList: {
     all: 'All',
     text: 'Text',
@@ -342,13 +352,6 @@ export default {
     clearAll: 'Clear',
     export: 'Export',
     backToLatest: '↓ Back to latest',
-    emptyIdleTitle: 'Not connected',
-    emptyIdleHint: 'Choose a port and parameters, then click Connect',
-    emptyIdleStep: 'If no port appears, check the cable and driver',
-    emptyWaitingTitle: 'Waiting for data',
-    emptyWaitingHint: 'Connected — incoming frames will appear here',
-    emptyPausedTitle: 'Paused',
-    emptyPausedHint: 'Click Resume to continue receiving',
     emptyFilteredTitle: 'No matching messages',
     emptyFilteredHint: 'No data under current filters — adjust the keyword or clear filters',
     selected: '{n} selected',
@@ -523,6 +526,8 @@ export default {
   waveform: {
     points: '{n} pts',
     pointsTip: 'Sample points in the visible window',
+    noFieldsTitle: 'Nothing to plot',
+    noFieldsHint: 'Only "label: value" lines (e.g. t:1.2 CH1:3.14) are plotted — no matching lines in the received data. Check the firmware output, waveform parse settings or the marker prefix',
     dragHistory: 'Drag to review history',
     backSeconds: 'Review −{s}s',
     zoomLevel: 'Zoom ×{x}',
@@ -658,6 +663,7 @@ export default {
     cancel: 'Dismiss',
     backToLatest: 'Back to latest',
     rawDumpTitle: 'Raw RX bytes (hex, last 400)',
+    emptyIdleHint: 'Once connected, interact with the device right here — type directly in char mode, or use the input bar in line mode',
   },
   decoder: {
     title: 'Frame Decode',

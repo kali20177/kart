@@ -325,6 +325,16 @@ export default {
     breakTip: '发送 Break 信号（TX 拉低 250ms）。用于进入 ISP / 下载模式',
     ctsTip: 'CTS — Clear To Send 允许发送（只读指示，表示对端允许接收数据，不可手动控制）',
   },
+  viewEmpty: {
+    // 三视图（消息/波形/终端）共用空态文案——布局与配色在 ViewEmptyState.vue 单源
+    idleTitle: '未连接串口',
+    idleHint: '选择端口与参数，点击「连接」开始',
+    idleStep: '若未列出端口，请检查线缆与驱动',
+    waitingTitle: '等待数据',
+    waitingHint: '已连接 — 有数据到达时会出现在这里',
+    pausedTitle: '已暂停',
+    pausedHint: '点击「继续」恢复接收',
+  },
   msgList: {
     all: '全部',
     text: '文本',
@@ -342,13 +352,6 @@ export default {
     clearAll: '清空',
     export: '导出',
     backToLatest: '↓ 回到最新',
-    emptyIdleTitle: '未连接串口',
-    emptyIdleHint: '选择端口与参数，点击「连接」开始',
-    emptyIdleStep: '若未列出端口，请检查线缆与驱动',
-    emptyWaitingTitle: '等待数据',
-    emptyWaitingHint: '已连接 — 有数据到达时会出现在这里',
-    emptyPausedTitle: '已暂停',
-    emptyPausedHint: '点击「继续」恢复接收',
     emptyFilteredTitle: '没有匹配的消息',
     emptyFilteredHint: '当前筛选条件下无数据，可调整关键词或清除筛选',
     selected: '已选 {n}',
@@ -530,6 +533,8 @@ export default {
   waveform: {
     points: '{n} 点',
     pointsTip: '当前可视窗口内的采样点数',
+    noFieldsTitle: '没有可绘制的点',
+    noFieldsHint: '波形只绘制「标签: 数值」行（如 t:1.2 CH1:3.14）——收到的数据里没有匹配行，请检查固件输出格式、波形解析设置或标记前缀',
     dragHistory: '拖拽回看历史',
     backSeconds: '回看 −{s}s',
     zoomLevel: '放大 ×{x}',
@@ -669,6 +674,7 @@ export default {
     cancel: '关闭',
     backToLatest: '回到最新',
     rawDumpTitle: '原始 RX 字节（hex，最近 400 字节）',
+    emptyIdleHint: '连接后即可在此与设备交互——直通模式直接键入，行模式用下方输入条',
   },
   decoder: {
     title: '帧解码',

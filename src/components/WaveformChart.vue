@@ -7,12 +7,13 @@ import 'uplot/dist/uPlot.min.css'
 import { useI18n } from 'vue-i18n'
 import { useSession } from '@/composables/useSession'
 import { useTheme } from '@/composables/useTheme'
+import ViewEmptyState from '@/components/ViewEmptyState.vue'
 import { formatTimestamp } from '@/utils/codec/message-format'
 import { exportWaveformAsCsv } from '@/utils/waveform/export-waveform-csv'
 import { downloadTextFile } from '@/utils/download'
 import type { WaveformParseConfig } from '@/types'
 
-const { waveform, settings, pause: pauseStore } = useSession()
+const { waveform, settings, pause: pauseStore, serial } = useSession()
 const { isDark } = useTheme()
 const { t } = useI18n()
 
@@ -548,6 +549,18 @@ const showNoMatchTag = computed(
     pointCount.value === 0
 )
 
+/** 空态判定（视图语义与消息列表不同）：有可绘制点即不显示（含暂停——数据本身可见）；
+ *  0 点时 paused 抢先于连接判定（暂停+空=用户主动停，不该催配置）；未连接→idle；
+ *  连接后有 RX 字节却 0 点→no-fields（最高价值的引导：数据在流但格式不匹配，
+ *  正是「普通日志混流」场景的坑）；其余→waiting。 */
+const emptyState = computed<'idle' | 'waiting' | 'paused' | 'no-fields' | null>(() => {
+  if (pointCount.value > 0) return null
+  if (waveform.paused) return 'paused'
+  if (!serial.connected) return 'idle'
+  if (serial.rxBytes > 0) return 'no-fields'
+  return 'waiting'
+})
+
 // 回看偏移折算为秒（可视窗口右边缘距最新采样的真实时间差），用于工具栏提示
 const backSeconds = computed(() => {
   // history 是 shallowRef 且原地 push（不触发响应式），借 version 作更新信号（同 pointCount）
@@ -691,11 +704,30 @@ function handleExport(key: string) {
         </div>
       </div>
     </div>
+    <!-- 空态覆盖层：锚定面板根（与消息/终端同一参照系，切换视图 glyph 不跳动）；
+         uPlot 画布常驻底下，透明覆盖不挡工具栏（pointer-events:none 组件自带） -->
+    <ViewEmptyState
+      v-if="emptyState"
+      class="wave-empty"
+      :kind="emptyState"
+      :title="t(emptyState === 'no-fields' ? 'waveform.noFieldsTitle' : `viewEmpty.${emptyState}Title`)"
+      :hint="t(emptyState === 'no-fields' ? 'waveform.noFieldsHint' : `viewEmpty.${emptyState}Hint`)"
+    >
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <!-- 波形 glyph：一段正弦 + 采样点 -->
+        <path d="M10 34 C 15 18, 21 18, 26 34 S 37 50, 42 34 S 51 20, 55 30" />
+        <circle cx="26" cy="34" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="42" cy="34" r="1.2" fill="currentColor" stroke="none" />
+        <path v-if="emptyState === 'idle'" class="empty-led" d="M12 46 L18 46" />
+        <path v-else-if="emptyState === 'waiting'" class="empty-led waiting" d="M12 46 L18 46" />
+      </svg>
+    </ViewEmptyState>
   </div>
 </template>
 
 <style scoped>
 .wave-wrap {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -721,6 +753,12 @@ function handleExport(key: string) {
   min-height: 0;
   background: var(--bg-panel);
   position: relative;
+}
+/* 空态覆盖层：盖住 uPlot 的空画布（dashed 游标线），遮住「光秃秃」感 */
+.wave-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
 }
 .chart-area :deep(.uplot-wrap) {
   font-family: var(--mono-font);
