@@ -522,7 +522,7 @@ function onChipMenuSelect(key: string) {
 }
 .decoded-field {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
   font-family: var(--mono-font);
   font-size: 11px;
@@ -531,6 +531,9 @@ function onChipMenuSelect(key: string) {
   border-radius: var(--radius-sm);
   padding: 1px 6px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
+  /* 芯片可收缩到气泡宽度内：宽值（如全表寄存器数组）在值区内部换行而非戳出气泡 */
+  min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
   /* 右键可添加至仪表盘：以 context-menu 光标暗示可操作 */
   cursor: context-menu;
@@ -544,6 +547,10 @@ function onChipMenuSelect(key: string) {
 }
 .decoded-field .fval {
   color: var(--text);
+  /* 值区解除 nowrap：空格处自然换行，无空格长串（URL/连续 hex）强制断行 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .actions {
   display: flex;
