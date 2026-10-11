@@ -50,11 +50,27 @@ describe('modbus-rtu decoder', () => {
     expect(r.fields?.find((f) => f.name === 'value')?.value).toBe('0x0003')
   })
 
-  it('fc10 写多寄存器：reg + count + data', () => {
+  it('fc10 写多寄存器请求：reg + count + byteCount + data（byteCount 不混入 data）', () => {
     const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x10, [0x00, 0x00, 0x00, 0x02, 0x04, 0x00, 0x64, 0x00, 0x01]))
     expect(r.matched).toBe(true)
     expect(r.fields?.find((f) => f.name === 'count')?.value).toBe('2')
-    expect(r.fields?.find((f) => f.name === 'data')?.value).toBe('04 00 64 00 01')
+    expect(r.fields?.find((f) => f.name === 'byteCount')?.value).toBe('4')
+    expect(r.fields?.find((f) => f.name === 'data')?.value).toBe('00 64 00 01')
+  })
+
+  it('fc10 成功写应答（addr+qty 回显）→ reg + count，不退化为裸 data', () => {
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x10, [0x00, 0x00, 0x00, 0x02]))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'reg')?.value).toBe('0x0000')
+    expect(r.fields?.find((f) => f.name === 'count')?.value).toBe('2')
+    expect(r.fields?.find((f) => f.name === 'data')).toBeUndefined()
+  })
+
+  it('fc0f 成功写多线圈应答（addr+qty 回显）→ reg + count', () => {
+    const r = modbusRtuDecoder.decode(modbusFrame(0x01, 0x0f, [0x00, 0x00, 0x00, 0x01]))
+    expect(r.matched).toBe(true)
+    expect(r.fields?.find((f) => f.name === 'reg')?.value).toBe('0x0000')
+    expect(r.fields?.find((f) => f.name === 'count')?.value).toBe('1')
   })
 
   it('标准 Modbus 测试向量：01 03 00 00 00 0A → CRC 0xCDC5', () => {
